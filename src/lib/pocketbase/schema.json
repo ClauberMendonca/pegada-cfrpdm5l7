@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-09T20:49:24.298Z",
+  "generatedAt": "2026-11-09T21:29:34.308Z",
   "collections": [
     {
       "name": "users",
@@ -7,9 +7,9 @@
       "apiRules": {
         "list": "id = @request.auth.id",
         "view": "id = @request.auth.id",
-        "create": "",
+        "create": null,
         "update": "id = @request.auth.id",
-        "delete": "id = @request.auth.id"
+        "delete": null
       },
       "fields": [
         {
@@ -56,9 +56,9 @@
       "apiRules": {
         "list": "@request.auth.id != '' && user_id = @request.auth.id",
         "view": "@request.auth.id != '' && user_id = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user_id = @request.auth.id",
-        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id)",
+        "delete": null
       },
       "fields": [
         {
@@ -193,9 +193,9 @@
       "apiRules": {
         "list": "@request.auth.id != '' && user_id = @request.auth.id",
         "view": "@request.auth.id != '' && user_id = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user_id = @request.auth.id",
-        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.project_id:isset = false || project_id = '' || @request.body.project_id = '' || project_id.user_id = @request.auth.id)",
+        "delete": null
       },
       "fields": [
         {
@@ -291,9 +291,9 @@
       "apiRules": {
         "list": "@request.auth.id != '' && user_id = @request.auth.id",
         "view": "@request.auth.id != '' && user_id = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user_id = @request.auth.id",
-        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.converted_project_id:isset = false || converted_project_id = '' || @request.body.converted_project_id = '' || converted_project_id.user_id = @request.auth.id) && (@request.body.converted_action_id:isset = false || converted_action_id = '' || @request.body.converted_action_id = '' || converted_action_id.user_id = @request.auth.id)",
+        "delete": null
       },
       "fields": [
         {
@@ -356,9 +356,9 @@
       "apiRules": {
         "list": "@request.auth.id != '' && user_id = @request.auth.id",
         "view": "@request.auth.id != '' && user_id = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user_id = @request.auth.id",
-        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.project_id:isset = false || project_id = '' || @request.body.project_id = '' || project_id.user_id = @request.auth.id) && (@request.body.action_id:isset = false || action_id = '' || @request.body.action_id = '' || action_id.user_id = @request.auth.id)",
+        "delete": null
       },
       "fields": [
         {

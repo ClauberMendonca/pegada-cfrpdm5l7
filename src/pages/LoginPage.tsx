@@ -16,8 +16,8 @@ import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react'
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth()
-  const [email, setEmail] = useState('cm@biodrinks.com.br')
-  const [password, setPassword] = useState('Skip@Pass123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -56,7 +56,7 @@ export const LoginPage: React.FC = () => {
           <CardHeader className="space-y-1">
             <CardTitle className="text-lg font-medium text-white">Acesso Privado</CardTitle>
             <CardDescription className="text-slate-400">
-              Entre com as credenciais do dono configuradas no Skip Cloud.
+              Acesso exclusivo do dono. Use suas credenciais privadas.
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>

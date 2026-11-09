@@ -10,7 +10,7 @@ migrate(
       // Create owner record if not present
       ownerRecord = new Record(users)
       ownerRecord.setEmail(ownerEmail)
-      ownerRecord.setPassword('Skip@Pass123')
+      ownerRecord.setPassword('@S3cr3t0!')
       ownerRecord.setVerified(true)
       ownerRecord.set('name', 'Dono do Sistema')
       ownerRecord.set('timezone', 'America/Sao_Paulo')

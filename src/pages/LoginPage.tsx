@@ -29,11 +29,7 @@ export const LoginPage: React.FC = () => {
       await login(email, password)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Falha na autenticação'
-      setError(
-        msg.includes('Failed to authenticate')
-          ? 'E-mail ou senha incorretos. Apenas a conta privada do dono tem acesso.'
-          : msg,
-      )
+      setError(msg.includes('Failed to authenticate') ? 'E-mail ou senha incorretos.' : msg)
     } finally {
       setIsLoading(false)
     }

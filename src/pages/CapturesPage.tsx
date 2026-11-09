@@ -145,42 +145,60 @@ export const CapturesPage: React.FC = () => {
     setConversionType('action')
   }
 
-  const handleConfirmConvertToProject = async () => {
-    if (!selectedCapture || !projectTitle.trim()) return
-    try {
-      await captureService.convertToProject(selectedCapture.id, {
-        title: projectTitle.trim(),
-        context: projectContext,
-        aspiration: projectAspiration.trim() || undefined,
-        controllable_delivery: projectControllable.trim() || undefined,
-        completion_condition: projectCompletion.trim() || undefined,
-      })
-      toast({ title: 'Captura convertida em Projeto com sucesso!' })
-      setConversionType(null)
-      setSelectedCapture(null)
-      loadCaptures()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro na conversão'
-      toast({ variant: 'destructive', title: 'Erro', description: msg })
-    }
-  }
+  const [isConverting, setIsConverting] = useState(false)
 
-  const handleConfirmConvertToAction = async () => {
-    if (!selectedCapture || !actionTitle.trim()) return
+  const handleConfirmConvert = async (target: 'project' | 'action') => {
+    if (!selectedCapture) return
+    if (target === 'project' && !projectTitle.trim()) return
+    if (target === 'action' && !actionTitle.trim()) return
+
+    setIsConverting(true)
     try {
-      await captureService.convertToAction(selectedCapture.id, {
-        title: actionTitle.trim(),
-        context: actionContext,
-        project_id: actionProjectId ? actionProjectId : undefined,
-        is_today_selected: false,
-      })
-      toast({ title: 'Captura convertida em Ação pronta!' })
+      const result = await captureService.convert(
+        selectedCapture.id,
+        target,
+        target === 'project'
+          ? {
+              title: projectTitle.trim(),
+              context: projectContext,
+              aspiration: projectAspiration.trim() || undefined,
+              controllable_delivery: projectControllable.trim() || undefined,
+              completion_condition: projectCompletion.trim() || undefined,
+            }
+          : {
+              title: actionTitle.trim(),
+              context: actionContext,
+              project_id: actionProjectId ? actionProjectId : undefined,
+            },
+      )
+
+      // Idempotente: quando a captura já estava convertida (retry após perder
+      // a resposta, duplo clique, chamada concorrente), o backend retorna o
+      // destino REAL que já existia — nunca cria um segundo destino.
+      if (result.duplicate) {
+        const destino = result.target_type === 'project' ? 'Projeto' : 'Ação'
+        toast({
+          title: `Captura já estava convertida`,
+          description: `Exibindo o ${destino} que já existia — nenhum destino duplicado foi criado.`,
+        })
+      } else {
+        toast({
+          title:
+            target === 'project'
+              ? 'Captura convertida em Projeto com sucesso!'
+              : 'Captura convertida em Ação pronta!',
+        })
+      }
       setConversionType(null)
       setSelectedCapture(null)
       loadCaptures()
     } catch (err: unknown) {
+      // Falha: erro visível e dados digitados preservados (o modal permanece
+      // aberto com o estado do formulário intacto — nada é apagado).
       const msg = err instanceof Error ? err.message : 'Erro na conversão'
-      toast({ variant: 'destructive', title: 'Erro', description: msg })
+      toast({ variant: 'destructive', title: 'Erro na conversão', description: msg })
+    } finally {
+      setIsConverting(false)
     }
   }
 
@@ -439,11 +457,11 @@ export const CapturesPage: React.FC = () => {
               Cancelar
             </Button>
             <Button
-              onClick={handleConfirmConvertToProject}
-              disabled={!projectTitle.trim()}
+              onClick={() => handleConfirmConvert('project')}
+              disabled={isConverting || !projectTitle.trim()}
               className="bg-sky-600 hover:bg-sky-500 text-white"
             >
-              Criar Projeto Rascunho
+              {isConverting ? 'Gravando…' : 'Criar Projeto Rascunho'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -528,11 +546,11 @@ export const CapturesPage: React.FC = () => {
               Cancelar
             </Button>
             <Button
-              onClick={handleConfirmConvertToAction}
-              disabled={!actionTitle.trim()}
+              onClick={() => handleConfirmConvert('action')}
+              disabled={isConverting || !actionTitle.trim()}
               className="bg-emerald-600 hover:bg-emerald-500 text-white"
             >
-              Criar Ação Pronta
+              {isConverting ? 'Gravando…' : 'Criar Ação Pronta'}
             </Button>
           </DialogFooter>
         </DialogContent>

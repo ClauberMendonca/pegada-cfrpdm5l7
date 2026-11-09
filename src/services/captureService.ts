@@ -1,10 +1,17 @@
 import pb from '@/lib/pocketbase/client'
-import { CaptureItem, CaptureStatus } from '@/types/execution'
-import { projectService } from './projectService'
-import { actionService } from './actionService'
+import { CaptureItem, CaptureStatus, Project, ActionItem } from '@/types/execution'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { ClientResponseError } from 'pocketbase'
 
 export interface CreateCaptureInput {
   raw_text: string
+}
+
+export interface ConvertResult {
+  duplicate: boolean
+  target_type: 'project' | 'action'
+  target: Project | ActionItem
+  capture: CaptureItem
 }
 
 export const captureService = {
@@ -38,46 +45,45 @@ export const captureService = {
     })
   },
 
-  async convertToProject(
+  /**
+   * Converte uma captura em Projeto ou Ação através da rota nativa autenticada
+   * do PocketBase (hook capture-convert.pb.js), que executa TUDO dentro de uma
+   * única transação: valida sessão/dono/estado, cria o destino, vincula a
+   * captura e responde com o destino real — inclusive quando a captura já
+   * estava convertida (idempotente: retry/concorrência não cria segundo
+   * destino; a resposta marca `duplicate: true`).
+   *
+   * Texto original (raw_text) nunca é alterado pela conversão.
+   */
+  async convert(
     captureId: string,
-    projectData: {
+    target: 'project' | 'action',
+    data: {
       title: string
       context: 'vida' | 'trabalho'
+      project_id?: string
       aspiration?: string
       controllable_delivery?: string
       completion_condition?: string
     },
-  ) {
-    const project = await projectService.create({
-      ...projectData,
-      status: 'rascunho',
-    })
-    const capture = await pb.collection('captures').update<CaptureItem>(captureId, {
-      status: 'convertida_projeto',
-      converted_project_id: project.id,
-    })
-    return { project, capture }
-  },
+  ): Promise<ConvertResult> {
+    const authId = pb.authStore.model?.id
+    if (!authId) throw new Error('Usuário não autenticado')
 
-  async convertToAction(
-    captureId: string,
-    actionData: {
-      title: string
-      context: 'vida' | 'trabalho'
-      project_id?: string
-      is_next_step?: boolean
-      is_today_selected?: boolean
-      deadline?: string
-    },
-  ) {
-    const action = await actionService.create({
-      ...actionData,
-      status: 'pronta',
-    })
-    const capture = await pb.collection('captures').update<CaptureItem>(captureId, {
-      status: 'convertida_acao',
-      converted_action_id: action.id,
-    })
-    return { action, capture }
+    try {
+      const result = await pb.send<ConvertResult>(`api/pc/captures/${captureId}/convert`, {
+        method: 'POST',
+        body: { target, data },
+      })
+      return result
+    } catch (err: unknown) {
+      // Mensagem legível para falhas da rota nativa (400/401/403/404/409).
+      if (err instanceof ClientResponseError) {
+        const msg =
+          (err.response as { message?: string } | undefined)?.message || getErrorMessage(err)
+        throw new Error(msg || `Falha na conversão (HTTP ${err.status}).`)
+      }
+      throw err
+    }
   },
 }

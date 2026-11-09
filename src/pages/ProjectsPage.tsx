@@ -17,10 +17,15 @@ import {
   Compass,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
+import { useAuth } from '@/contexts/AuthContext'
 
 export const ProjectsPage: React.FC = () => {
   const { toast } = useToast()
   const { contextFilter } = useGlobalFilter()
+  // FATIA P1C — fuso do dono para instantes; prazos são dia-calendário puro.
+  const { user } = useAuth()
+  const ownerTz = ownerTimezone(user?.timezone)
 
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
@@ -172,7 +177,7 @@ export const ProjectsPage: React.FC = () => {
                   {project.deadline && (
                     <span className="flex items-center gap-1 text-xs font-mono text-slate-400">
                       <Clock className="w-3 h-3 text-slate-500" />
-                      {project.deadline}
+                      {formatCalendarDay(project.deadline)}
                     </span>
                   )}
                 </div>
@@ -206,7 +211,7 @@ export const ProjectsPage: React.FC = () => {
                   <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
                 </span>
                 <span className="font-mono text-[11px] text-slate-500">
-                  {new Date(project.created).toLocaleDateString('pt-BR')}
+                  {formatInstantInZone(project.created, ownerTz).split(' ')[0]}
                 </span>
               </div>
             </div>

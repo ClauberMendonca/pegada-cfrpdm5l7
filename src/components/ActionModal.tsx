@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
+import { calendarDayOrNull } from '@/lib/datetime'
 
 interface ActionModalProps {
   isOpen: boolean
@@ -97,7 +98,9 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         context,
         project_id: projectId ? projectId : undefined,
         status,
-        deadline: deadline || undefined,
+        // FATIA P1C — dia-calendário puro: aceita só 'YYYY-MM-DD'; vazio/parcial
+        // NÃO cria prazo (sem parse de fuso que desloque o dia).
+        deadline: calendarDayOrNull(deadline),
         is_next_step: isNextStep,
         is_today_selected: isTodaySelected || isNextStep,
         waiting_for: waitingFor.trim() || undefined,

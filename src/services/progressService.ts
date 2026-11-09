@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { ProgressLog, ProgressLogType } from '@/types/execution'
+import { todayInZone, ownerTimezone } from '@/lib/datetime'
 
 export interface CreateProgressLogInput {
   project_id?: string
@@ -38,7 +39,10 @@ export const progressService = {
     const userId = pb.authStore.model?.id
     if (!userId) throw new Error('Usuário não autenticado')
 
-    const todayStr = new Date().toISOString().split('T')[0]
+    // FATIA P1C — `date` é DIA-CALENDÁRIO (texto 'YYYY-MM-DD'), não instante:
+    // default é "hoje" no FUSO DO DONO (users.timezone), não UTC do servidor.
+    const tz = ownerTimezone(pb.authStore.model?.timezone)
+    const todayStr = todayInZone(tz)
     return pb.collection('progress_logs').create<ProgressLog>(
       {
         user_id: userId,

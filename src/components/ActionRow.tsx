@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { ActionItem, ActionStatus } from '@/types/execution'
+import { formatCalendarDay } from '@/lib/datetime'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -170,7 +171,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               {action.deadline && (
                 <span className="flex items-center gap-1 text-xs font-mono text-slate-400">
                   <Clock className="w-3 h-3 text-slate-500" />
-                  {action.deadline}
+                  {formatCalendarDay(action.deadline)}
                 </span>
               )}
             </div>

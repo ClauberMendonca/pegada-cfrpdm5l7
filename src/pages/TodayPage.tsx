@@ -28,6 +28,7 @@ import {
   Clock,
   Loader2,
 } from 'lucide-react'
+import { todayInZone, ownerTimezone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 
 function projectBlockLabel(p: Project): string {
@@ -67,25 +68,8 @@ export const TodayPage: React.FC = () => {
   const [logModalAction, setLogModalAction] = useState<ActionItem | null>(null)
   const [isReevaluateOpen, setIsReevaluateOpen] = useState(false)
 
-  // Today calculation in user's timezone or ISO fallback
-  const getTodayDateStr = () => {
-    try {
-      if (user?.timezone) {
-        const parts = new Intl.DateTimeFormat('en-CA', {
-          timeZone: user.timezone,
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date())
-        return parts // formatted as YYYY-MM-DD
-      }
-    } catch {
-      /* fallback ISO abaixo */
-    }
-    return new Date().toISOString().split('T')[0]
-  }
-
-  const todayStr = getTodayDateStr()
+  // FATIA P1C — "hoje" no fuso do dono (fonte única: lib/datetime).
+  const todayStr = todayInZone(ownerTimezone(user?.timezone))
 
   const loadData = useCallback(async () => {
     setIsLoading(true)

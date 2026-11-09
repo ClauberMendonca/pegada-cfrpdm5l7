@@ -27,6 +27,8 @@ import {
   PlayCircle,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface ProjectDetailProps {
   projectId: string
@@ -42,6 +44,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onProjectUpdated,
 }) => {
   const { toast } = useToast()
+  // FATIA P1C — fuso de referência para instantes (created/updated) e rótulo "hoje".
+  const { user } = useAuth()
+  const ownerTz = ownerTimezone(user?.timezone)
   const [project, setProject] = useState<Project | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [logs, setLogs] = useState<ProgressLog[]>([])
@@ -240,7 +245,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {project.deadline && (
               <span className="flex items-center gap-1 text-xs font-mono text-slate-400">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Prazo Factual: {project.deadline}
+                Prazo Factual: {formatCalendarDay(project.deadline)}
               </span>
             )}
           </div>
@@ -528,7 +533,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     >
                       {log.log_type === 'executei' ? 'Executei' : 'Resultado Aconteceu'}
                     </span>
-                    <span className="text-xs font-mono text-slate-500">{log.date}</span>
+                    <span className="text-xs font-mono text-slate-500">
+                      {formatCalendarDay(log.date)}
+                    </span>
 
                     {log.expand?.action_id && (
                       <span className="text-xs text-slate-400 truncate max-w-xs">

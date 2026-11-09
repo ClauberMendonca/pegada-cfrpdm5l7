@@ -23,6 +23,7 @@ import {
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { ChevronDown, Sparkles, Target, Compass, BookOpen } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { calendarDayOrNull } from '@/lib/datetime'
 
 interface ProjectModalProps {
   isOpen: boolean
@@ -130,7 +131,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         aspiration: aspiration.trim() || undefined,
         controllable_delivery: controllableDelivery.trim() || undefined,
         completion_condition: completionCondition.trim() || undefined,
-        deadline: deadline || undefined,
+        // FATIA P1C — dia-calendário puro: aceita só 'YYYY-MM-DD'; vazio/parcial
+        // NÃO cria prazo (sem parse de fuso que desloque o dia).
+        deadline: calendarDayOrNull(deadline),
         learning_asset: learningAsset.trim() || undefined,
 
         r_resultado: rResultado.trim() || undefined,

@@ -1,0 +1,60 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Toaster } from '@/components/ui/toaster'
+import { Toaster as Sonner } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { FilterProvider } from '@/contexts/FilterContext'
+import Layout from '@/components/Layout'
+import { TodayPage } from '@/pages/TodayPage'
+import { CapturesPage } from '@/pages/CapturesPage'
+import { ProjectsPage } from '@/pages/ProjectsPage'
+import { ReviewPage } from '@/pages/ReviewPage'
+import { LoginPage } from '@/pages/LoginPage'
+import NotFound from '@/pages/NotFound'
+
+const ProtectedRoutes = () => {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs uppercase tracking-widest font-mono">Iniciando sistema...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />
+  }
+
+  return (
+    <FilterProvider>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<TodayPage />} />
+          <Route path="/capturas" element={<CapturesPage />} />
+          <Route path="/projetos" element={<ProjectsPage />} />
+          <Route path="/revisao" element={<ReviewPage />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </FilterProvider>
+  )
+}
+
+const App = () => (
+  <BrowserRouter>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <ProtectedRoutes />
+      </AuthProvider>
+    </TooltipProvider>
+  </BrowserRouter>
+)
+
+export default App

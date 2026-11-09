@@ -1,0 +1,426 @@
+{
+  "generatedAt": "2026-11-09T20:49:24.298Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "timezone",
+          "type": "text",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "projects",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "context",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["vida", "trabalho"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["rascunho", "ativo", "pausado", "concluido", "arquivado"]
+        },
+        {
+          "name": "aspiration",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "controllable_delivery",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "completion_condition",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deadline",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "learning_asset",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_resultado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_razao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_rumo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_recursos",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_restricoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_riscos",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "r_responsavel",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_projects_user ON projects (user_id)",
+        "CREATE INDEX idx_projects_status ON projects (user_id, status)",
+        "CREATE INDEX idx_projects_context ON projects (user_id, context)"
+      ]
+    },
+    {
+      "name": "actions",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "context",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["vida", "trabalho"]
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "pronta",
+            "em_andamento",
+            "aguardando",
+            "bloqueada",
+            "feita",
+            "cancelada"
+          ]
+        },
+        {
+          "name": "deadline",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "is_next_step",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "is_today_selected",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "waiting_for",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_actions_user ON actions (user_id)",
+        "CREATE INDEX idx_actions_project ON actions (project_id)",
+        "CREATE INDEX idx_actions_status ON actions (user_id, status)",
+        "CREATE INDEX idx_actions_today ON actions (user_id, is_today_selected)"
+      ]
+    },
+    {
+      "name": "captures",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "raw_text",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "convertida_projeto", "convertida_acao", "descartada"]
+        },
+        {
+          "name": "converted_project_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "converted_action_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "actions"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_captures_user ON captures (user_id)",
+        "CREATE INDEX idx_captures_status ON captures (user_id, status)"
+      ]
+    },
+    {
+      "name": "progress_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "action_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "actions"
+        },
+        {
+          "name": "text",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "log_type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["executei", "resultado_aconteceu"]
+        },
+        {
+          "name": "date",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_progress_user ON progress_logs (user_id)",
+        "CREATE INDEX idx_progress_project ON progress_logs (project_id)",
+        "CREATE INDEX idx_progress_action ON progress_logs (action_id)"
+      ]
+    }
+  ]
+}

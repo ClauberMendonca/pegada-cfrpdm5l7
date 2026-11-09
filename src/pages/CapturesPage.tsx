@@ -89,8 +89,11 @@ export const CapturesPage: React.FC = () => {
       .then((list) => {
         setAvailableProjects(list.filter((p) => p.status === 'ativo' || p.status === 'rascunho'))
       })
-      .catch(() => {})
-  }, [])
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Falha ao carregar projetos para vínculo.'
+        toast({ variant: 'destructive', title: 'Erro', description: msg })
+      })
+  }, [toast])
 
   const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -118,8 +121,9 @@ export const CapturesPage: React.FC = () => {
       await captureService.discard(id)
       toast({ title: 'Captura descartada logicamente' })
       loadCaptures()
-    } catch {
-      /* intentionally ignored */
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível descartar a captura.'
+      toast({ variant: 'destructive', title: 'Erro', description: msg })
     }
   }
 

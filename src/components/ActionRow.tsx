@@ -21,11 +21,14 @@ import {
   Play,
   RotateCcw,
   Plus,
+  Loader2,
 } from 'lucide-react'
 
 interface ActionRowProps {
   action: ActionItem
   isNextAdvance?: boolean
+  /** FATIA 3: gravação em andamento — desabilita controles e mostra pendência */
+  saving?: boolean
   onToggleNextStep?: (id: string, current: boolean) => void
   onToggleTodaySelected?: (id: string, current: boolean) => void
   onStatusChange?: (id: string, status: ActionStatus, reason?: string) => void
@@ -36,6 +39,7 @@ interface ActionRowProps {
 export const ActionRow: React.FC<ActionRowProps> = ({
   action,
   isNextAdvance = false,
+  saving = false,
   onToggleNextStep,
   onToggleTodaySelected,
   onStatusChange,
@@ -125,14 +129,19 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           {/* Quick complete / status toggle button */}
           <button
             onClick={() => onStatusChange?.(action.id, isDone ? 'pronta' : 'feita')}
+            disabled={saving}
             className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
               isDone
                 ? 'bg-emerald-600 border-emerald-500 text-white'
                 : 'border-slate-700 hover:border-emerald-500 text-transparent hover:text-emerald-500'
-            }`}
+            } ${saving ? 'opacity-50 cursor-wait' : ''}`}
             title={isDone ? 'Reabrir como pronta' : 'Marcar como concluída'}
           >
-            <CheckCircle2 className="w-3.5 h-3.5" />
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            )}
           </button>
 
           <div className="flex-1 min-w-0">
@@ -206,7 +215,10 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           {onToggleNextStep && !isDone && (
             <button
               onClick={() => onToggleNextStep(action.id, action.is_next_step)}
+              disabled={saving}
               className={`p-1.5 rounded-lg border transition-all ${
+                saving ? 'opacity-50 cursor-wait' : ''
+              } ${
                 action.is_next_step
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                   : 'text-slate-500 hover:text-amber-300 border-transparent hover:border-slate-800'
@@ -227,6 +239,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
+                disabled={saving}
                 className="h-8 w-8 text-slate-400 hover:text-white"
               >
                 <MoreVertical className="w-4 h-4" />
@@ -278,36 +291,42 @@ export const ActionRow: React.FC<ActionRowProps> = ({
 
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('pronta')}
+                disabled={saving}
                 className="cursor-pointer"
               >
                 Marcar como Pronta
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('em_andamento')}
+                disabled={saving}
                 className="cursor-pointer"
               >
                 Marcar em Andamento
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('aguardando')}
+                disabled={saving}
                 className="cursor-pointer"
               >
                 Marcar como Aguardando...
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('bloqueada')}
+                disabled={saving}
                 className="cursor-pointer"
               >
                 Marcar como Bloqueada...
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('feita')}
+                disabled={saving}
                 className="cursor-pointer"
               >
                 Concluir ação (Feita)
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('cancelada')}
+                disabled={saving}
                 className="cursor-pointer text-slate-400"
               >
                 Cancelar ação
@@ -344,9 +363,10 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             <Button
               size="sm"
               onClick={confirmReasonStatus}
+              disabled={saving}
               className="bg-emerald-600 hover:bg-emerald-500 text-white h-7 text-xs"
             >
-              Confirmar
+              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Confirmar'}
             </Button>
             <Button
               size="sm"

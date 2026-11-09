@@ -59,7 +59,10 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           // Only active/draft projects
           setProjects(list.filter((p) => p.status === 'ativo' || p.status === 'rascunho'))
         })
-        .catch(() => {})
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : 'Falha ao carregar projetos.'
+          toast({ variant: 'destructive', title: 'Erro', description: msg })
+        })
 
       if (actionToEdit) {
         setTitle(actionToEdit.title)

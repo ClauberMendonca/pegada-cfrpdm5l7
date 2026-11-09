@@ -1,9 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { ActionItem, ActionStatus, Project } from '@/types/execution'
 import { actionService } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
+import {
+  checkEligibility,
+  ineligibilityLabel,
+  isEligibleForFocusDisplay,
+  isSelectableForFocus,
+  resolveProjectState,
+} from '@/lib/eligibility'
 import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
@@ -18,12 +25,28 @@ import {
   ChevronDown,
   RotateCcw,
   CheckCircle,
-  Inbox,
   Clock,
-  Briefcase,
-  Heart,
+  Loader2,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+
+function projectBlockLabel(p: Project): string {
+  if (p.status === 'pausado') return 'projeto pausado'
+  if (p.status === 'arquivado') return 'projeto arquivado'
+  if (p.status === 'concluido') return 'projeto encerrado'
+  return 'sem próxima ação definida'
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'object' && err !== null) {
+    const anyErr = err as { message?: unknown; response?: { message?: unknown } }
+    if (typeof anyErr.message === 'string' && anyErr.message) return anyErr.message
+    if (typeof anyErr.response?.message === 'string' && anyErr.response.message)
+      return anyErr.response.message
+  }
+  return fallback
+}
 
 export const TodayPage: React.FC = () => {
   const { user } = useAuth()
@@ -33,6 +56,10 @@ export const TodayPage: React.FC = () => {
   const [actions, setActions] = useState<ActionItem[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  // FATIA 3 — gravação em andamento (impede submissão duplicada por controle)
+  const [savingActionId, setSavingActionId] = useState<string | null>(null)
 
   // Modals state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -53,7 +80,7 @@ export const TodayPage: React.FC = () => {
         return parts // formatted as YYYY-MM-DD
       }
     } catch {
-      /* intentionally ignored */
+      /* fallback ISO abaixo */
     }
     return new Date().toISOString().split('T')[0]
   }
@@ -62,6 +89,7 @@ export const TodayPage: React.FC = () => {
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
       const filterContext = contextFilter === 'todos' ? undefined : contextFilter
       const [allActions, allProjects] = await Promise.all([
@@ -71,8 +99,12 @@ export const TodayPage: React.FC = () => {
       setActions(allActions)
       setProjects(allProjects)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao carregar dados'
-      toast({ variant: 'destructive', title: 'Erro', description: msg })
+      const msg = errorMessage(
+        err,
+        'Erro ao carregar dados. Verifique sua conexão e tente novamente.',
+      )
+      setLoadError(msg)
+      toast({ variant: 'destructive', title: 'Erro ao carregar', description: msg })
     } finally {
       setIsLoading(false)
     }
@@ -82,88 +114,196 @@ export const TodayPage: React.FC = () => {
     loadData()
   }, [loadData])
 
-  // Filter actions for Today views
-  // 1. Next advance (chosen explicitly, singular)
-  const nextAdvanceAction = actions.find(
-    (a) => a.is_next_step && a.status !== 'feita' && a.status !== 'cancelada',
+  // FATIA 2 — resolvedor de situação REAL do projeto: usa a lista carregada do
+  // backend (mesma consulta). Nunca assume "ativo" para relação não carregada:
+  // sem expand e fora da lista = impedimento visível na seção Reavaliar.
+  const resolveProject = useCallback(
+    (a: ActionItem): Project | null | undefined => resolveProjectState(a, projects),
+    [projects],
   )
 
-  // 2. Few selected actions for today (excluding next advance to avoid duplication)
-  const todaySelectedActions = actions.filter(
-    (a) =>
-      a.is_today_selected && !a.is_next_step && a.status !== 'feita' && a.status !== 'cancelada',
+  // FATIA 2 — RENDERIZAÇÃO do foco já escolhido: pronta ou em andamento, e
+  // nunca se o projeto estiver pausado/arquivado/encerrado, mesmo com flags antigas.
+  const nextAdvanceAction = useMemo(
+    () => actions.find((a) => a.is_next_step && isEligibleForFocusDisplay(a, resolveProject)),
+    [actions, resolveProject],
   )
 
-  // 3. Separated deadlines of today (deadline === todayStr, regardless of whether is_today_selected was clicked)
-  const todayDeadlineActions = actions.filter(
-    (a) =>
-      a.deadline === todayStr &&
-      a.status !== 'feita' &&
-      a.status !== 'cancelada' &&
-      !a.is_next_step &&
-      !a.is_today_selected,
+  const todaySelectedActions = useMemo(
+    () =>
+      actions.filter(
+        (a) =>
+          a.is_today_selected && !a.is_next_step && isEligibleForFocusDisplay(a, resolveProject),
+      ),
+    [actions, resolveProject],
   )
 
-  // 4. "Reavaliar" collapsible items:
-  // - Ações atrasadas (deadline < todayStr and not feita/cancelada)
-  // - Ações aguardando ou bloqueadas
-  // - Projetos pausados, arquivados ou sem ações prontas
-  const overdueActions = actions.filter(
-    (a) => a.deadline && a.deadline < todayStr && a.status !== 'feita' && a.status !== 'cancelada',
+  // Prazos de hoje em seção separada (prazo não escolhe foco nem altera estado).
+  const todayDeadlineActions = useMemo(
+    () =>
+      actions.filter(
+        (a) =>
+          a.deadline === todayStr &&
+          a.status !== 'feita' &&
+          a.status !== 'cancelada' &&
+          !a.is_next_step &&
+          !a.is_today_selected,
+      ),
+    [actions, todayStr],
   )
 
-  const blockedOrWaitingActions = actions.filter(
-    (a) =>
-      (a.status === 'aguardando' || a.status === 'bloqueada') &&
-      (!a.deadline || a.deadline >= todayStr),
+  const overdueActions = useMemo(
+    () =>
+      actions.filter(
+        (a) =>
+          a.deadline && a.deadline < todayStr && a.status !== 'feita' && a.status !== 'cancelada',
+      ),
+    [actions, todayStr],
   )
 
-  // Inactive or stuck projects:
-  const reevaluateProjects = projects.filter((p) => {
-    if (p.status === 'pausado' || p.status === 'arquivado') return true
-    if (p.status === 'ativo') {
-      // Check if project has ready/in-progress actions
-      const projActions = actions.filter((a) => a.project_id === p.id)
-      const hasReadyAction = projActions.some(
-        (a) => a.status === 'pronta' || a.status === 'em_andamento',
-      )
-      return !hasReadyAction // sem próxima ação definida
-    }
-    return false
-  })
+  const blockedOrWaitingActions = useMemo(
+    () =>
+      actions.filter(
+        (a) =>
+          (a.status === 'aguardando' || a.status === 'bloqueada') &&
+          (!a.deadline || a.deadline >= todayStr),
+      ),
+    [actions, todayStr],
+  )
+
+  // FATIA 2 — impedimentos de foco (flags antigas preservadas, motivo legível):
+  // escolhidas (is_next_step / is_today_selected) mas que não passam na regra
+  // compartilhada nem caem nas seções acima → visíveis só em "Reavaliar".
+  const focusImpediments = useMemo(
+    () =>
+      actions.filter((a) => {
+        if (!a.is_next_step && !a.is_today_selected) return false
+        if (a.is_next_step && a === nextAdvanceAction) return false
+        if (a.is_today_selected && todaySelectedActions.includes(a)) return false
+        if (a.deadline === todayStr && todayDeadlineActions.includes(a)) return false
+        return !checkEligibility(a, resolveProject(a)).ok
+      }),
+    [actions, nextAdvanceAction, todaySelectedActions, todayDeadlineActions, resolveProject],
+  )
+
+  // Projetos pausados/arquivados ou ativos sem próxima ação viável:
+  const reevaluateProjects = useMemo(
+    () =>
+      projects.filter((p) => {
+        if (p.status === 'pausado' || p.status === 'arquivado') return true
+        if (p.status === 'ativo') {
+          const projActions = actions.filter((a) => a.project_id === p.id)
+          const hasReadyAction = projActions.some(
+            (a) => a.status === 'pronta' || a.status === 'em_andamento',
+          )
+          return !hasReadyAction // sem próxima ação definida
+        }
+        return false
+      }),
+    [projects, actions],
+  )
 
   const reevaluateCount =
-    overdueActions.length + blockedOrWaitingActions.length + reevaluateProjects.length
+    overdueActions.length +
+    blockedOrWaitingActions.length +
+    focusImpediments.length +
+    reevaluateProjects.length
 
-  // Handlers
+  // FATIA 2 + FATIA 3 — seleção de novo foco: valida com a MESMA regra
+  // compartilhada; estado pendente; sucesso só após confirmação real do
+  // backend (sem atualização otimista: a lista local é o estado do servidor).
   const handleToggleNextStep = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    const action = actions.find((a) => a.id === id)
+    if (!current && action) {
+      const check = checkEligibility(action, resolveProject(action))
+      if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
+        toast({
+          variant: 'destructive',
+          title: 'Não é possível selecionar',
+          description:
+            check.label ||
+            'Somente ações "pronta" podem ser o próximo avanço único. Tente outra ação ou reavalie esta.',
+        })
+        return
+      }
+    }
+    setSavingActionId(id)
     try {
       if (current) {
         await actionService.unsetNextStep(id)
       } else {
         await actionService.setAsNextStep(id)
       }
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({
+        variant: 'destructive',
+        title: 'Falha ao gravar escolha',
+        description: msg,
+      })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
   const handleToggleTodaySelected = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    const action = actions.find((a) => a.id === id)
+    if (!current && action) {
+      const check = checkEligibility(action, resolveProject(action))
+      if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
+        toast({
+          variant: 'destructive',
+          title: 'Não é possível selecionar',
+          description:
+            check.label ||
+            'Somente ações "pronta" podem ir para as Poucas Ações de Hoje. Tente outra ação ou reavalie esta.',
+        })
+        return
+      }
+    }
+    setSavingActionId(id)
     try {
       await actionService.setTodaySelected(id, !current)
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({
+        variant: 'destructive',
+        title: 'Falha ao gravar escolha',
+        description: msg,
+      })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
   const handleStatusChange = async (id: string, status: ActionStatus, reason?: string) => {
+    if (savingActionId) return
+    setSavingActionId(id)
     try {
       await actionService.updateStatus(id, status, reason)
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({
+        variant: 'destructive',
+        title: 'Falha ao atualizar status',
+        description: msg,
+      })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
@@ -199,6 +339,7 @@ export const TodayPage: React.FC = () => {
               setEditingAction(null)
               setIsActionModalOpen(true)
             }}
+            disabled={savingActionId !== null}
             className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
@@ -207,7 +348,25 @@ export const TodayPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 1. SEÇÃO PRINCIPAL: Próximo Avanço (singular, explícito) */}
+      {loadError && (
+        <div className="rounded-xl border border-rose-900/60 bg-rose-950/30 p-4 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-rose-400 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-rose-200 font-medium">Falha ao carregar dados do Hoje.</p>
+            <p className="text-xs text-rose-300/80 mt-0.5">{loadError}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={loadData}
+              className="mt-2 text-xs border-rose-800 text-rose-200 hover:bg-rose-950/50"
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. SEÇÃO PRINCIPAL: Próximo Avanço (singular, deliberado) */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -226,26 +385,32 @@ export const TodayPage: React.FC = () => {
         </div>
 
         {nextAdvanceAction ? (
-          <ActionRow
-            action={nextAdvanceAction}
-            isNextAdvance={true}
-            onToggleNextStep={handleToggleNextStep}
-            onToggleTodaySelected={handleToggleTodaySelected}
-            onStatusChange={handleStatusChange}
-            onOpenLogModal={setLogModalAction}
-            onEdit={(a) => {
-              setEditingAction(a)
-              setIsActionModalOpen(true)
-            }}
-          />
+          <div className="relative">
+            {savingActionId === nextAdvanceAction.id && (
+              <p className="mb-1.5 text-xs text-amber-300 flex items-center gap-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Gravando escolha…
+              </p>
+            )}
+            <ActionRow
+              action={nextAdvanceAction}
+              isNextAdvance={true}
+              saving={savingActionId === nextAdvanceAction.id}
+              onToggleNextStep={handleToggleNextStep}
+              onToggleTodaySelected={handleToggleTodaySelected}
+              onStatusChange={handleStatusChange}
+              onOpenLogModal={setLogModalAction}
+              onEdit={(a) => {
+                setEditingAction(a)
+                setIsActionModalOpen(true)
+              }}
+            />
+          </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/30 p-6 text-center">
-            <p className="text-sm text-slate-400 font-medium">
-              Nenhum próximo avanço definido para hoje.
-            </p>
+            <p className="text-sm text-slate-400 font-medium">Qual avanço você quer fazer agora?</p>
             <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-              Escolha deliberadamente uma ação da sua lista ou crie uma nova clicando na estrela
-              para torná-la o foco do dia.
+              Escolha deliberadamente uma ação "pronta" da sua lista (estrela) para torná-la o foco
+              do dia. Nada é promovido automaticamente.
             </p>
           </div>
         )}
@@ -267,6 +432,7 @@ export const TodayPage: React.FC = () => {
               <ActionRow
                 key={action.id}
                 action={action}
+                saving={savingActionId === action.id}
                 onToggleNextStep={handleToggleNextStep}
                 onToggleTodaySelected={handleToggleTodaySelected}
                 onStatusChange={handleStatusChange}
@@ -279,7 +445,7 @@ export const TodayPage: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-850 bg-slate-900/20 p-4 text-center">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/20 p-4 text-center">
             <p className="text-xs text-slate-400">
               Nenhuma outra ação secundária selecionada para hoje. Você pode navegar em Projetos e
               marcar as que deseja puxar.
@@ -300,7 +466,7 @@ export const TodayPage: React.FC = () => {
                 Prazos Fatuais de Hoje ({todayDeadlineActions.length})
               </h3>
               <p className="text-xs text-slate-400">
-                Compromissos externos ou datas limite com vencimento hoje.
+                Compromissos externos ou datas limite com vencimento hoje. Prazo não escolhe foco.
               </p>
             </div>
           </div>
@@ -310,6 +476,7 @@ export const TodayPage: React.FC = () => {
               <ActionRow
                 key={action.id}
                 action={action}
+                saving={savingActionId === action.id}
                 onToggleNextStep={handleToggleNextStep}
                 onToggleTodaySelected={handleToggleTodaySelected}
                 onStatusChange={handleStatusChange}
@@ -337,7 +504,8 @@ export const TodayPage: React.FC = () => {
                   Reavaliar ({reevaluateCount})
                 </span>
                 <p className="text-xs text-slate-400">
-                  Atrasadas, aguardando, bloqueadas e projetos pausados ou sem avanço
+                  Atrasadas, aguardando, bloqueadas, fora do foco por impedimento e projetos
+                  pausados ou sem avanço
                 </p>
               </div>
             </div>
@@ -369,6 +537,7 @@ export const TodayPage: React.FC = () => {
                     <ActionRow
                       key={action.id}
                       action={action}
+                      saving={savingActionId === action.id}
                       onToggleNextStep={handleToggleNextStep}
                       onToggleTodaySelected={handleToggleTodaySelected}
                       onStatusChange={handleStatusChange}
@@ -392,18 +561,47 @@ export const TodayPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   {blockedOrWaitingActions.map((action) => (
-                    <ActionRow
+                    <div key={action.id}>
+                      <p className="mb-1 text-[11px] text-slate-500 px-1">
+                        Motivo: {ineligibilityLabel(action, resolveProject) || '—'}
+                        {action.waiting_for ? ` — ${action.waiting_for}` : ''}
+                      </p>
+                      <ActionRow
+                        action={action}
+                        saving={savingActionId === action.id}
+                        onToggleNextStep={handleToggleNextStep}
+                        onToggleTodaySelected={handleToggleTodaySelected}
+                        onStatusChange={handleStatusChange}
+                        onOpenLogModal={setLogModalAction}
+                        onEdit={(a) => {
+                          setEditingAction(a)
+                          setIsActionModalOpen(true)
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* FATIA 2 — ações com flags antigas que não podem aparecer no foco */}
+            {focusImpediments.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Fora do Foco por Impedimento ({focusImpediments.length})</span>
+                </div>
+                <div className="grid gap-2">
+                  {focusImpediments.map((action) => (
+                    <div
                       key={action.id}
-                      action={action}
-                      onToggleNextStep={handleToggleNextStep}
-                      onToggleTodaySelected={handleToggleTodaySelected}
-                      onStatusChange={handleStatusChange}
-                      onOpenLogModal={setLogModalAction}
-                      onEdit={(a) => {
-                        setEditingAction(a)
-                        setIsActionModalOpen(true)
-                      }}
-                    />
+                      className="p-3 rounded-lg border border-slate-800 bg-slate-900/40 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <span className="font-medium text-slate-300 truncate">{action.title}</span>
+                      <span className="text-amber-300/80 shrink-0">
+                        Motivo: {ineligibilityLabel(action, resolveProject)}
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -427,9 +625,7 @@ export const TodayPage: React.FC = () => {
                         </Badge>
                         <span className="font-medium text-slate-300 truncate">{p.title}</span>
                       </div>
-                      <span className="text-slate-500 shrink-0">
-                        {p.status === 'ativo' ? 'Sem ação pronta' : p.status}
-                      </span>
+                      <span className="text-slate-500 shrink-0">{projectBlockLabel(p)}</span>
                     </div>
                   ))}
                 </div>

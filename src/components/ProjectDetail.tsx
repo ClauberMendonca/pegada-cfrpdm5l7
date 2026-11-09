@@ -46,6 +46,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [actions, setActions] = useState<ActionItem[]>([])
   const [logs, setLogs] = useState<ProgressLog[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // FATIA 3 — gravação em andamento (impede submissão duplicada)
+  const [savingActionId, setSavingActionId] = useState<string | null>(null)
 
   // Modals
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -78,33 +80,48 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   }, [loadData])
 
   const handleStatusChange = async (id: string, status: ActionStatus, reason?: string) => {
+    if (savingActionId) return
+    setSavingActionId(id)
     try {
       await actionService.updateStatus(id, status, reason)
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível gravar. Tente novamente.'
+      toast({ variant: 'destructive', title: 'Falha ao atualizar status', description: msg })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
   const handleToggleNextStep = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    setSavingActionId(id)
     try {
       if (current) {
         await actionService.unsetNextStep(id)
       } else {
         await actionService.setAsNextStep(id)
       }
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível gravar. Tente novamente.'
+      toast({ variant: 'destructive', title: 'Falha ao gravar escolha', description: msg })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
   const handleToggleTodaySelected = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    setSavingActionId(id)
     try {
       await actionService.setTodaySelected(id, !current)
-      loadData()
-    } catch {
-      /* intentionally ignored */
+      await loadData()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível gravar. Tente novamente.'
+      toast({ variant: 'destructive', title: 'Falha ao gravar escolha', description: msg })
+    } finally {
+      setSavingActionId(null)
     }
   }
 
@@ -401,6 +418,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     key={action.id}
                     action={action}
                     isNextAdvance={action.is_next_step}
+                    saving={savingActionId === action.id}
                     onToggleNextStep={handleToggleNextStep}
                     onToggleTodaySelected={handleToggleTodaySelected}
                     onStatusChange={handleStatusChange}

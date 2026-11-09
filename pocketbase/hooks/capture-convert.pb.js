@@ -1,6 +1,10 @@
 // FATIA P1B — Conversão idempotente de capturas (rota nativa autenticada).
 //
-// POST /api/pc/captures/{id}/convert   body: { target: 'project' | 'action', data: {...} }
+// POST /backend/v1/pc/captures/{id}/convert   body: { target: 'project' | 'action', data: {...} }
+//
+// Esta instância Skip Cloud exige que rotas custom novas usem o prefixo
+// /backend/v1/ (namespace /api/ é reservado ao PocketBase). O caminho
+// registrado é o caminho exato servido — routerAdd não acrescenta prefixo.
 //
 // Garantias (backend nativo, dentro de UMA transação SQLite):
 // - Sessão obrigatória; proprietário do destino é sempre derivado da sessão
@@ -18,7 +22,7 @@
 
 routerAdd(
   'POST',
-  '/pc/captures/{captureId}/convert',
+  '/backend/v1/pc/captures/{captureId}/convert',
   (e) => {
     const info = e.requestInfo()
     const auth = e.auth

@@ -71,7 +71,7 @@ export const captureService = {
     if (!authId) throw new Error('Usuário não autenticado')
 
     try {
-      const result = await pb.send<ConvertResult>(`api/pc/captures/${captureId}/convert`, {
+      const result = await pb.send<ConvertResult>(`backend/v1/pc/captures/${captureId}/convert`, {
         method: 'POST',
         body: { target, data },
       })

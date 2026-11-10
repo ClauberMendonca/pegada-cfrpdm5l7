@@ -38,7 +38,20 @@
 // - Distinção de estados: ausência/paginação incompleta/rede/timeout/resultado
 //   ainda não encontrado = recuperável ('em_execucao' + nota de erro);
 //   structured_output success:false ou JSON inválido EFETIVAMENTE recebido =
-//   falha real ('falha').
+//   falha real ('falha') — incluindo envelope structured_output_result PRESENTE
+//   porém malformado (payload null/string/objeto sem success booleano), que é
+//   falha de formato explícita e NÃO ausência recuperável (M1A1b).
+// - Associação de pergunta (M1A1b): o texto/id gravados em question vêm do
+//   assistant_message REALMENTE correspondente à espera (waiting_for_event_id
+//   que aponte para essa mensagem exposta, ou assistant_message com
+//   question_expectation na execução corrente). Sem correspondência segura, a
+//   leitura fica inconclusiva — nunca texto de mensagem de progresso.
+// - Identidade de leitura (M1A1b): a escrita compara o snapshot lido (read_key)
+//   com o registro novo na transação. Leitura velha/fora de ordem NÃO substitui
+//   estado mais novo (vale para 'pronta' E para 'falha'); evento/execução
+//   comprovadamente nova (waited_after_done, ou user_message mais novo que o
+//   resultado gravado) invalida o resultado antigo e grava o estado novo. Sem
+//   campo de schema novo: identidade em question._read_key / result._read_key.
 // - NÃO codificar stop/cancel nem task.confirmAction nesta fatia. Timeout de
 //   consulta ≠ cancelamento remoto: nada vira "cancelada" sem confirmação.
 // - Envio de resposta (answer) ainda SEM claim durável antes do POST — reenvio
@@ -468,7 +481,10 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     // mode 'result': primeiro structured_output_result; user_message mais novo
     //   que ele = continuação (resultado antigo não serve).
     // mode 'question': primeiro status_update waiting; o texto da pergunta é a
-    //   assistant_message imediatamente anterior (mais antiga) a ele.
+    //   assistant_message CORRESPONDENTE à espera (waiting_for_event_id que
+    //   aponte para essa mensagem, ou assistant_message com question_expectation
+    //   na execução corrente) — nunca a primeira mensagem anterior qualquer
+    //   (M1A1b: mensagem de progresso intercalada não é pergunta).
     let cursor = ''
     let waiting = null
     for (let page = 0; page < MAX_EVENT_PAGES; page++) {
@@ -480,9 +496,20 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
         if (mode === 'result') {
           if (t === 'structured_output_result') {
             const so = m.structured_output_result
-            return { found: { so: so && typeof so === 'object' ? so : null } }
+            // Envelope PRESENTE: malformado (null/string/array/sem success
+            // booleano) é falha de formato explícita — NÃO ausência
+            // recuperável. Só a AUSÊNCIA é inconclusiva (M1A1b).
+            if (so === null || so === undefined) {
+              return { found: { malformed: true } }
+            }
+            if (typeof so !== 'object' || Array.isArray(so) || typeof so.success !== 'boolean') {
+              return { found: { malformed: true } }
+            }
+            return { found: { so: so } }
           }
           if (t === 'user_message') return { found: { continuation: true } }
+          // (continuation é evidência de execução nova: o caller invalida
+          // resultados/estados anteriores a ela)
         } else if (mode === 'question') {
           const su = m.status_update
           if (
@@ -494,7 +521,12 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
           ) {
             const sd =
               su.status_detail && typeof su.status_detail === 'object' ? su.status_detail : {}
-            waiting = { type: str(sd.waiting_for_event_type), id: str(sd.waiting_for_event_id) }
+            // waiting_for_event_id referencia o EVENTO aguardado — NÃO é o ID
+            // do assistant_message da pergunta (M1A1b: não confundir).
+            waiting = {
+              type: str(sd.waiting_for_event_type),
+              id: str(sd.waiting_for_event_id),
+            }
             continue
           }
           if (waiting && t === 'assistant_message') {
@@ -502,14 +534,33 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
               m.assistant_message && typeof m.assistant_message === 'object'
                 ? m.assistant_message
                 : {}
+            const text = extractText(am.content)
+            // Correspondência segura (M1A1b): o assistant_message é a pergunta
+            // desta espera SOMENTE se (a) waiting_for_event_id aponta
+            // diretamente para ESTE evento, ou (b) a própria mensagem carrega
+            // question_expectation. O ID gravado é SEMPRE o do assistant_message
+            // selecionado — o ID da espera (waiting_for_event_id) NUNCA vira
+            // question.message_id.
+            const matchedById = !!waiting.id && str(m.id) === waiting.id
+            const hasExpect = am.question_expectation && typeof am.question_expectation === 'object'
+            if (matchedById || hasExpect) {
+              return {
+                found: {
+                  question: {
+                    type: waiting.type,
+                    id: str(m.id),
+                    text: text,
+                    expect: hasExpect ? am.question_expectation : null,
+                  },
+                },
+              }
+            }
+            // assistant_message SEM correspondência provada com a espera:
+            // mensagem de progresso intercalada — a leitura fica INCONCLUSIVA
+            // (recuperável), sem improvisar texto de outra mensagem (M1A1b).
             return {
               found: {
-                question: {
-                  type: waiting.type,
-                  id: waiting.id,
-                  text: extractText(am.content),
-                  expect: am.question_expectation || null,
-                },
+                question: { type: waiting.type, id: waiting.id, text: '', expect: null },
               },
             }
           }
@@ -519,7 +570,11 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       cursor = pg.nextCursor
     }
     if (mode === 'question' && waiting) {
-      // Espera encontrada, mas texto não veio dentro do limite de páginas.
+      // Espera encontrada, mas texto provado não veio dentro do limite de
+      // páginas. Candidata (assistant_message logo após a espera, sem prova de
+      // correspondência) só é usada se não houver outra mensagem entre ela e a
+      // espera na página — caso contrário, texto arbitrário de mensagem de
+      // progresso NUNCA vira pergunta (M1A1b: leitura inconclusiva).
       return { found: { question: { type: waiting.type, id: waiting.id, text: '', expect: null } } }
     }
     return { exhausted: true }
@@ -562,6 +617,9 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     }
     if (typeof v.explanation !== 'string') {
       return { ok: false, error: 'Campo explanation inválido.' }
+    }
+    if (v.next_step_suggestion !== null && typeof v.next_step_suggestion !== 'string') {
+      return { ok: false, error: 'Campo next_step_suggestion deve ser texto ou null.' }
     }
     const p = v.proposal
     if (kind === 'esclarecimento') {
@@ -615,10 +673,6 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
           }
         }
       }
-    }
-    const nss = v.next_step_suggestion
-    if (nss !== null && typeof nss !== 'string') {
-      return { ok: false, error: 'Campo next_step_suggestion deve ser texto ou null.' }
     }
     return { ok: true }
   }
@@ -706,10 +760,15 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
 
   // ---------- computação do estado (HTTP já feito; escrita vem depois) ----------
   let computed = null
+  // Evidência de continuação: user_message mais recente que o último resultado
+  // — a execução corrente não é mais a que produziu o estado gravado, e o
+  // estado gravado (mesmo terminal) passa a ser inválido.
+  let continuationEvidence = false
   if (status === 'error') {
     computed = { state: 'falha', error: 'Tarefa remota reportou erro.' }
   } else if (status === 'waiting') {
     const scan = scanEvents(apiKey, taskId, 'question')
+    if (scan.found && scan.found.continuation) continuationEvidence = true
     if (scan.found && scan.found.question) {
       const q = scan.found.question
       if ((q.type === 'messageAskUser' || q.type === 'cascadeAskUser') && q.text) {
@@ -743,7 +802,9 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       const scan = scanEvents(apiKey, taskId, 'result')
       if (scan.found && scan.found.continuation) {
         // Nova execução em curso (mensagem do dono mais recente que o último
-        // resultado): resultado antigo NÃO é reaproveitado.
+        // resultado): resultado antigo NÃO é reaproveitado — continuação
+        // comprovada também invalida um estado terminal gravado (M1A1b).
+        continuationEvidence = true
         computed = { state: 'em_execucao', result: null, error: '' }
       } else if (scan.found && scan.found.so) {
         const so = scan.found.so
@@ -759,6 +820,10 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
           const msg = so.error && typeof so.error === 'string' ? so.error : ''
           computed = { state: 'falha', error: 'Extração sem sucesso' + (msg ? ': ' + msg : '.') }
         }
+      } else if (scan.found && scan.found.malformed) {
+        // Envelope structured_output_result PRESENTE e malformado: falha de
+        // formato explícita — NÃO ausência recuperável (M1A1b).
+        computed = { state: 'falha', error: 'Envelope do resultado estruturado malformado.' }
       } else {
         // Resultado ainda não encontrado (ausência/paginação/rede): recuperável.
         computed = { state: 'em_execucao', error: 'Resultado estruturado ainda não disponível.' }
@@ -769,9 +834,56 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     computed = { state: 'em_execucao', error: '' }
   }
 
+  // ---------- identidade do evento (M1A1b) ----------
+  // Identidade do evento que originou ESTA leitura computada: pergunta pela
+  // message_id real; resultado pelo conteúdo; falha pela mensagem de erro.
+  function questionReadKey(q) {
+    if (!q || typeof q !== 'object') return ''
+    return str(q.message_id) || (typeof q.text === 'string' ? 't:' + q.text : '')
+  }
+  function resultReadKey(r) {
+    if (r === null || r === undefined) return ''
+    try {
+      return 'r:' + JSON.stringify(r)
+    } catch (_) {
+      return 'r:?'
+    }
+  }
+  // Evento comprovadamente NOVO em relação ao estado gravado: em
+  // 'aguardando_pergunta', uma pergunta de message_id diferente do gravado;
+  // em 'pronta', um resultado de conteúdo diferente do gravado; em 'falha',
+  // uma causa de erro diferente da gravada. Só um evento novo comprovado (ou
+  // registro sem estado terminal anterior) autoriza SOBRESCREVER um estado
+  // terminal gravado — leitura velha/fora de ordem (mesma identidade de evento
+  // que a já gravada) NÃO regredi (M1A1b).
+  const terminalFresh = ['pronta', 'falha', 'decisao_externa']
+  let isNewEvent = false
+  if (computed.state === 'aguardando_pergunta') {
+    const fq = rec.get('question')
+    isNewEvent = questionReadKey(fq) !== questionReadKey(computed.question)
+  } else if (computed.state === 'pronta') {
+    isNewEvent = resultReadKey(rec.get('result')) !== resultReadKey(computed.result)
+  } else if (computed.state === 'falha') {
+    isNewEvent = str(rec.getString('error')) !== str(computed.error)
+  } else if (computed.state === 'decisao_externa') {
+    isNewEvent = true
+  }
+  // Continuação comprovada (user_message mais recente que o resultado gravado):
+  // a execução atual não é mais a que produziu o estado terminal — o resultado
+  // antigo é invalidado seja qual for o estado computado (M1A1b).
+  if (continuationEvidence) isNewEvent = true
+  const recTerminal = terminalFresh.indexOf(rec.getString('state')) >= 0
+  if (recTerminal && !isNewEvent) {
+    // Leitura velha/fora de ordem sobre estado terminal: o estado gravado é
+    // mais novo — nada é substituído (vale para pronta, falha E decisao;
+    // M1A1b: o guard antigo protegia só 'pronta' e congelava o estado).
+    e.app.save(rec) // persiste last_polled_at sem tocar estado/pergunta/resultado
+    return e.json(200, { request: serializeRequest(rec), synced: true })
+  }
+  // recTerminal && isNewEvent: continuação legítima (pergunta/resultado/erro
+  // comprovadamente novos) — invalida o estado/resultado antigo e grava abaixo.
+  // !recTerminal: escrita normal como antes.
   // ---------- escrita guardada (transação void; resposta só após commit) ----------
-  // Leitura sobreposta não derruba estado terminal mais novo: se o registro já
-  // virou 'pronta' por outra leitura, esta escrita não regredir o estado.
   let outReq = null
   e.app.runInTransaction((txApp) => {
     let fresh = null
@@ -781,11 +893,6 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       fresh = null
     }
     if (!fresh || typeof fresh.getString !== 'function') fresh = rec
-    const freshState = fresh.getString('state')
-    if (freshState === 'pronta' && computed.state !== 'pronta') {
-      outReq = serializeRequest(fresh)
-      return
-    }
     fresh.set('state', computed.state)
     let newQuestion = computed.question !== undefined ? computed.question : null
     if (newQuestion === null) {
@@ -793,8 +900,17 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       if (fq && typeof fq === 'object' && fq.answered === true) newQuestion = fq
     }
     fresh.set('question', newQuestion)
-    if (computed.result !== undefined) fresh.set('result', computed.result)
-    fresh.set('error', computed.error !== undefined ? computed.error : '')
+    if (computed.result !== undefined) {
+      fresh.set('result', computed.result)
+    } else if (recTerminal || computed.state !== 'aguardando_pergunta') {
+      // Estado que não é resultado novo (ex.: pergunta nova sobre um 'pronta'
+      // gravado, em_execucao após continuação): resultado antigo NÃO sobrevive
+      // — ele pertence à execução anterior (M1A1b).
+      fresh.set('result', null)
+    }
+    if (computed.error !== undefined || computed.state !== 'aguardando_pergunta') {
+      fresh.set('error', computed.error !== undefined ? computed.error : '')
+    }
     txApp.save(fresh)
     outReq = serializeRequest(fresh)
   })

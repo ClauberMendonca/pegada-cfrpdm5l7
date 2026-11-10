@@ -31,7 +31,7 @@ export const ProjectsPage: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'todos'>('todos')
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
-  const [editingProject, setEditingProject] = useState<Project | null>(null)
+
   const [isLoading, setIsLoading] = useState(true)
 
   const loadProjects = useCallback(async () => {
@@ -59,10 +59,6 @@ export const ProjectsPage: React.FC = () => {
       <ProjectDetail
         projectId={selectedProjectId}
         onBack={() => setSelectedProjectId(null)}
-        onEditProject={(p) => {
-          setEditingProject(p)
-          setIsProjectModalOpen(true)
-        }}
         onProjectUpdated={loadProjects}
       />
     )
@@ -109,10 +105,7 @@ export const ProjectsPage: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <Button
-            onClick={() => {
-              setEditingProject(null)
-              setIsProjectModalOpen(true)
-            }}
+            onClick={() => setIsProjectModalOpen(true)}
             className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
@@ -222,11 +215,7 @@ export const ProjectsPage: React.FC = () => {
       {/* Project Modal */}
       <ProjectModal
         isOpen={isProjectModalOpen}
-        onClose={() => {
-          setIsProjectModalOpen(false)
-          setEditingProject(null)
-        }}
-        projectToEdit={editingProject}
+        onClose={() => setIsProjectModalOpen(false)}
         defaultContext={contextFilter === 'vida' ? 'vida' : 'trabalho'}
         onSaved={loadProjects}
       />

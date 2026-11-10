@@ -6,6 +6,7 @@ import { progressService } from '@/services/progressService'
 import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
+import { ProjectModal } from '@/components/ProjectModal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -33,14 +34,12 @@ import { useAuth } from '@/contexts/AuthContext'
 interface ProjectDetailProps {
   projectId: string
   onBack: () => void
-  onEditProject: (project: Project) => void
   onProjectUpdated?: () => void
 }
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   projectId,
   onBack,
-  onEditProject,
   onProjectUpdated,
 }) => {
   const { toast } = useToast()
@@ -60,9 +59,12 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
   const [logAction, setLogAction] = useState<ActionItem | null>(null)
   const [is8RsOpen, setIs8RsOpen] = useState(false)
+  // Edição da ficha: modal próprio do detalhe (camada acima do detalhe, sem sair dele)
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
 
+  // Recarregamentos (ex.: após salvar a ficha) não voltam ao estado de carregamento:
+  // a árvore continua montada, o modal de edição fecha sem perder o foco do detalhe.
   const loadData = useCallback(async () => {
-    setIsLoading(true)
     try {
       const [proj, actList, logList] = await Promise.all([
         projectService.getById(projectId),
@@ -214,7 +216,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           <Button
             size="sm"
-            onClick={() => onEditProject(project)}
+            onClick={() => setIsProjectModalOpen(true)}
             className="bg-slate-800 hover:bg-slate-700 text-white text-xs gap-1"
           >
             <Edit3 className="w-3.5 h-3.5" />
@@ -550,6 +552,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         )}
       </section>
+
+      {/* Edição da ficha do projeto — mesmo projeto, sem voltar à lista */}
+      <ProjectModal
+        isOpen={isProjectModalOpen}
+        onClose={() => setIsProjectModalOpen(false)}
+        projectToEdit={project}
+        defaultContext={project.context}
+        onSaved={() => {
+          loadData()
+          onProjectUpdated?.()
+        }}
+      />
 
       {/* Action modal for creating / editing action within this project */}
       <ActionModal

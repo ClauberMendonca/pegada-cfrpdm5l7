@@ -45,136 +45,125 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
 
   const str = (v) => (typeof v === 'string' ? v.trim() : '')
 
-  let result
-  try {
-    result = e.app.runInTransaction((txApp) => {
-      // ---------- captura: dono + estado ----------
-      let capture
+  const result = e.app.runInTransaction((txApp) => {
+    // ---------- captura: dono + estado ----------
+    let capture
+    try {
+      capture = txApp.findRecordById('captures', captureId)
+    } catch (_) {
+      throw new NotFoundError('Captura não encontrada.')
+    }
+    if (capture.getString('user_id') !== userId) {
+      throw new ForbiddenError('Captura pertence a outro usuário.')
+    }
+
+    const status = capture.getString('status')
+
+    // Idempotência: captura já convertida → devolve o destino real.
+    if (status === 'convertida_projeto' || status === 'convertida_acao') {
+      const existingProjectId = capture.getString('converted_project_id')
+      const existingActionId = capture.getString('converted_action_id')
+      let targetId = ''
+      let targetType = ''
+      if (status === 'convertida_projeto' && existingProjectId) {
+        targetId = existingProjectId
+        targetType = 'project'
+      } else if (status === 'convertida_acao' && existingActionId) {
+        targetId = existingActionId
+        targetType = 'action'
+      } else {
+        throw new BadRequestError(
+          'Captura em estado inconsistente: marcada como convertida sem destino válido.',
+        )
+      }
+      let existing
       try {
-        capture = txApp.findRecordById('captures', captureId)
+        existing = txApp.findRecordById(targetType === 'project' ? 'projects' : 'actions', targetId)
       } catch (_) {
-        throw new NotFoundError('Captura não encontrada.')
+        throw new BadRequestError('Captura convertida aponta para um destino que não existe mais.')
       }
-      if (capture.getString('user_id') !== userId) {
-        throw new ForbiddenError('Captura pertence a outro usuário.')
+      if (existing.getString('user_id') !== userId) {
+        throw new ForbiddenError('Destino da captura pertence a outro usuário.')
       }
-
-      const status = capture.getString('status')
-
-      // Idempotência: captura já convertida → devolve o destino real.
-      if (status === 'convertida_projeto' || status === 'convertida_acao') {
-        const existingProjectId = capture.getString('converted_project_id')
-        const existingActionId = capture.getString('converted_action_id')
-        let targetId = ''
-        let targetType = ''
-        if (status === 'convertida_projeto' && existingProjectId) {
-          targetId = existingProjectId
-          targetType = 'project'
-        } else if (status === 'convertida_acao' && existingActionId) {
-          targetId = existingActionId
-          targetType = 'action'
-        } else {
-          throw new BadRequestError(
-            'Captura em estado inconsistente: marcada como convertida sem destino válido.',
-          )
-        }
-        let existing
-        try {
-          existing = txApp.findRecordById(
-            targetType === 'project' ? 'projects' : 'actions',
-            targetId,
-          )
-        } catch (_) {
-          throw new BadRequestError(
-            'Captura convertida aponta para um destino que não existe mais.',
-          )
-        }
-        if (existing.getString('user_id') !== userId) {
-          throw new ForbiddenError('Destino da captura pertence a outro usuário.')
-        }
-        return {
-          duplicate: true,
-          targetType: targetType,
-          target: existing,
-          capture: capture,
-        }
+      return {
+        duplicate: true,
+        targetType: targetType,
+        target: existing,
+        capture: capture,
       }
+    }
 
-      if (status === 'descartada') {
-        throw new BadRequestError('Captura descartada não pode ser convertida.')
+    if (status === 'descartada') {
+      throw new BadRequestError('Captura descartada não pode ser convertida.')
+    }
+    if (status !== 'pendente') {
+      // 409 nativo da JSVM (não existe ConflictError nesta instância).
+      throw new ApiError(409, 'Captura não está mais pendente.')
+    }
+
+    // ---------- criação do destino + vínculo (mesma transação) ----------
+    if (target === 'project') {
+      const project = new Record(txApp.findCollectionByNameOrId('projects'))
+      project.set('user_id', userId) // derivado da sessão, nunca do payload
+      project.set('title', title)
+      project.set('context', context)
+      project.set('status', 'rascunho')
+      if (str(data.aspiration)) project.set('aspiration', str(data.aspiration))
+      if (str(data.controllable_delivery)) {
+        project.set('controllable_delivery', str(data.controllable_delivery))
       }
-      if (status !== 'pendente') {
-        throw new ConflictError('Captura não está mais pendente.')
+      if (str(data.completion_condition)) {
+        project.set('completion_condition', str(data.completion_condition))
       }
+      txApp.save(project)
 
-      // ---------- criação do destino + vínculo (mesma transação) ----------
-      if (target === 'project') {
-        const project = new Record(txApp.findCollectionByNameOrId('projects'))
-        project.set('user_id', userId) // derivado da sessão, nunca do payload
-        project.set('title', title)
-        project.set('context', context)
-        project.set('status', 'rascunho')
-        if (str(data.aspiration)) project.set('aspiration', str(data.aspiration))
-        if (str(data.controllable_delivery)) {
-          project.set('controllable_delivery', str(data.controllable_delivery))
-        }
-        if (str(data.completion_condition)) {
-          project.set('completion_condition', str(data.completion_condition))
-        }
-        txApp.save(project)
-
-        capture.set('status', 'convertida_projeto')
-        capture.set('converted_project_id', project.id)
-        txApp.save(capture)
-
-        return { duplicate: false, targetType: 'project', target: project, capture: capture }
-      }
-
-      // target === 'action'
-      const projectId = str(data.project_id)
-      if (projectId) {
-        let project
-        try {
-          project = txApp.findRecordById('projects', projectId)
-        } catch (_) {
-          throw new BadRequestError('Projeto relacionado inválido.')
-        }
-        if (project.getString('user_id') !== userId) {
-          throw new ForbiddenError('Projeto relacionado pertence a outro usuário.')
-        }
-        if (project.getString('context') !== context) {
-          throw new BadRequestError('Contexto da ação difere do contexto do projeto.')
-        }
-      }
-
-      const action = new Record(txApp.findCollectionByNameOrId('actions'))
-      action.set('user_id', userId) // derivado da sessão, nunca do payload
-      action.set('title', title)
-      action.set('context', context)
-      action.set('status', 'pronta')
-      action.set('is_next_step', false)
-      action.set('is_today_selected', false)
-      if (projectId) action.set('project_id', projectId)
-      txApp.save(action)
-
-      capture.set('status', 'convertida_acao')
-      capture.set('converted_action_id', action.id)
+      capture.set('status', 'convertida_projeto')
+      capture.set('converted_project_id', project.id)
       txApp.save(capture)
 
-      return { duplicate: false, targetType: 'action', target: action, capture: capture }
-    })
-  } catch (err) {
-    if (
-      err instanceof BadRequestError ||
-      err instanceof ForbiddenError ||
-      err instanceof UnauthorizedError ||
-      err instanceof NotFoundError ||
-      err instanceof ConflictError
-    ) {
-      throw err
+      return { duplicate: false, targetType: 'project', target: project, capture: capture }
     }
-    throw new BadRequestError('Falha na conversão: ' + (err && err.message ? err.message : err))
-  }
+
+    // target === 'action'
+    const projectId = str(data.project_id)
+    if (projectId) {
+      let project
+      try {
+        project = txApp.findRecordById('projects', projectId)
+      } catch (_) {
+        throw new BadRequestError('Projeto relacionado inválido.')
+      }
+      if (project.getString('user_id') !== userId) {
+        throw new ForbiddenError('Projeto relacionado pertence a outro usuário.')
+      }
+      if (project.getString('context') !== context) {
+        throw new BadRequestError('Contexto da ação difere do contexto do projeto.')
+      }
+    }
+
+    const action = new Record(txApp.findCollectionByNameOrId('actions'))
+    action.set('user_id', userId) // derivado da sessão, nunca do payload
+    action.set('title', title)
+    action.set('context', context)
+    action.set('status', 'pronta')
+    action.set('is_next_step', false)
+    action.set('is_today_selected', false)
+    if (projectId) action.set('project_id', projectId)
+    txApp.save(action)
+
+    capture.set('status', 'convertida_acao')
+    capture.set('converted_action_id', action.id)
+    txApp.save(capture)
+
+    return { duplicate: false, targetType: 'action', target: action, capture: capture }
+  })
+  // Sem wrapper try/catch no bloco da transação: erros de rota (ApiError 4xx,
+  // UnauthorizedError, BadRequestError, ...) e falhas internas seguem direto
+  // para o handler global de erros do PocketBase, que responde com o
+  // status/message do ApiError e registra o erro original nos logs — sem
+  // mascaramento nem concatenação de err.message bruto numa resposta ao
+  // usuário. (Antes: cadeia instanceof com ConflictError — classe inexistente
+  // na JSVM — estourava ReferenceError e ocultava o erro da transação.)
 
   const targetObj = result.target
   const targetId = targetObj.id

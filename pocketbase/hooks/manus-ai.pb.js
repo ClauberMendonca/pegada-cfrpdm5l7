@@ -726,10 +726,33 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     return e.json(200, { request: serializeRequest(rec), synced: false })
   }
 
-  rec.set('last_polled_at', new Date().toISOString())
-  e.app.save(rec)
+  // ---------- RESERVA de polling (M1A1b/Ponto 1) ----------
+  // Reserva atomicamente sobre registro FRESCO (relido dentro da transação) e
+  // preserva a identidade/revisão do snapshot reservado: pollTicket guarda o
+  // 'updated' e o 'last_polled_at' DO REGISTRO RELIDO — a escrita posterior só
+  // é aceita se essa revisão continuar atual (escrita condicionada). Sem
+  // campos de schema novos: reusa updated/last_polled_at existentes.
+  const pollTicket = { updated: '', lastPolledAt: '' }
+  e.app.runInTransaction((txApp) => {
+    let fresh = null
+    try {
+      fresh = txApp.findRecordById('ai_requests', rec.id)
+    } catch (_) {
+      fresh = null
+    }
+    if (!fresh || typeof fresh.getString !== 'function') fresh = rec
+    pollTicket.updated = fresh.getString('updated')
+    pollTicket.lastPolledAt = fresh.getString('last_polled_at')
+    const pollNow = new Date().toISOString()
+    fresh.set('last_polled_at', pollNow)
+    txApp.save(fresh)
+    pollTicket.lastPolledAt = pollNow
+    // O rec de trabalho passa a ser o snapshot RESERVADO (fresco), com a nova
+    // last_polled_at — nunca a leitura velha pré-transação.
+    rec = fresh
+  })
 
-  // ---------- task.detail (metadados/status/background) ----------
+  // ---------- task.detail (metadados/status/background) — HTTP FORA da transação ----------
   let detail = null
   let detailErr = null
   try {
@@ -746,13 +769,55 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
   if (detailErr || !officialOk(detail)) {
     // Falha transitória de consulta: estado mantido (recuperável), sem
     // 'falha' irrecuperável e sem 'cancelada'. synced:false — leitura inválida.
-    rec.set('error', detailErr ? sanitizeErr(detailErr, null) : sanitizeErr(null, detail))
-    e.app.save(rec)
-    return e.json(200, { request: serializeRequest(rec), synced: false })
+    // Escrita CONDICIONADA (M1A1b/Ponto 1): dentro da transação, só persiste a
+    // nota de erro se a reserva (updated + last_polled_at) e a revisão do
+    // registro continuarem atuais — leitura obsoleta NÃO sobrescreve estado
+    // mais novo gravado por outra consulta; devolve o registro ATUAL.
+    let outReq = serializeRequest(rec)
+    let stale = false
+    e.app.runInTransaction((txApp) => {
+      let fresh = null
+      try {
+        fresh = txApp.findRecordById('ai_requests', rec.id)
+      } catch (_) {
+        fresh = null
+      }
+      if (!fresh || typeof fresh.getString !== 'function') {
+        return
+      }
+      const stillOurs =
+        fresh.getString('updated') === pollTicket.updated &&
+        fresh.getString('last_polled_at') === pollTicket.lastPolledAt
+      if (!stillOurs) {
+        stale = true
+        return
+      }
+      // Compara DENTRO da transação com o snapshot fresco (não só o texto de
+      // erro do rec velho): se o registro mudou enquanto A aguardava HTTP, o
+      // rec antigo NÃO é salvo.
+      if (
+        str(fresh.getString('error')) !== rec.getString('error') ||
+        fresh.getString('state') !== rec.getString('state')
+      ) {
+        // registro mudou além da nossa reserva: não sobrescrever
+        stale = true
+        return
+      }
+      fresh.set('error', detailErr ? sanitizeErr(detailErr, null) : sanitizeErr(null, detail))
+      txApp.save(fresh)
+      rec = fresh
+      outReq = serializeRequest(fresh)
+    })
+    if (stale || !outReq) {
+      // Devolve o registro ATUAL (relido), não o rec velho.
+      let current = rec
+      try {
+        current = e.app.findRecordById('ai_requests', rec.id)
+      } catch (_) {}
+      return e.json(200, { request: serializeRequest(current), synced: false })
+    }
+    return e.json(200, { request: outReq, synced: false })
   }
-
-  const task = detail.json.task && typeof detail.json.task === 'object' ? detail.json.task : {}
-  const status = str(task.status)
   // has_running_background_jobs: true = pode acordar de novo; false =
   // encerrado de verdade; OMISSÃO = desconhecido → política conservadora:
   // NUNCA 'pronta' (só === false autoriza prontidão).

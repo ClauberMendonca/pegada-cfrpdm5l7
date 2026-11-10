@@ -171,7 +171,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
   // por uma das saídas acima. Se não foi, é falha interna — o erro sobe para
   // o handler global (nunca enviar sucesso antes do commit, nem em finally).
   if (!result) {
-    throw new ApiError(http.StatusInternalServerError, 'Falha interna na conversão da captura.')
+    throw new ApiError(500, 'Falha interna na conversão da captura.')
   }
   // Sem wrapper try/catch no bloco da transação: erros de rota (ApiError 4xx,
   // UnauthorizedError, BadRequestError, ...) e falhas internas seguem direto
@@ -233,7 +233,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
             : undefined,
         }
 
-  return e.json(http.StatusOK, {
+  return e.json(200, {
     duplicate: result.duplicate,
     target_type: result.targetType,
     target: targetPayload,

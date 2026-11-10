@@ -12,7 +12,7 @@
 
 type DateLike = Date | string | null | undefined
 
-const CALENDAR_DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+const CALENDAR_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
 function toDate(value: DateLike): Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value

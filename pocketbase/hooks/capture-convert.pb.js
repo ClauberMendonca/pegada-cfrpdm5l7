@@ -45,7 +45,14 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
 
   const str = (v) => (typeof v === 'string' ? v.trim() : '')
 
-  const result = e.app.runInTransaction((txApp) => {
+  // Contrato nativo de runInTransaction: fn: (txApp) => void. O retorno do
+  // callback NÃO pode ser um objeto (o lado Go tenta convertê-lo em erro —
+  // "could not convert [object Object] to error" — e reverte a transação).
+  // O resultado é carregado nesta variável LOCAL, por requisição, e a resposta
+  // HTTP só é enviada DEPOIS do commit bem-sucedido.
+  let result = null
+
+  e.app.runInTransaction((txApp) => {
     // ---------- captura: dono + estado ----------
     let capture
     try {
@@ -85,12 +92,13 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       if (existing.getString('user_id') !== userId) {
         throw new ForbiddenError('Destino da captura pertence a outro usuário.')
       }
-      return {
+      result = {
         duplicate: true,
         targetType: targetType,
         target: existing,
         capture: capture,
       }
+      return
     }
 
     if (status === 'descartada') {
@@ -121,7 +129,8 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       capture.set('converted_project_id', project.id)
       txApp.save(capture)
 
-      return { duplicate: false, targetType: 'project', target: project, capture: capture }
+      result = { duplicate: false, targetType: 'project', target: project, capture: capture }
+      return
     }
 
     // target === 'action'
@@ -155,8 +164,15 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
     capture.set('converted_action_id', action.id)
     txApp.save(capture)
 
-    return { duplicate: false, targetType: 'action', target: action, capture: capture }
+    result = { duplicate: false, targetType: 'action', target: action, capture: capture }
   })
+
+  // Transação commitada com sucesso: `result` obrigatoriamente foi definido
+  // por uma das saídas acima. Se não foi, é falha interna — o erro sobe para
+  // o handler global (nunca enviar sucesso antes do commit, nem em finally).
+  if (!result) {
+    throw new ApiError(http.StatusInternalServerError, 'Falha interna na conversão da captura.')
+  }
   // Sem wrapper try/catch no bloco da transação: erros de rota (ApiError 4xx,
   // UnauthorizedError, BadRequestError, ...) e falhas internas seguem direto
   // para o handler global de erros do PocketBase, que responde com o

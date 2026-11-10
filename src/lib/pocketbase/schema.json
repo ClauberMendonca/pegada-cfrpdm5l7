@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-10T16:37:06.983Z",
+  "generatedAt": "2026-11-10T20:27:30.219Z",
   "collections": [
     {
       "name": "users",
@@ -420,6 +420,146 @@
         "CREATE INDEX idx_progress_user ON progress_logs (user_id)",
         "CREATE INDEX idx_progress_project ON progress_logs (project_id)",
         "CREATE INDEX idx_progress_action ON progress_logs (action_id)"
+      ]
+    },
+    {
+      "name": "ai_requests",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "origin_type",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "origin_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "origin_revision",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "context",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["vida", "trabalho"]
+        },
+        {
+          "name": "local_request_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "remote_task_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "remote_request_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "task_url",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "schema_version",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "prompt_revision",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "state",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "registrado",
+            "criacao_incerta",
+            "aguardando_pergunta",
+            "decisao_externa",
+            "em_execucao",
+            "pronta",
+            "falha"
+          ]
+        },
+        {
+          "name": "question",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "result",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "last_polled_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "error",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_ai_requests_local ON ai_requests (user_id, local_request_id)",
+        "CREATE INDEX idx_ai_requests_user ON ai_requests (user_id)",
+        "CREATE INDEX idx_ai_requests_state ON ai_requests (user_id, state)",
+        "CREATE INDEX idx_ai_requests_origin ON ai_requests (user_id, origin_type, origin_id)"
       ]
     }
   ]

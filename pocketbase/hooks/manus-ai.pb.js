@@ -1,4 +1,4 @@
-// FATIA M1A — Base Manus no backend, DESLIGADA por padrão.
+// FATIA M1A1 — Contrato/rotas Manus v2 corrigidos; integração DESLIGADA por padrão.
 //
 // Rotas nativas autenticadas (prefixo /backend/v1/ — routerAdd não acrescenta
 // prefixo; /api/ é reservado ao PocketBase):
@@ -10,23 +10,39 @@
 // - GATE server-side EXCLUSIVO: $os.getenv('MANUS_AI_ENABLED') ausente/"0"/
 //   "false" desliga TUDO. A existência da chave NÃO ativa. Com gate OFF, nada
 //   é persistido nem chamado — 503 "Integração Manus desligada/não configurada"
-//   (nunca resultado fictício). Motivo para NÃO persistir: uma intenção
-//   'registrado' criada hoje ficaria presa quando o gate for ligado depois
-//   (o dedup por local_request_id a traria como duplicate sem POST remoto).
+//   (nunca resultado fictício). GET mantém leitura LOCAL (synced:false, sem HTTP).
 // - Chave MANUS_API_KEY lida via $os.getenv, usada APENAS no header
 //   x-manus-api-key — nunca em prompt, resposta, log, migration ou payload.
-// - NENHUMA chamada a api.manus.ai nesta rodada (gate OFF): o adaptador
-//   manusCall é exercitado só por mocks locais (scripts/manus-ai-fixtures.mjs).
+// - NENHUMA chamada a api.manus.ai nesta rodada (gate OFF): os callbacks são
+//   exercitados só por mocks locais (scripts/manus-ai-fixtures.mjs, que rodam
+//   o FONTE REAL em Node VM com stubs).
 // - Intenção local persistida ANTES do POST (state 'registrado'); falha do POST
 //   deixa 'criacao_incerta' (request_id só se recebido), SEM reenvio
 //   automático, sem revogar/limpar nada. Dedup local ≠ exactly-once remoto.
 // - HTTP externo FORA de transação; runInTransaction void (resultado em
 //   variável local; resposta HTTP só após commit, status numérico — JSVM não
 //   expõe o pacote http).
-// - Hooks não acessam declarações de topo: helpers são funções DENTRO de cada
-//   callback (cópia por rota).
+// - Hooks não acessam declarações de topo: helpers (serializeRequest incluída)
+//   são funções DENTRO de cada callback (cópia por rota) — callbacks são
+//   escopos separados na JSVM.
+// - Contrato v2 (M1A1): task.create usa agent_profile ('standard'); resposta
+//   oficial exige ok===true (corpo de erro ok:false jamais é sucesso).
+//   task.detail traz status/has_running_background_jobs (NUNCA stop_reason/
+//   structured_output — isso é do webhook); task.listMessages retorna ENVELOPE
+//   { messages, has_more, next_cursor }; espera = status 'waiting' com tipo em
+//   status_update.status_detail.waiting_for_event_type; texto da pergunta em
+//   assistant_message.content; resultado no evento structured_output_result
+//   (após finish), da execução CORRENTE (user_message mais novo que o último
+//   resultado = continuação; resultado antigo NÃO é reaproveitado). 'pronta'
+//   exige has_running_background_jobs === false explícito (true/omissão nunca).
+// - Distinção de estados: ausência/paginação incompleta/rede/timeout/resultado
+//   ainda não encontrado = recuperável ('em_execucao' + nota de erro);
+//   structured_output success:false ou JSON inválido EFETIVAMENTE recebido =
+//   falha real ('falha').
 // - NÃO codificar stop/cancel nem task.confirmAction nesta fatia. Timeout de
 //   consulta ≠ cancelamento remoto: nada vira "cancelada" sem confirmação.
+// - Envio de resposta (answer) ainda SEM claim durável antes do POST — reenvio
+//   em timeout/concorrência é limitação conhecida, corrigida em M1A2.
 //
 // NOTA (aplicação futura atômica): converter o resultado em action/project
 // NÃO é implementado aqui (capture-convert.pb.js intocado). Quando for,
@@ -66,18 +82,36 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
     })
     return resp
   }
+  function officialOk(resp) {
+    // Resposta oficial v2: HTTP < 300 E corpo com ok === true. Corpo de erro
+    // (ok:false) jamais é tratado como sucesso, venha com o HTTP que vier.
+    return (
+      !!resp &&
+      typeof resp.statusCode === 'number' &&
+      resp.statusCode < 300 &&
+      resp.json &&
+      typeof resp.json === 'object' &&
+      resp.json.ok === true
+    )
+  }
   function parseCreateResponse(resp) {
-    if (!resp || typeof resp.statusCode !== 'number' || resp.statusCode >= 300) {
+    if (!resp || typeof resp.statusCode !== 'number') {
+      return { ok: false, error: 'Resposta inválida de Manus.' }
+    }
+    if (resp.statusCode >= 300) {
       return { ok: false, error: sanitizeErr(null, resp) }
     }
     const j = resp.json
-    const taskId = j ? str(j.task_id) || str(j.taskId) || str(j.id) : ''
+    if (!j || typeof j !== 'object' || j.ok !== true) {
+      return { ok: false, error: 'Criação sem confirmação oficial (ok).' }
+    }
+    const taskId = str(j.task_id)
     if (!taskId) return { ok: false, error: 'Resposta de criação sem task_id.' }
     return {
       ok: true,
       taskId: taskId,
-      taskUrl: j ? str(j.task_url) || str(j.url) || str(j.share_url) : '',
-      requestId: j ? str(j.request_id) || str(j.requestId) : '', // só se recebido
+      taskUrl: str(j.task_url) || str(j.share_url),
+      requestId: str(j.request_id), // só se recebido
     }
   }
   function buildCreatePrompt(rawText, context) {
@@ -111,7 +145,7 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
       interactive_mode: true,
       share_visibility: 'private',
       hide_in_task_list: false,
-      profile: 'standard', // perfil standard explícito
+      agent_profile: 'standard', // perfil standard explícito (contrato v2)
       structured_output_schema: {
         type: 'object',
         properties: {
@@ -232,7 +266,7 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
   const originRevision = rawText + '|' + capture.getString('updated')
 
   const SCHEMA_VERSION = '2026-11-10'
-  const PROMPT_REVISION = 'm1a-1'
+  const PROMPT_REVISION = 'm1a1-1'
 
   // ---------- dedup local (fora da transação, leitura apenas) ----------
   let existing = null
@@ -333,7 +367,7 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
 })
 
 routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
-  // ---------- helpers (inline por rota) ----------
+  // ---------- helpers (inline por callback) ----------
   function str(v) {
     return typeof v === 'string' ? v.trim() : ''
   }
@@ -347,14 +381,23 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     return 'Falha de rede contatando Manus.'
   }
   function manusCall(apiKey, method, path, bodyObj, timeoutSec) {
-    const resp = $http.send({
+    return $http.send({
       url: 'https://api.manus.ai' + path,
       method: method,
       headers: { 'x-manus-api-key': apiKey, 'Content-Type': 'application/json' },
       timeout: timeoutSec || 10,
       body: bodyObj ? JSON.stringify(bodyObj) : null,
     })
-    return resp
+  }
+  function officialOk(resp) {
+    return (
+      !!resp &&
+      typeof resp.statusCode === 'number' &&
+      resp.statusCode < 300 &&
+      resp.json &&
+      typeof resp.json === 'object' &&
+      resp.json.ok === true
+    )
   }
   function extractText(content) {
     // content pode ser string ou array de partes {type:'text', text}.
@@ -370,35 +413,148 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     }
     return ''
   }
-  function parseQuestion(listResp) {
-    // Procura a última espera messageAskUser/cascadeAskUser nas mensagens.
-    // Sem forma reconhecível → 'outra' (decisão externa — nunca responder).
-    if (!listResp || !listResp.json || !Array.isArray(listResp.json)) {
-      return { kind: 'outra', text: '' }
+  function serializeRequest(r) {
+    const q = r.get('question')
+    return {
+      id: r.id,
+      user_id: r.getString('user_id'),
+      origin_type: r.getString('origin_type'),
+      origin_id: r.getString('origin_id'),
+      origin_revision: r.getString('origin_revision'),
+      context: r.getString('context'),
+      local_request_id: r.getString('local_request_id'),
+      remote_task_id: r.getString('remote_task_id') || undefined,
+      remote_request_id: r.getString('remote_request_id') || undefined,
+      task_url: r.getString('task_url') || undefined,
+      schema_version: r.getString('schema_version'),
+      prompt_revision: r.getString('prompt_revision'),
+      state: r.getString('state'),
+      question: q && typeof q === 'object' ? q : undefined,
+      result: r.get('result') || undefined,
+      last_polled_at: r.getString('last_polled_at') || undefined,
+      error: r.getString('error') || undefined,
+      created: r.getString('created'),
+      updated: r.getString('updated'),
     }
-    const msgs = listResp.json
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i] || {}
-      const mType = str(m.type) || str(m.message && m.message.type)
-      const isAsk = mType === 'messageAskUser' || mType === 'cascadeAskUser'
-      if (!isAsk) continue
-      const text = extractText(m.content || (m.message && m.message.content))
-      return {
-        kind: 'ask_user',
-        text: text,
-        messageId: str(m.id) || str(m.message_id) || '',
-        type: mType,
-      }
-    }
-    return { kind: 'outra', text: '' }
   }
-  function validateResultValue(v) {
-    // Validação server-side do JSON do resultado (subset do schema versionado).
+  function fetchEventPage(apiKey, taskId, cursor) {
+    // task.listMessages retorna ENVELOPE OBJETO { messages, has_more,
+    // next_cursor } — nunca um array. Uma página por chamada.
+    // verbose=true: sem ele a página traz apenas user_message/assistant_message/
+    // error_message/status_update/user_stop — structured_output_result fica de fora.
+    let path =
+      '/v2/task.listMessages?task_id=' +
+      encodeURIComponent(taskId) +
+      '&order=desc&limit=50&verbose=true'
+    if (cursor) path += '&cursor=' + encodeURIComponent(cursor)
+    let resp = null
+    try {
+      resp = manusCall(apiKey, 'GET', path, null, 10)
+    } catch (err) {
+      return { error: sanitizeErr(err, null) }
+    }
+    if (!officialOk(resp)) return { error: sanitizeErr(null, resp) }
+    const j = resp.json || {}
+    if (!Array.isArray(j.messages)) {
+      return { error: 'Envelope de eventos em formato inesperado.' }
+    }
+    return { msgs: j.messages, hasMore: j.has_more === true, nextCursor: str(j.next_cursor) }
+  }
+  const MAX_EVENT_PAGES = 5
+  function scanEvents(apiKey, taskId, mode) {
+    // Percorre páginas (order=desc, mais recentes primeiro) até achar o primeiro
+    // evento de interesse da execução CORRENTE, com limite duro de páginas —
+    // consulta nunca vira espera ilimitada.
+    // mode 'result': primeiro structured_output_result; user_message mais novo
+    //   que ele = continuação (resultado antigo não serve).
+    // mode 'question': primeiro status_update waiting; o texto da pergunta é a
+    //   assistant_message imediatamente anterior (mais antiga) a ele.
+    let cursor = ''
+    let waiting = null
+    for (let page = 0; page < MAX_EVENT_PAGES; page++) {
+      const pg = fetchEventPage(apiKey, taskId, cursor)
+      if (pg.error) return { error: pg.error }
+      for (let i = 0; i < pg.msgs.length; i++) {
+        const m = pg.msgs[i] || {}
+        const t = str(m.type)
+        if (mode === 'result') {
+          if (t === 'structured_output_result') {
+            const so = m.structured_output_result
+            return { found: { so: so && typeof so === 'object' ? so : null } }
+          }
+          if (t === 'user_message') return { found: { continuation: true } }
+        } else if (mode === 'question') {
+          const su = m.status_update
+          if (
+            !waiting &&
+            t === 'status_update' &&
+            su &&
+            typeof su === 'object' &&
+            str(su.agent_status) === 'waiting'
+          ) {
+            const sd =
+              su.status_detail && typeof su.status_detail === 'object' ? su.status_detail : {}
+            waiting = { type: str(sd.waiting_for_event_type), id: str(sd.waiting_for_event_id) }
+            continue
+          }
+          if (waiting && t === 'assistant_message') {
+            const am =
+              m.assistant_message && typeof m.assistant_message === 'object'
+                ? m.assistant_message
+                : {}
+            return {
+              found: {
+                question: {
+                  type: waiting.type,
+                  id: waiting.id,
+                  text: extractText(am.content),
+                  expect: am.question_expectation || null,
+                },
+              },
+            }
+          }
+        }
+      }
+      if (!pg.hasMore || !pg.nextCursor) break
+      cursor = pg.nextCursor
+    }
+    if (mode === 'question' && waiting) {
+      // Espera encontrada, mas texto não veio dentro do limite de páginas.
+      return { found: { question: { type: waiting.type, id: waiting.id, text: '', expect: null } } }
+    }
+    return { exhausted: true }
+  }
+  function validateResultValue(v, authorizedContext) {
+    // Validação server-side do schema COMPLETO: required na raiz e na proposal,
+    // additionalProperties:false (campo desconhecido é rejeitado), tipos
+    // nullable exatos, título válido, kind coerente e proposal.context IGUAL ao
+    // context autorizado do pedido. Campos de projeto em ação não permitidos.
     if (!v || typeof v !== 'object' || Array.isArray(v)) {
       return { ok: false, error: 'Resultado estruturado não é um objeto.' }
     }
-    const kind = str(v.kind)
-    if (kind !== 'esclarecimento' && kind !== 'projeto' && kind !== 'acao') {
+    const ROOT_FIELDS = [
+      'kind',
+      'missing_data',
+      'waiting_or_decision',
+      'explanation',
+      'proposal',
+      'next_step_suggestion',
+    ]
+    for (const k in v) {
+      if (ROOT_FIELDS.indexOf(k) < 0) {
+        return { ok: false, error: 'Campo desconhecido no resultado: ' + k + '.' }
+      }
+    }
+    for (let i = 0; i < ROOT_FIELDS.length; i++) {
+      if (typeof v[ROOT_FIELDS[i]] === 'undefined') {
+        return { ok: false, error: 'Campo obrigatório ausente: ' + ROOT_FIELDS[i] + '.' }
+      }
+    }
+    const kind = v.kind
+    if (
+      typeof kind !== 'string' ||
+      (kind !== 'esclarecimento' && kind !== 'projeto' && kind !== 'acao')
+    ) {
       return { ok: false, error: 'Campo kind inválido no resultado.' }
     }
     if (typeof v.missing_data !== 'boolean' || typeof v.waiting_or_decision !== 'boolean') {
@@ -408,86 +564,65 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       return { ok: false, error: 'Campo explanation inválido.' }
     }
     const p = v.proposal
-    if (p !== null && p !== undefined) {
+    if (kind === 'esclarecimento') {
+      if (p !== null) {
+        return { ok: false, error: 'Esclarecimento não admite proposal (deve ser null).' }
+      }
+    } else {
       if (!p || typeof p !== 'object' || Array.isArray(p)) {
-        return { ok: false, error: 'Proposal inválida.' }
+        return { ok: false, error: 'Proposal obrigatória para kind ' + kind + '.' }
       }
-      const pk = str(p.kind)
-      if (pk !== 'projeto' && pk !== 'acao') {
-        return { ok: false, error: 'Proposal com kind inválido.' }
+      const P_FIELDS = [
+        'kind',
+        'title',
+        'context',
+        'aspiration',
+        'controllable_delivery',
+        'completion_condition',
+      ]
+      for (const k in p) {
+        if (P_FIELDS.indexOf(k) < 0) {
+          return { ok: false, error: 'Campo desconhecido na proposal: ' + k + '.' }
+        }
       }
-      if (!str(p.title)) return { ok: false, error: 'Proposal sem título.' }
-      if (str(p.context) !== 'vida' && str(p.context) !== 'trabalho') {
-        return { ok: false, error: 'Proposal com contexto inválido.' }
+      for (let i = 0; i < P_FIELDS.length; i++) {
+        if (typeof p[P_FIELDS[i]] === 'undefined') {
+          return { ok: false, error: 'Campo obrigatório ausente na proposal: ' + P_FIELDS[i] + '.' }
+        }
       }
-      if (pk === 'acao') {
-        // Ação: só título e contexto — campos extras não são aceitos.
-        const extras = ['aspiration', 'controllable_delivery', 'completion_condition']
-        for (const ex of extras) {
-          if (p[ex] !== null && p[ex] !== undefined && p[ex] !== '') {
-            return { ok: false, error: 'Proposal de ação com campo de projeto (' + ex + ').' }
+      if (p.kind !== kind) {
+        return { ok: false, error: 'Proposal com kind divergente do resultado.' }
+      }
+      if (typeof p.title !== 'string' || !p.title.trim()) {
+        return { ok: false, error: 'Proposal sem título válido.' }
+      }
+      if (p.context !== authorizedContext) {
+        return { ok: false, error: 'Proposal com contexto diferente do autorizado no pedido.' }
+      }
+      const NULLABLE = ['aspiration', 'controllable_delivery', 'completion_condition']
+      for (let i = 0; i < NULLABLE.length; i++) {
+        if (p[NULLABLE[i]] !== null && typeof p[NULLABLE[i]] !== 'string') {
+          return { ok: false, error: 'Campo ' + NULLABLE[i] + ' deve ser texto ou null.' }
+        }
+      }
+      if (kind === 'acao') {
+        for (let i = 0; i < NULLABLE.length; i++) {
+          if (p[NULLABLE[i]] !== null) {
+            return {
+              ok: false,
+              error: 'Proposal de ação com campo de projeto (' + NULLABLE[i] + ').',
+            }
           }
         }
       }
     }
-    if (
-      v.next_step_suggestion !== null &&
-      v.next_step_suggestion !== undefined &&
-      typeof v.next_step_suggestion !== 'string'
-    ) {
-      return { ok: false, error: 'Campo next_step_suggestion inválido.' }
+    const nss = v.next_step_suggestion
+    if (nss !== null && typeof nss !== 'string') {
+      return { ok: false, error: 'Campo next_step_suggestion deve ser texto ou null.' }
     }
     return { ok: true }
   }
-  function parseStructuredResult(detailResp, apiKey, taskId) {
-    // Prioriza task.detail.structured_output; senão procura o evento
-    // structured_output_result em task.listMessages.
-    let so = null
-    if (detailResp && detailResp.json) {
-      const t = detailResp.json.task || detailResp.json
-      if (
-        t &&
-        typeof t === 'object' &&
-        t.structured_output &&
-        typeof t.structured_output === 'object'
-      ) {
-        so = t.structured_output
-      }
-    }
-    if (!so) {
-      let listResp = null
-      try {
-        listResp = manusCall(
-          apiKey,
-          'GET',
-          '/v2/task.listMessages?task_id=' + encodeURIComponent(taskId) + '&order=asc',
-          null,
-          10,
-        )
-      } catch (_) {
-        return { ok: false, error: 'Falha de rede lendo resultado estruturado.' }
-      }
-      if (!listResp || !listResp.json || !Array.isArray(listResp.json)) {
-        return { ok: false, error: 'Resultado estruturado não encontrado.' }
-      }
-      for (let i = listResp.json.length - 1; i >= 0; i--) {
-        const m = listResp.json[i] || {}
-        if (str(m.type) === 'structured_output_result' && m.structured_output_result) {
-          so = m.structured_output_result
-          break
-        }
-      }
-      if (!so) return { ok: false, error: 'Resultado estruturado não encontrado.' }
-    }
-    // success:false ou erro de extração NUNCA é ready.
-    if (so.success !== true) {
-      const msg = so.error && typeof so.error === 'string' ? so.error : ''
-      return { ok: false, error: 'Extração sem sucesso' + (msg ? ': ' + msg : '.') }
-    }
-    const val = validateResultValue(so.value)
-    if (!val.ok) return { ok: false, error: val.error }
-    return { ok: true, value: so.value }
-  }
+
   // ---------- sessão ----------
   const auth = e.auth
   if (!auth || !auth.id) {
@@ -512,16 +647,15 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     throw new ForbiddenError('Pedido pertence a outro usuário.')
   }
 
-  const state = rec.getString('state')
   if (!syncAllowed) {
     // Sem gate: devolve o estado local sem sincronizar (jamais resultado
-    // fictício). Consultas locais existentes podem continuar.
+    // fictício) e sem NENHUMA chamada HTTP.
     return e.json(200, { request: serializeRequest(rec), synced: false })
   }
 
   // ---------- coalescência/backoff (não consultar perto do limite de quota) ----------
   const nowMs = Date.now()
-  const lastPoll = rec.getString('last_polled_at') // datetime serializa como string
+  const lastPoll = rec.getString('last_polled_at')
   const lastPollMs = lastPoll ? Date.parse(lastPoll) : 0
   const COALESCE_MS = 15000
   if (lastPollMs && nowMs - lastPollMs < COALESCE_MS) {
@@ -541,6 +675,7 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
   rec.set('last_polled_at', new Date().toISOString())
   e.app.save(rec)
 
+  // ---------- task.detail (metadados/status/background) ----------
   let detail = null
   let detailErr = null
   try {
@@ -554,99 +689,121 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
   } catch (err) {
     detailErr = err
   }
-  if (detailErr) {
-    // Timeout de consulta ≠ cancelamento remoto: mantém estado, sem "cancelada".
-    rec.set('error', sanitizeErr(detailErr, null))
-    e.app.save(rec)
-    return e.json(200, { request: serializeRequest(rec), synced: false })
-  }
-  if (!detail || typeof detail.statusCode !== 'number' || detail.statusCode >= 300) {
-    rec.set('error', sanitizeErr(null, detail))
+  if (detailErr || !officialOk(detail)) {
+    // Falha transitória de consulta: estado mantido (recuperável), sem
+    // 'falha' irrecuperável e sem 'cancelada'. synced:false — leitura inválida.
+    rec.set('error', detailErr ? sanitizeErr(detailErr, null) : sanitizeErr(null, detail))
     e.app.save(rec)
     return e.json(200, { request: serializeRequest(rec), synced: false })
   }
 
-  const task = (detail.json && (detail.json.task || detail.json)) || {}
-  rec.set('error', '')
+  const task = detail.json.task && typeof detail.json.task === 'object' ? detail.json.task : {}
   const status = str(task.status)
-  const stopReason = str(task.stop_reason)
-  // has_running_background_jobs: true = em execução; false = encerrado de
-  // verdade; OMISSÃO = desconhecido (tratado como ainda em execução).
-  const bgTrue = task.has_running_background_jobs === true
+  // has_running_background_jobs: true = pode acordar de novo; false =
+  // encerrado de verdade; OMISSÃO = desconhecido → política conservadora:
+  // NUNCA 'pronta' (só === false autoriza prontidão).
   const bgFalse = task.has_running_background_jobs === false
-  const bgOmitted = typeof task.has_running_background_jobs === 'undefined'
 
+  // ---------- computação do estado (HTTP já feito; escrita vem depois) ----------
+  let computed = null
   if (status === 'error') {
-    rec.set('state', 'falha')
-    e.app.save(rec)
-    return e.json(200, { request: serializeRequest(rec), synced: true })
-  }
-
-  // Espera de pergunta comum vs outras esperas: stop_reason 'ask'.
-  if (status === 'running' || bgTrue || (stopReason === 'ask' && !bgFalse)) {
-    if (stopReason === 'ask' && !bgTrue && status !== 'running') {
-      const q = parseQuestion(detail)
-      if (q.kind === 'ask_user' && q.text) {
-        rec.set('state', 'aguardando_pergunta')
-        rec.set('question', {
-          type: q.type,
-          text: q.text,
-          message_id: q.messageId,
-          task_id: taskId,
-        })
-        e.app.save(rec)
-        return e.json(200, { request: serializeRequest(rec), synced: true })
+    computed = { state: 'falha', error: 'Tarefa remota reportou erro.' }
+  } else if (status === 'waiting') {
+    const scan = scanEvents(apiKey, taskId, 'question')
+    if (scan.found && scan.found.question) {
+      const q = scan.found.question
+      if ((q.type === 'messageAskUser' || q.type === 'cascadeAskUser') && q.text) {
+        const question = { type: q.type, text: q.text, message_id: q.id, task_id: taskId }
+        if (q.expect && typeof q.expect === 'object') question.question_expectation = q.expect
+        computed = { state: 'aguardando_pergunta', question: question, error: '' }
+      } else if (q.type === 'messageAskUser' || q.type === 'cascadeAskUser') {
+        // Pergunta ao dono cujo texto ainda não chegou aos eventos: recuperável —
+        // a próxima consulta traz o assistant_message.
+        computed = {
+          state: 'em_execucao',
+          error: 'Pergunta ao dono ainda sem texto nos eventos (consulta inconclusiva).',
+        }
+      } else {
+        // Espera identificada mas não é pergunta ao dono → decisão externa;
+        // nunca responder/pular/confirmar.
+        computed = { state: 'decisao_externa', question: null, error: '' }
       }
-      // Espera não reconhecida como pergunta ao dono → decisão externa.
-      rec.set('state', 'decisao_externa')
-      rec.set('question', null)
-      e.app.save(rec)
-      return e.json(200, { request: serializeRequest(rec), synced: true })
+    } else {
+      // Evento de espera não alcançado (rede/paginação): recuperável.
+      computed = {
+        state: 'em_execucao',
+        error: 'Espera ainda não identificada nos eventos (consulta inconclusiva).',
+      }
     }
-    rec.set('state', 'em_execucao')
-    e.app.save(rec)
-    return e.json(200, { request: serializeRequest(rec), synced: true })
+  } else if (status === 'stopped') {
+    if (!bgFalse) {
+      // bg true/omitido: pode acordar de novo / desconhecido — nunca 'pronta'.
+      computed = { state: 'em_execucao', error: '' }
+    } else {
+      const scan = scanEvents(apiKey, taskId, 'result')
+      if (scan.found && scan.found.continuation) {
+        // Nova execução em curso (mensagem do dono mais recente que o último
+        // resultado): resultado antigo NÃO é reaproveitado.
+        computed = { state: 'em_execucao', result: null, error: '' }
+      } else if (scan.found && scan.found.so) {
+        const so = scan.found.so
+        if (so.success === true) {
+          const val = validateResultValue(so.value, rec.getString('context'))
+          if (val.ok) {
+            computed = { state: 'pronta', result: so.value, error: '' }
+          } else {
+            // JSON efetivamente recebido e inválido → falha real.
+            computed = { state: 'falha', error: 'JSON do resultado inválido: ' + val.error }
+          }
+        } else {
+          const msg = so.error && typeof so.error === 'string' ? so.error : ''
+          computed = { state: 'falha', error: 'Extração sem sucesso' + (msg ? ': ' + msg : '.') }
+        }
+      } else {
+        // Resultado ainda não encontrado (ausência/paginação/rede): recuperável.
+        computed = { state: 'em_execucao', error: 'Resultado estruturado ainda não disponível.' }
+      }
+    }
+  } else {
+    // running, deleted ou status desconhecido: segue em execução (recuperável).
+    computed = { state: 'em_execucao', error: '' }
   }
 
-  // status 'stopped': NÃO é ready por si só — exigir stop_reason 'finish' +
-  // has_running_background_jobs:false + resultado estruturado success:true.
-  if (status === 'stopped') {
-    if (stopReason !== 'finish') {
-      // Encerrado sem finish (ex.: pausa/ask não capturada acima): decisão
-      // externa necessária com task_url real — nunca responder/pular/confirmar.
-      rec.set('state', 'decisao_externa')
-      rec.set('question', null)
-      e.app.save(rec)
-      return e.json(200, { request: serializeRequest(rec), synced: true })
+  // ---------- escrita guardada (transação void; resposta só após commit) ----------
+  // Leitura sobreposta não derruba estado terminal mais novo: se o registro já
+  // virou 'pronta' por outra leitura, esta escrita não regredir o estado.
+  let outReq = null
+  e.app.runInTransaction((txApp) => {
+    let fresh = null
+    try {
+      fresh = txApp.findRecordById('ai_requests', rec.id)
+    } catch (_) {
+      fresh = null
     }
-    const done = parseStructuredResult(detail, apiKey, taskId)
-    if (done.ok) {
-      rec.set('state', 'pronta')
-      rec.set('result', done.value)
-      rec.set('question', null)
-      rec.set('error', '')
-      e.app.save(rec)
-      return e.json(200, { request: serializeRequest(rec), synced: true })
+    if (!fresh || typeof fresh.getString !== 'function') fresh = rec
+    const freshState = fresh.getString('state')
+    if (freshState === 'pronta' && computed.state !== 'pronta') {
+      outReq = serializeRequest(fresh)
+      return
     }
-    if (bgFalse) {
-      rec.set('state', 'falha')
-      rec.set('error', done.error)
-      e.app.save(rec)
-      return e.json(200, { request: serializeRequest(rec), synced: true })
+    fresh.set('state', computed.state)
+    let newQuestion = computed.question !== undefined ? computed.question : null
+    if (newQuestion === null) {
+      const fq = fresh.get('question')
+      if (fq && typeof fq === 'object' && fq.answered === true) newQuestion = fq
     }
-    // bg true/omissido: encerramento ainda incerto — mantém em execução.
-    rec.set('state', 'em_execucao')
-    e.app.save(rec)
-    return e.json(200, { request: serializeRequest(rec), synced: true })
-  }
-
-  rec.set('state', 'em_execucao')
-  e.app.save(rec)
-  return e.json(200, { request: serializeRequest(rec), synced: true })
+    fresh.set('question', newQuestion)
+    if (computed.result !== undefined) fresh.set('result', computed.result)
+    fresh.set('error', computed.error !== undefined ? computed.error : '')
+    txApp.save(fresh)
+    outReq = serializeRequest(fresh)
+  })
+  if (!outReq) outReq = serializeRequest(rec)
+  return e.json(200, { request: outReq, synced: true })
 })
 
 routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
-  // ---------- helpers (inline por rota) ----------
+  // ---------- helpers (inline por callback) ----------
   function str(v) {
     return typeof v === 'string' ? v.trim() : ''
   }
@@ -660,20 +817,53 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     return 'Falha de rede contatando Manus.'
   }
   function manusCall(apiKey, method, path, bodyObj, timeoutSec) {
-    const resp = $http.send({
+    return $http.send({
       url: 'https://api.manus.ai' + path,
       method: method,
       headers: { 'x-manus-api-key': apiKey, 'Content-Type': 'application/json' },
       timeout: timeoutSec || 12,
       body: bodyObj ? JSON.stringify(bodyObj) : null,
     })
-    return resp
+  }
+  function officialOk(resp) {
+    return (
+      !!resp &&
+      typeof resp.statusCode === 'number' &&
+      resp.statusCode < 300 &&
+      resp.json &&
+      typeof resp.json === 'object' &&
+      resp.json.ok === true
+    )
   }
   function parseSendResponse(resp) {
-    if (!resp || typeof resp.statusCode !== 'number' || resp.statusCode >= 300) {
+    if (!officialOk(resp)) {
       return { ok: false, error: sanitizeErr(null, resp) }
     }
     return { ok: true }
+  }
+  function serializeRequest(r) {
+    const q = r.get('question')
+    return {
+      id: r.id,
+      user_id: r.getString('user_id'),
+      origin_type: r.getString('origin_type'),
+      origin_id: r.getString('origin_id'),
+      origin_revision: r.getString('origin_revision'),
+      context: r.getString('context'),
+      local_request_id: r.getString('local_request_id'),
+      remote_task_id: r.getString('remote_task_id') || undefined,
+      remote_request_id: r.getString('remote_request_id') || undefined,
+      task_url: r.getString('task_url') || undefined,
+      schema_version: r.getString('schema_version'),
+      prompt_revision: r.getString('prompt_revision'),
+      state: r.getString('state'),
+      question: q && typeof q === 'object' ? q : undefined,
+      result: r.get('result') || undefined,
+      last_polled_at: r.getString('last_polled_at') || undefined,
+      error: r.getString('error') || undefined,
+      created: r.getString('created'),
+      updated: r.getString('updated'),
+    }
   }
   // ---------- sessão + gate ----------
   const info = e.requestInfo()
@@ -708,7 +898,8 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
   // ---------- idempotência local da resposta ----------
   // O marcador de resposta fica no JSON `question` (question.answered). Se o
   // mesmo answer_request_id volta e a resposta já foi confirmada, devolve
-  // duplicate — sem reenviar ao Manus.
+  // duplicate — sem reenviar ao Manus. (Claim durável ANTES do POST ainda não
+  // existe: reenvio em timeout/concorrência é limitação conhecida da M1A2.)
   const q = rec.get('question')
   const answeredMarker = q && typeof q === 'object' && q.answered ? q : null
   if (answerRequestId && answeredMarker && answeredMarker.answer_request_id === answerRequestId) {

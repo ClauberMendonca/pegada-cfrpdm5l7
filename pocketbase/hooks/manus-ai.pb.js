@@ -304,6 +304,13 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
   if (!localRequestId) {
     throw new BadRequestError('local_request_id é obrigatório (idempotência por dono).')
   }
+  // Novo cliente envia a revisão aprovada; clientes anteriores seguem compatíveis.
+  // Não normalizar/trim: texto + updated precisam coincidir exatamente.
+  const hasExpectedRevision = Object.prototype.hasOwnProperty.call(body, 'expected_origin_revision')
+  const expectedRevision = body.expected_origin_revision
+  if (hasExpectedRevision && (typeof expectedRevision !== 'string' || expectedRevision === '')) {
+    throw new BadRequestError('expected_origin_revision deve ser texto não vazio.')
+  }
 
   // ---------- chave: exigida antes de persistir (evita intenção presa) ----------
   const apiKey = $os.getenv('MANUS_API_KEY') || ''
@@ -343,6 +350,13 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
       }
       // revisão da origem: raw_text + updated, lidos nesta transação
       const revision = cap.getString('raw_text') + '|' + cap.getString('updated')
+      if (hasExpectedRevision && expectedRevision !== revision) {
+        txErr = new ApiError(
+          409,
+          'A captura mudou; confira o texto atual antes de confirmar outro pedido.',
+        )
+        return
+      }
       const sameId = txApp.findRecordsByFilter(
         'ai_requests',
         'user_id = {:u} && local_request_id = {:l}',

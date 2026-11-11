@@ -421,5 +421,74 @@ const base = { capture_id: 'cap1', context: 'vida', local_request_id: 'L1' }
   )
 }
 
+// 12. Novo cliente: comparação EXATA da revisão aprovada antes de claim/HTTP.
+// Campo opcional mantém compatibilidade dos 24 checks anteriores.
+{
+  const db = freshDb()
+  const expected = seedCap().raw_text + '|' + seedCap().updated
+  const r = call(db, { ...base, expected_origin_revision: expected }, okHttp())
+  check(
+    'revisão aprovada correta => 200 e um POST',
+    r.res.status === 200 && r.calls.length === 1,
+    r.res,
+  )
+}
+{
+  const db = freshDb()
+  const r = call(db, { ...base, expected_origin_revision: 'texto antigo|data antiga' }, okHttp())
+  check('revisão aprovada antiga => 409', r.res.status === 409, r.res)
+  check(
+    'revisão antiga => zero HTTP e zero intenção nova',
+    r.calls.length === 0 && db._tables().ai_requests.length === 0,
+  )
+}
+{
+  for (const value of [null, 123, '', {}]) {
+    const db = freshDb()
+    const r = call(db, { ...base, expected_origin_revision: value }, okHttp())
+    check(
+      'revisão presente inválida => 400 sem HTTP/claim (' + JSON.stringify(value) + ')',
+      r.res.status === 400 && r.calls.length === 0 && db._tables().ai_requests.length === 0,
+      r.res,
+    )
+  }
+}
+{
+  const db = freshDb({ captures: [seedCap({ raw_text: '  intenção com espaços  ' })] })
+  const expected = '  intenção com espaços  |' + seedCap().updated
+  const r = call(db, { ...base, expected_origin_revision: expected }, okHttp())
+  check(
+    'revisão com espaços preserva comparação exata',
+    r.res.status === 200 && r.calls.length === 1,
+    r.res,
+  )
+  const db2 = freshDb({ captures: [seedCap({ raw_text: '  intenção com espaços  ' })] })
+  const r2 = call(db2, { ...base, expected_origin_revision: expected.trim() }, okHttp())
+  check(
+    'trim divergente => 409 e zero HTTP',
+    r2.res.status === 409 && r2.calls.length === 0,
+    r2.res,
+  )
+}
+{
+  const db = freshDb()
+  const expected = seedCap().raw_text + '|' + seedCap().updated
+  const orig = db.runInTransaction
+  let first = true
+  db.runInTransaction = (fn, opts) => {
+    if (first) {
+      first = false
+      db._tables().captures[0].updated = '2026-11-11 10:00:01.000Z'
+    }
+    return orig(fn, opts)
+  }
+  const r = call(db, { ...base, expected_origin_revision: expected }, okHttp())
+  check(
+    'mudança antes do claim => bloqueada na transação sem HTTP',
+    r.res.status === 409 && r.calls.length === 0 && db._tables().ai_requests.length === 0,
+    r.res,
+  )
+}
+
 console.log(`passes=${passes} failures=${failures}`)
 if (failures > 0) process.exitCode = 1

@@ -1,12 +1,15 @@
 // FATIA M1B1 — painel do copiloto em Capturas (SOMENTE LEITURA).
+// FATIA M1B2a — confirmação e comando de criação do esclarecimento.
 //
-// Integração real DESLIGADA: nenhuma chamada a /backend/v1/ai/*, nenhuma
-// escrita, nenhum reenvio/cancelamento. Fonte única: registros locais de
-// ai_requests lidos via API padrão (src/lib/skipAi/requestsService.ts).
-// Fechar o painel NÃO é cancelar eventual tarefa Manus.
+// Integração real AINDA DESLIGADA: abrir/selecionar/consultar NÃO envia
+// nada ao Manus. A criação só ocorre após o clique explícito em
+// 'Revisar pedido de esclarecimento' e depois em 'Confirmar envio'
+// (card inline em ClarifyConfirmCard + clarifyService.ts). Fechar o
+// painel NÃO cancela eventual tarefa Manus nem libera reserva.
 
 import React, { useEffect, useRef, useState } from 'react'
 import { Bot, Calendar, ExternalLink, RefreshCw, TriangleAlert } from 'lucide-react'
+import { ClarifyConfirmCard } from '@/components/ClarifyConfirmCard'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -25,9 +28,11 @@ import type { AiProposal, AiRequestRecord } from '@/lib/skipAi/types'
 import { safeManusTaskUrl } from '@/lib/skipAi/types'
 import { listAiRequestsForCapture } from '@/lib/skipAi/requestsService'
 import { questionText, resultOf, stateInfo } from '@/lib/skipAi/stateLabels'
+import { prepareClarifyIntent, submitClarifyIntent } from '@/lib/skipAi/clarifyService'
+import type { ClarifyIntent, ClarifyOutcome } from '@/lib/skipAi/clarifyService'
 
 const AVISO_PERSISTENTE =
-  'Envio ao Manus ainda não habilitado nesta etapa. Este painel consulta apenas registros locais.'
+  'Comando de envio preparado; a integração ainda não foi ativada nesta etapa. Abrir ou escolher contexto não envia dados ao Manus.'
 
 interface CopilotPanelProps {
   capture: CaptureItem | null
@@ -119,7 +124,10 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
     }
   }, [open, context, captureId, capture, user?.id])
 
-  const retry = () => {
+  // Releitura local (getFullList nativo) — usada pelo botão 'Atualizar
+  // registros locais' e após um envio confirmado. Erro aqui não desfaz
+  // confirmação anterior nem autoriza reenvio.
+  const refreshLocalRequests = () => {
     if (!open || !activeRef.current || !context) return
     const reqId = ++requestIdRef.current
     setLoad({ phase: 'carregando', reqId })
@@ -205,7 +213,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={retry}
+                onClick={refreshLocalRequests}
                 className="border-rose-500/40 text-rose-200 hover:bg-rose-500/10 gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -223,6 +231,17 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
               ))}
             </ul>
           )}
+
+          {/* M1B2a — comando explícito de criação; NUNCA no mount/consulta */}
+          {user && (
+            <ClarifyCommand
+              capture={capture}
+              context={context}
+              userId={user.id}
+              existingRequests={requests}
+              onSubmitted={refreshLocalRequests}
+            />
+          )}
         </div>
 
         <DialogFooter>
@@ -232,6 +251,212 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * FATIA M1B2a — comando de criação do esclarecimento (componente pequeno
+ * extra, arquivo próprio ClarifyConfirmCard.tsx para o cartão visual).
+ * Ciclo: 'Revisar pedido de esclarecimento' (prepara intenção) →
+ * 'Confirmar envio' (submitClarifyIntent). Identities invalidam: dono,
+ * captura, status, texto/revisão ou contexto mudou => preparação perdida.
+ * Retorno tardio após fechar/mudar identidade é ignorado. Fechar o painel
+ * NÃO aborta POST em curso (não é cancelamento) e não libera reserva.
+ */
+const ClarifyCommand: React.FC<{
+  capture: CaptureItem
+  context: EntityContext | null
+  userId: string
+  existingRequests: AiRequestRecord[]
+  onSubmitted: () => void
+}> = ({ capture, context, userId, existingRequests, onSubmitted }) => {
+  const [prepared, setPrepared] = useState<ClarifyIntent | null>(null)
+  const [prepError, setPrepError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [submittingPrep, setSubmittingPrep] = useState(false)
+  const [outcome, setOutcome] = useState<ClarifyOutcome | null>(null)
+  const [outcomeKey, setOutcomeKey] = useState<string | null>(null)
+  const [refreshNote, setRefreshNote] = useState<string | null>(null)
+  const activeRef = useRef(true)
+  const busyRef = useRef(false)
+  const preparedRef = useRef<ClarifyIntent | null>(null)
+
+  useEffect(() => {
+    activeRef.current = true
+    return () => {
+      activeRef.current = false
+    }
+  }, [])
+
+  const currentRevision = `${capture.raw_text}|${capture.updated}`
+  const outcomeKeyOf = (intent: ClarifyIntent) =>
+    JSON.stringify([intent.userId, intent.captureId, intent.context, intent.revision])
+
+  // Prévia/resultado vinculados a contexto/revisão atuais; qualquer mudança
+  // de identidade invalida a preparação. Retornos tardios são ignorados.
+  useEffect(() => {
+    preparedRef.current = null
+    setPrepared(null)
+    setPrepError(null)
+    setOutcome(null)
+    setOutcomeKey(null)
+    setRefreshNote(null)
+    busyRef.current = false
+    setSubmitting(false)
+    setSubmittingPrep(false)
+  }, [userId, capture.id, capture.status, currentRevision, context])
+
+  // Histórico local já tem pedido da mesma revisão/contexto: exibir, sem nova execução.
+  const alreadyRequested = existingRequests.some(
+    (r) => r.origin_revision === currentRevision && r.context === context,
+  )
+
+  const canOffer =
+    !!context &&
+    capture.status === 'pendente' &&
+    !alreadyRequested &&
+    !prepared &&
+    !prepError &&
+    !outcome &&
+    !submittingPrep &&
+    !submitting
+
+  const startPreparation = async () => {
+    if (!activeRef.current || busyRef.current || !context) return
+    busyRef.current = true
+    setSubmittingPrep(true)
+    setPrepError(null)
+    try {
+      const intent = await prepareClarifyIntent(capture, context, userId)
+      if (!activeRef.current) return // retorno tardio: ignorado
+      // No clique final conferir que a intenção coincide com os dados atuais;
+      // a guarda transacional do backend continua sendo a proteção real.
+      if (
+        intent.captureId !== capture.id ||
+        intent.context !== context ||
+        intent.revision !== `${capture.raw_text}|${capture.updated}`
+      ) {
+        setPrepError('Os dados da captura mudaram durante a preparação; revise e tente novamente.')
+        return
+      }
+      preparedRef.current = intent
+      setPrepared(intent)
+    } catch (err) {
+      if (activeRef.current) {
+        setPrepError(err instanceof Error ? err.message : 'Não foi possível preparar o pedido.')
+      }
+    } finally {
+      busyRef.current = false
+      if (activeRef.current) setSubmittingPrep(false)
+    }
+  }
+
+  const confirmSend = async () => {
+    const intent = preparedRef.current
+    if (!activeRef.current || busyRef.current || submitting || !intent || !context) return
+    // Checagem visual no clique final (não substitui a guarda transacional).
+    if (
+      intent.captureId !== capture.id ||
+      intent.context !== context ||
+      intent.revision !== `${capture.raw_text}|${capture.updated}` ||
+      intent.userId !== userId
+    ) {
+      setPrepared(null)
+      preparedRef.current = null
+      setPrepError('Os dados mudaram; a preparação foi descartada. Revise e prepare novamente.')
+      return
+    }
+    busyRef.current = true
+    setSubmitting(true)
+    setOutcome(null)
+    setOutcomeKey(null)
+    setRefreshNote(null)
+    try {
+      const result = await submitClarifyIntent(intent)
+      if (!activeRef.current) return // retorno tardio: ignorado
+      setOutcome(result)
+      setOutcomeKey(outcomeKeyOf(intent))
+      if (
+        (result.kind === 'confirmed' ||
+          result.kind === 'existing' ||
+          result.kind === 'uncertain') &&
+        result.request
+      ) {
+        // Releitura APENAS local (getFullList nativo); erro não desfaz nada.
+        onSubmitted()
+      }
+    } finally {
+      busyRef.current = false
+      if (activeRef.current) setSubmitting(false)
+    }
+  }
+
+  const key = prepared ? outcomeKeyOf(prepared) : null
+  const outcomeStale = !!(prepared && outcome && outcomeKey !== key)
+  const sendBlocked = outcomeStale || !!prepError || alreadyRequested
+
+  const buttonLabel =
+    alreadyRequested && (!prepared || outcomeStale)
+      ? 'Pedido já registrado nesta revisão/contexto'
+      : 'Revisar pedido de esclarecimento'
+
+  // Sem contexto/sessão, captura não pendente, consulta local carregando/erro
+  // ou Web Crypto indisponível => sem envio (o serviço também bloqueia).
+  if (!context || capture.status !== 'pendente') return null
+
+  return (
+    <div
+      className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+      data-testid="clarify-command"
+    >
+      {outcome && !prepared && outcome.kind === 'unavailable' && (
+        <p className="text-xs text-amber-200 break-words">{outcome.message}</p>
+      )}
+      {prepError && !prepared && <p className="text-xs text-rose-200 break-words">{prepError}</p>}
+      {alreadyRequested && !prepared && !outcome && (
+        <p className="text-xs text-slate-400">
+          Já existe pedido registrado para esta captura nesta revisão e contexto — exibido acima;
+          não há nova execução desta intenção.
+        </p>
+      )}
+      {canOffer && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={startPreparation}
+          disabled={submittingPrep || submitting}
+          className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5"
+        >
+          <Bot className="w-3.5 h-3.5" />
+          {submittingPrep ? 'Preparando…' : buttonLabel}
+        </Button>
+      )}
+      {prepared && !outcomeStale && (
+        <ClarifyConfirmCard
+          intent={prepared}
+          context={context}
+          submitting={submitting}
+          sendBlocked={sendBlocked}
+          prepError={prepError}
+          outcome={outcome}
+          onConfirm={confirmSend}
+          onBack={() => {
+            // Cancela SOMENTE a preparação; nenhum POST é feito aqui.
+            preparedRef.current = null
+            setPrepared(null)
+            setPrepError(null)
+            setOutcome(null)
+            setOutcomeKey(null)
+          }}
+        />
+      )}
+      {prepared && outcomeStale && (
+        <p className="text-xs text-amber-200 break-words">
+          Os dados da captura ou o contexto mudaram; esta preparação não é mais válida.
+        </p>
+      )}
+      {refreshNote && <p className="text-xs text-slate-500">{refreshNote}</p>}
+    </div>
   )
 }
 

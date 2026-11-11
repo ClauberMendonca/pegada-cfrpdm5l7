@@ -34,8 +34,10 @@ import {
   CheckCircle,
   Archive,
   Lightbulb,
+  Bot,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { CopilotPanel } from '@/components/CopilotPanel'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -50,6 +52,10 @@ export const CapturesPage: React.FC = () => {
   // Conversion Modals
   const [selectedCapture, setSelectedCapture] = useState<CaptureItem | null>(null)
   const [conversionType, setConversionType] = useState<'project' | 'action' | null>(null)
+
+  // FATIA M1B1 — Painel do Copiloto (estado SEPARADO da conversão manual)
+  const [copilotCapture, setCopilotCapture] = useState<CaptureItem | null>(null)
+  const [copilotOpen, setCopilotOpen] = useState(false)
 
   // Convert to Project form state
   const [projectTitle, setProjectTitle] = useState('')
@@ -360,6 +366,20 @@ export const CapturesPage: React.FC = () => {
 
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCopilotCapture(item)
+                        setCopilotOpen(true)
+                      }}
+                      className="border-slate-700 bg-slate-800/80 hover:bg-slate-800 hover:text-violet-400 text-xs gap-1.5"
+                      title="Ver pedidos locais do copiloto (somente leitura)"
+                    >
+                      <Bot className="w-3.5 h-3.5 text-violet-400" />
+                      Copiloto
+                    </Button>
+
+                    <Button
+                      size="sm"
                       variant="ghost"
                       onClick={() => handleDiscard(item.id)}
                       className="text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 text-xs"
@@ -555,6 +575,16 @@ export const CapturesPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* FATIA M1B1 — Painel do Copiloto (somente leitura, integração desligada) */}
+      <CopilotPanel
+        capture={copilotCapture}
+        open={copilotOpen}
+        onOpenChange={(o) => {
+          setCopilotOpen(o)
+          if (!o) setCopilotCapture(null)
+        }}
+      />
     </div>
   )
 }

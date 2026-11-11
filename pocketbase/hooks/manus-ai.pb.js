@@ -65,7 +65,8 @@
 //   answer_request_id) é 409 — sem TTL, sem reenvio automático; marcador
 //   answered:true antigo (sem delivery) também bloqueia. answered:true só
 //   significa SUCESSO CONFIRMADO. Sem promessa de idempotência remota.
-// - Criação/recuperação pós-POST do clarify (M1A2b) NÃO nesta fatia.
+// - Criação do clarify (M1A2b): claim 'registrado' antes do POST; criação
+//   incerta fica bloqueando novo ID da mesma captura até reconciliação MANUAL.
 //
 // NOTA (aplicação futura atômica): converter o resultado em action/project
 // NÃO é implementado aqui (capture-convert.pb.js intocado). Quando for,
@@ -121,7 +122,7 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
     if (!resp || typeof resp.statusCode !== 'number') {
       return { ok: false, error: 'Resposta inválida de Manus.' }
     }
-    if (resp.statusCode >= 300) {
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
       return { ok: false, error: sanitizeErr(null, resp) }
     }
     const j = resp.json
@@ -215,10 +216,49 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
       },
     }
   }
-  function markUncertain(app, rec, msg) {
-    rec.set('state', 'criacao_incerta')
-    rec.set('error', msg)
-    app.save(rec)
+  function sameIdentity(a, b) {
+    // Identidade imutável do pedido: dono, origem, revisão, contexto e ID local.
+    return (
+      a.getString('user_id') === b.getString('user_id') &&
+      a.getString('origin_type') === b.getString('origin_type') &&
+      a.getString('origin_id') === b.getString('origin_id') &&
+      a.getString('origin_revision') === b.getString('origin_revision') &&
+      a.getString('context') === b.getString('context') &&
+      a.getString('local_request_id') === b.getString('local_request_id')
+    )
+  }
+  function saveUncertain(app, src, msg, link) {
+    // Gravação LOCAL-ONLY, guardada: relê o registro, confere identidade e só
+    // sai de 'registrado'/'criacao_incerta'. Nunca apaga nem troca vínculo
+    // remoto existente. Falha aqui deixa 'registrado' bloqueando repetição.
+    try {
+      app.runInTransaction((txApp) => {
+        let fresh = null
+        try {
+          fresh = txApp.findRecordById('ai_requests', src.id)
+        } catch (_) {
+          fresh = null
+        }
+        if (!fresh || !sameIdentity(fresh, src)) return
+        const st = fresh.getString('state')
+        if (st !== 'registrado' && st !== 'criacao_incerta') return
+        const curTask = fresh.getString('remote_task_id')
+        if (link && link.taskId) {
+          if (curTask && curTask !== link.taskId) return
+          fresh.set('remote_task_id', link.taskId)
+          if (link.taskUrl && !fresh.getString('task_url')) fresh.set('task_url', link.taskUrl)
+          if (link.requestId && !fresh.getString('remote_request_id')) {
+            fresh.set('remote_request_id', link.requestId)
+          }
+        }
+        fresh.set('state', 'criacao_incerta')
+        fresh.set('error', msg)
+        txApp.save(fresh)
+      })
+      return true
+    } catch (_) {
+      return false
+    }
   }
   function serializeRequest(r) {
     const q = r.get('question')
@@ -271,93 +311,104 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
     throw new ApiError(503, 'Integração Manus desligada/não configurada.')
   }
 
-  // ---------- origem: captura PENDENTE do dono ----------
-  let capture
-  try {
-    capture = e.app.findRecordById('captures', captureId)
-  } catch (_) {
-    throw new NotFoundError('Captura não encontrada.')
-  }
-  if (capture.getString('user_id') !== userId) {
-    throw new ForbiddenError('Captura pertence a outro usuário.')
-  }
-  if (capture.getString('status') !== 'pendente') {
-    throw new ApiError(409, 'Captura não está mais pendente.')
-  }
-  const rawText = capture.getString('raw_text')
-  // revisão da origem: raw_text + updated no instante do pedido
-  const originRevision = rawText + '|' + capture.getString('updated')
-
+  // ---------- CLAIM + intenção: UMA transação void, SEM HTTP ----------
+  // Relê a captura, valida dono/estado, forma a revisão com dados frescos,
+  // revalida dedup por local_request_id e bloqueia se houver reserva
+  // 'registrado' ou 'criacao_incerta' da mesma captura (qualquer ID/contexto).
+  // Erro de consulta/persistência/commit → 500 SEM HTTP.
   const SCHEMA_VERSION = '2026-11-10'
   const PROMPT_REVISION = 'm1a1-1'
-
-  // ---------- dedup local (fora da transação, leitura apenas) ----------
-  let existing = null
-  try {
-    existing = e.app.findFirstRecordByFilter(
-      'ai_requests',
-      'user_id = {:u} && local_request_id = {:l}',
-      { u: userId, l: localRequestId },
-    )
-  } catch (_) {
-    existing = null
-  }
-  if (existing) {
-    if (existing.getString('origin_id') !== captureId) {
-      throw new ApiError(409, 'local_request_id já usado para outra origem.')
-    }
-    return e.json(200, { duplicate: true, request: serializeRequest(existing) })
-  }
-
-  // ---------- persistir intenção ANTES do POST ----------
   let rec = null
   let dup = null
-  let commitErr = null
-  e.app.runInTransaction((txApp) => {
-    // Re-checagem dentro da transação: a unicidade nativa (user_id +
-    // local_request_id) decide a corrida entre dois POSTs simultâneos.
-    let inner = null
-    try {
-      inner = txApp.findFirstRecordByFilter(
+  let txErr = null
+  try {
+    e.app.runInTransaction((txApp) => {
+      let cap = null
+      try {
+        cap = txApp.findRecordById('captures', captureId)
+      } catch (_) {
+        cap = null
+      }
+      if (!cap) {
+        txErr = new NotFoundError('Captura não encontrada.')
+        return
+      }
+      if (cap.getString('user_id') !== userId) {
+        txErr = new ForbiddenError('Captura pertence a outro usuário.')
+        return
+      }
+      if (cap.getString('status') !== 'pendente') {
+        txErr = new ApiError(409, 'Captura não está mais pendente.')
+        return
+      }
+      // revisão da origem: raw_text + updated, lidos nesta transação
+      const revision = cap.getString('raw_text') + '|' + cap.getString('updated')
+      const sameId = txApp.findRecordsByFilter(
         'ai_requests',
         'user_id = {:u} && local_request_id = {:l}',
+        '',
+        1,
+        0,
         { u: userId, l: localRequestId },
       )
-    } catch (_) {
-      inner = null
-    }
-    if (inner) {
-      if (inner.getString('origin_id') !== captureId) {
-        commitErr = new ApiError(409, 'local_request_id já usado para outra origem.')
-      } else {
-        dup = inner
+      if (sameId.length > 0) {
+        const ex = sameId[0]
+        if (
+          ex.getString('origin_type') === 'captura' &&
+          ex.getString('origin_id') === captureId &&
+          ex.getString('origin_revision') === revision &&
+          ex.getString('context') === context
+        ) {
+          dup = ex
+        } else {
+          txErr = new ApiError(
+            409,
+            'local_request_id já usado com outra origem, contexto ou revisão.',
+          )
+        }
+        return
       }
-      return
-    }
-    const col = txApp.findCollectionByNameOrId('ai_requests')
-    const r = new Record(col)
-    r.set('user_id', userId) // derivado da sessão, nunca do payload
-    r.set('origin_type', 'captura')
-    r.set('origin_id', captureId)
-    r.set('origin_revision', originRevision)
-    r.set('context', context)
-    r.set('local_request_id', localRequestId)
-    r.set('schema_version', SCHEMA_VERSION)
-    r.set('prompt_revision', PROMPT_REVISION)
-    r.set('state', 'registrado')
-    try {
+      const reservas = txApp.findRecordsByFilter(
+        'ai_requests',
+        "user_id = {:u} && origin_id = {:o} && (state = 'registrado' || state = 'criacao_incerta')",
+        '',
+        1,
+        0,
+        { u: userId, o: captureId },
+      )
+      if (reservas.length > 0) {
+        txErr = new ApiError(
+          409,
+          'Já existe criação registrada ou incerta para esta captura; novo pedido bloqueado.',
+        )
+        return
+      }
+      const col = txApp.findCollectionByNameOrId('ai_requests')
+      const r = new Record(col)
+      r.set('user_id', userId) // derivado da sessão, nunca do payload
+      r.set('origin_type', 'captura')
+      r.set('origin_id', captureId)
+      r.set('origin_revision', revision)
+      r.set('context', context)
+      r.set('local_request_id', localRequestId)
+      r.set('schema_version', SCHEMA_VERSION)
+      r.set('prompt_revision', PROMPT_REVISION)
+      r.set('state', 'registrado')
       txApp.save(r)
       rec = r
-    } catch (saveErr) {
-      void saveErr // corrida: unicidade nativa venceu
-      commitErr = new ApiError(409, 'local_request_id já registrado (corrida local).')
-    }
-  })
-  if (commitErr) throw commitErr
+    })
+  } catch (_) {
+    // Falha de consulta, persistência ou COMMIT: nada foi enviado.
+    throw new ApiError(500, 'Falha ao registrar a intenção; nada foi enviado.')
+  }
+  if (txErr) throw txErr
   if (dup) return e.json(200, { duplicate: true, request: serializeRequest(dup) })
-  if (!rec) throw new ApiError(500, 'Falha interna ao registrar a intenção.')
+  if (!rec) throw new ApiError(500, 'Falha interna ao registrar a intenção; nada foi enviado.')
+  // Texto enviado = snapshot gravado (raw_text antes do último '|' da revisão).
+  const snapRev = rec.getString('origin_revision')
+  const rawText = snapRev.slice(0, snapRev.lastIndexOf('|'))
 
-  // ---------- POST externo FORA de transação ----------
+  // ---------- POST externo FORA de transação (UM único POST) ----------
   let resp = null
   let postErr = null
   try {
@@ -365,28 +416,82 @@ routerAdd('POST', '/backend/v1/ai/clarify', (e) => {
   } catch (err) {
     postErr = err
   }
-
-  if (postErr) {
-    // Timeout/rede: confirmação perdida → 'criacao_incerta', sem request_id
-    // (nada foi recebido). NÃO reenviar; NÃO revogar/limpar nada.
-    markUncertain(e.app, rec, sanitizeErr(postErr, null))
+  const created = postErr ? null : parseCreateResponse(resp)
+  if (!created || !created.ok) {
+    // Confirmação não comprovada (timeout, rede, status fora de 2xx, ok ausente,
+    // task_id ausente): NÃO é prova de inexistência. Fica 'criacao_incerta'
+    // (sem vínculo novo); NÃO reenviar; reconciliação é manual.
+    const msg = postErr ? sanitizeErr(postErr, null) : created.error
+    saveUncertain(e.app, rec, msg, null)
     throw new ApiError(502, 'Manus não confirmou a criação da tarefa; tarefa não reenviada.')
   }
-  const created = parseCreateResponse(resp)
-  if (!created.ok) {
-    markUncertain(e.app, rec, created.error)
-    throw new ApiError(502, 'Manus recusou a criação da tarefa; tarefa não reenviada.')
+
+  // ---------- finalização FRESCA: relê por ID e confere identidade ----------
+  // Nunca salva snapshot pré-HTTP. Vínculo remoto existente nunca é trocado.
+  const link = { taskId: created.taskId, taskUrl: created.taskUrl, requestId: created.requestId }
+  let outReq = null
+  let finErr = null
+  let finOk = false
+  try {
+    e.app.runInTransaction((txApp) => {
+      let fresh = null
+      try {
+        fresh = txApp.findRecordById('ai_requests', rec.id)
+      } catch (_) {
+        fresh = null
+      }
+      if (!fresh || !sameIdentity(fresh, rec)) {
+        finErr = new ApiError(
+          409,
+          'Pedido alterado durante a criação; vínculo remoto não substituído.',
+        )
+        return
+      }
+      const curTask = fresh.getString('remote_task_id')
+      if (curTask && curTask !== created.taskId) {
+        finErr = new ApiError(409, 'Pedido já vinculado a outra tarefa; vínculo preservado.')
+        return
+      }
+      const st = fresh.getString('state')
+      if (st !== 'registrado' && st !== 'criacao_incerta') {
+        // Outro fluxo já finalizou: mesmo vínculo → sem regredir; outro → 409.
+        if (curTask === created.taskId) {
+          outReq = serializeRequest(fresh)
+          return
+        }
+        finErr = new ApiError(409, 'Pedido já finalizado de outra forma; vínculo preservado.')
+        return
+      }
+      fresh.set('remote_task_id', created.taskId)
+      if (created.taskUrl) fresh.set('task_url', created.taskUrl)
+      if (created.requestId) fresh.set('remote_request_id', created.requestId)
+      fresh.set('state', 'em_execucao')
+      fresh.set('last_polled_at', new Date().toISOString())
+      fresh.set('error', '')
+      txApp.save(fresh)
+      outReq = serializeRequest(fresh)
+    })
+    finOk = true
+  } catch (_) {
+    // Erro de save OU de COMMIT: confirmação local não comprovada.
+    finOk = false
   }
+  if (finErr) throw finErr
+  if (finOk && outReq) return e.json(200, { duplicate: false, request: outReq })
 
-  rec.set('remote_task_id', created.taskId)
-  if (created.taskUrl) rec.set('task_url', created.taskUrl)
-  if (created.requestId) rec.set('remote_request_id', created.requestId)
-  rec.set('state', 'em_execucao')
-  rec.set('last_polled_at', new Date().toISOString())
-  rec.set('error', '')
-  e.app.save(rec)
-
-  return e.json(200, { duplicate: false, request: serializeRequest(rec) })
+  // Remoto confirmado (2xx + ok + task_id) mas confirmação local falhou:
+  // UMA tentativa local-only preservando taskID/requestID/URL, guardada.
+  // Se falhar, 'registrado' permanece bloqueando repetição.
+  saveUncertain(
+    e.app,
+    rec,
+    'Tarefa possivelmente criada no Manus; confirmação local pendente.',
+    link,
+  )
+  throw new ApiError(
+    502,
+    'Tarefa possivelmente criada no Manus; confirmação local pendente. Não reenviada.',
+  )
 })
 
 routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {

@@ -32,7 +32,7 @@ import { prepareClarifyIntent, submitClarifyIntent } from '@/lib/skipAi/clarifyS
 import type { ClarifyIntent, ClarifyOutcome } from '@/lib/skipAi/clarifyService'
 
 const AVISO_PERSISTENTE =
-  'Comando de envio preparado; a integração ainda não foi ativada nesta etapa. Abrir ou escolher contexto não envia dados ao Manus.'
+  'Abrir o painel consulta registros locais. Atualizar no Manus e enviar respostas são comandos explícitos; podem estar indisponíveis se a integração estiver desligada.'
 
 interface CopilotPanelProps {
   capture: CaptureItem | null

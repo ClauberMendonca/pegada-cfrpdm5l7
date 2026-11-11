@@ -1126,6 +1126,7 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     return (
       !!resp &&
       typeof resp.statusCode === 'number' &&
+      resp.statusCode >= 200 &&
       resp.statusCode < 300 &&
       resp.json &&
       typeof resp.json === 'object' &&

@@ -5,7 +5,7 @@
 // ai_requests lidos via API padrão (src/lib/skipAi/requestsService.ts).
 // Fechar o painel NÃO é cancelar eventual tarefa Manus.
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Bot, Calendar, ExternalLink, RefreshCw, TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,7 +42,30 @@ type LoadState =
   | { phase: 'vazio'; reqId: number }
   | { phase: 'lista'; requests: AiRequestRecord[]; reqId: number }
 
-export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpenChange }) => {
+// Uma sessão visual por dono/captura. Fechar desmonta a sessão; abrir outra
+// captura nunca reaproveita a seleção ou as listas da sessão anterior.
+export const CopilotPanel: React.FC<CopilotPanelProps> = (props) => {
+  const { user } = useAuth()
+  if (!props.open || !props.capture) return null
+  return (
+    <CopilotPanelSession
+      key={JSON.stringify([user?.id ?? '', props.capture.id])}
+      capture={props.capture}
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    />
+  )
+}
+
+interface CopilotPanelSessionProps extends Omit<CopilotPanelProps, 'capture'> {
+  capture: CaptureItem
+}
+
+const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
+  capture,
+  open,
+  onOpenChange,
+}) => {
   const { user } = useAuth()
   const timezone = ownerTimezone(user?.timezone)
 
@@ -50,25 +73,41 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpe
   const [load, setLoad] = useState<LoadState>({ phase: 'sem_contexto' })
   const requestIdRef = useRef(0)
 
-  const captureId = capture?.id ?? ''
+  const captureId = capture.id
+  const activeRef = useRef(true)
 
-  // Contexto explícito começa SEM seleção a cada abertura (sem inferência do
-  // texto da captura, do contextFilter global, do usuário ou do último uso).
   useEffect(() => {
-    if (open) {
-      setContext(null)
-      setLoad({ phase: 'sem_contexto' })
+    activeRef.current = true
+    return () => {
+      activeRef.current = false
+      ++requestIdRef.current
     }
-  }, [open, captureId])
+  }, [])
+
+  // Invalidar no próprio evento, antes de qualquer efeito ou retorno tardio.
+  const selectContext = (next: EntityContext) => {
+    if (!activeRef.current || next === context) return
+    ++requestIdRef.current
+    setLoad({ phase: 'sem_contexto' })
+    setContext(next)
+  }
+
+  const changeOpen = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      activeRef.current = false
+      ++requestIdRef.current
+    }
+    onOpenChange(nextOpen)
+  }
 
   // Carrega pedidos locais SOMENTE após a escolha explícita do contexto.
   useEffect(() => {
-    if (!open || !context || !capture) return
+    if (!open || !activeRef.current || !context) return
     const reqId = ++requestIdRef.current
     setLoad({ phase: 'carregando', reqId })
     let cancelled = false
     listAiRequestsForCapture({ originId: capture.id, context, userId: user?.id }).then((res) => {
-      if (cancelled || reqId !== requestIdRef.current) return // retorno atrasado ignorado
+      if (cancelled || !activeRef.current || reqId !== requestIdRef.current) return
       if (!res.ok || res.requests.length === 0) {
         setLoad(res.ok ? { phase: 'vazio', reqId } : { phase: 'erro', message: res.error, reqId })
       } else {
@@ -81,12 +120,11 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpe
   }, [open, context, captureId, capture, user?.id])
 
   const retry = () => {
-    if (!context) return
+    if (!open || !activeRef.current || !context) return
     const reqId = ++requestIdRef.current
     setLoad({ phase: 'carregando', reqId })
-    let cancelled = false
     listAiRequestsForCapture({ originId: captureId, context, userId: user?.id }).then((res) => {
-      if (cancelled || reqId !== requestIdRef.current) return
+      if (!activeRef.current || reqId !== requestIdRef.current) return
       if (!res.ok || res.requests.length === 0) {
         setLoad(res.ok ? { phase: 'vazio', reqId } : { phase: 'erro', message: res.error, reqId })
       } else {
@@ -98,7 +136,7 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpe
   const requests = load.phase === 'lista' ? load.requests : []
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent
         className="bg-slate-900 border-slate-800 text-slate-100 max-w-2xl max-h-[85vh] flex flex-col"
         aria-describedby="copilot-panel-desc"
@@ -140,7 +178,7 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpe
                 <button
                   key={c}
                   type="button"
-                  onClick={() => setContext(c)}
+                  onClick={() => selectContext(c)}
                   aria-pressed={context === c}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                     context === c
@@ -188,7 +226,7 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = ({ capture, open, onOpe
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-slate-400">
+          <Button variant="ghost" onClick={() => changeOpen(false)} className="text-slate-400">
             Fechar
           </Button>
         </DialogFooter>
@@ -251,7 +289,7 @@ const CopilotRequestItem: React.FC<{
       {question && (
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-            Pergunta pendente (somente leitura)
+            Pergunta do Manus (somente leitura)
           </p>
           <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">{question}</p>
         </div>

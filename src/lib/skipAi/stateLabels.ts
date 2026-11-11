@@ -30,6 +30,26 @@ export function stateInfo(request: AiRequestRecord): AiStateInfo {
       (dStatus === 'enviando' ? 'em envio, confirmação pendente.' : 'incerta — sem confirmação.')
   }
 
+  // Pergunta preservada no histórico não significa que falta nova resposta.
+  // Uma marca legada de answered não comprova entrega; não pedir reenvio.
+  if (request.state === 'aguardando_pergunta') {
+    if (dStatus === 'enviando' || dStatus === 'incerta') {
+      return {
+        label: 'Resposta com confirmação pendente; não reenviar',
+        tone: 'atencao',
+        deliveryNote,
+      }
+    }
+    if (q?.answered === true || dStatus === 'confirmada') {
+      return {
+        label: 'Resposta registrada — estado do pedido a conferir',
+        tone: 'neutro',
+        deliveryNote:
+          'O registro de resposta não substitui a conferência do estado atual da tarefa.',
+      }
+    }
+  }
+
   const base: Record<AiRequestState, { label: string; tone: AiStateInfo['tone'] }> = {
     registrado: {
       label: 'Pedido registrado; confirmação ainda não comprovada',
@@ -56,7 +76,7 @@ export function stateInfo(request: AiRequestRecord): AiStateInfo {
       tone: 'ok',
     },
     falha: {
-      label: 'Falha registrada neste pedido (nenhuma ação automática foi tomada)',
+      label: 'Falha registrada neste pedido',
       tone: 'erro',
     },
   }

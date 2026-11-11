@@ -56,8 +56,8 @@
 //   campo de schema novo: snapshot local da reserva, fora do JSON do modelo.
 // - NÃO codificar stop/cancel nem task.confirmAction nesta fatia. Timeout de
 //   consulta ≠ cancelamento remoto: nada vira "cancelada" sem confirmação.
-// - CLAIM DURÁVEL DO ANSWER (M1A2a): question.answer_delivery = impressão
-//   digital nativa estável (campo json existente; NENHUM campo de schema novo).
+// - CLAIM DURÁVEL DO ANSWER (M1A2a): question.answer_delivery = identificação
+//   da pergunta, tentativa e texto normalizado (campo json existente; NENHUM campo de schema novo).
 //   Estados: 'enviando' (gravado atomicamente ANTES do task.sendMessage — é a
 //   autorização para um ÚNICO POST), 'incerta' (timeout/rede/resposta não
 //   confirmatória) e 'confirmada' (2xx + ok:true + persistência local OK).
@@ -416,6 +416,7 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     return (
       !!resp &&
       typeof resp.statusCode === 'number' &&
+      resp.statusCode >= 200 &&
       resp.statusCode < 300 &&
       resp.json &&
       typeof resp.json === 'object' &&
@@ -792,23 +793,26 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     return q.answer_delivery && typeof q.answer_delivery === 'object' ? q.answer_delivery : null
   }
   function preserveExistingAnswer(currentQ, nextQ) {
-    // nextQ é a pergunta NOVA computada (pode ser null). Preserva answer_delivery
-    // e answered SOMENTE quando a pergunta nova é a MESMA (mesmo message_id) e
-    // ainda sem answered. Pergunta nova COM ID comprovado e DIFERENTE avança
-    // sem o claim; leitura inconclusiva/sem ID (nextQ null ou sem message_id)
-    // NUNCA apaga o claim.
-    if (!nextQ || typeof nextQ !== 'object') return nextQ
-    if (!currentQ || typeof currentQ !== 'object') return nextQ
+    // nextQ pode não conter uma pergunta identificada. Preservar a reserva e
+    // o marcador confirmado na mesma pergunta ou em leitura inconclusiva.
+    // Só uma pergunta COM ID comprovado e DIFERENTE pode substituí-los.
+    if (!currentQ || typeof currentQ !== 'object' || Array.isArray(currentQ)) return nextQ
     const d = answerDeliveryOf(currentQ)
-    const sameQ =
-      !!d &&
-      str(nextQ.message_id || '') === str(currentQ.message_id || '') &&
-      currentQ.answered !== true
-    if (!sameQ) return nextQ
+    if (!d && currentQ.answered !== true) return nextQ
+    const nextId =
+      nextQ && typeof nextQ === 'object' && !Array.isArray(nextQ) ? str(nextQ.message_id || '') : ''
+    const currentId = str(currentQ.message_id || '')
+    // Sem ID novo comprovado, manter a reserva: ausência de evento não é ack.
+    if (!nextId) return currentQ
+    // Pergunta comprovadamente diferente pode avançar normalmente.
+    if (nextId !== currentId) return nextQ
     const out = {}
     for (const k in nextQ) out[k] = nextQ[k]
-    out.answer_delivery = d
-    if (currentQ.answered === true) out.answered = true
+    if (d) out.answer_delivery = d
+    if (currentQ.answered === true) {
+      out.answered = true
+      if (currentQ.answer_request_id) out.answer_request_id = currentQ.answer_request_id
+    }
     return out
   }
   function keepWaitingAnswer(fresh, computed) {
@@ -1073,7 +1077,7 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     }
     // M1A2a: preservar answer_delivery/answered da MESMA pergunta (mesmo
     // message_id) quando a leitura nova a redefine; leitura sem ID de pergunta
-    // NUNCA apaga o claim (preservação só age com nextQ objeto com ID).
+    // NUNCA apaga o claim; somente ID novo comprovado libera a substituição.
     newQuestion = preserveExistingAnswer(fresh.get('question'), newQuestion)
     fresh.set('question', newQuestion)
     if (computed.result !== undefined) {
@@ -1216,9 +1220,13 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     const confirmedSame =
       !!delivery &&
       delivery.state === 'confirmada' &&
+      str(questionObj.message_id) === questionId &&
       str(delivery.question_id) === questionId &&
-      (!delivery.answer_request_id || delivery.answer_request_id === answerRequestId) &&
-      (typeof delivery.text !== 'string' || delivery.text === normalizeAnswerText(text))
+      str(delivery.remote_task_id) === rec.getString('remote_task_id') &&
+      str(questionObj.task_id) === rec.getString('remote_task_id') &&
+      delivery.answer_request_id === answerRequestId &&
+      typeof delivery.text === 'string' &&
+      delivery.text === normalizeAnswerText(text)
     if (confirmedSame) {
       return e.json(200, { duplicate: true, request: serializeRequest(rec) })
     }
@@ -1324,6 +1332,11 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
       claimErr = new ApiError(409, 'Pedido sem tarefa remota vinculada.')
       return
     }
+    // O vínculo observado na tela/leitura inicial não pode mudar antes do claim.
+    if (freshTaskId !== taskId || str(freshQ.task_id) !== freshTaskId) {
+      claimErr = new ApiError(409, 'Vínculo da tarefa mudou; atualize o pedido antes de responder.')
+      return
+    }
     const freshQText = str(freshQ.text)
     const claim = {
       state: 'enviando',
@@ -1402,6 +1415,11 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     // Tuple do claim deve ser EXATAMENTE o nosso (pergunta nova não pode ter
     // avançado; outro submit não pode ter tomado a reserva).
     const tupleOk =
+      !!freshQ &&
+      (str(freshQ.type) === 'messageAskUser' || str(freshQ.type) === 'cascadeAskUser') &&
+      fresh.getString('remote_task_id') === taskId &&
+      str(freshQ.message_id) === questionId &&
+      str(freshQ.task_id) === taskId &&
       !!freshDelivery &&
       freshDelivery.state === 'enviando' &&
       str(freshDelivery.question_id) === questionId &&

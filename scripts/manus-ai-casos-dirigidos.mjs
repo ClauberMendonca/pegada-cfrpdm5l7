@@ -731,6 +731,8 @@ check('M1A2a: pergunta NOVA com ID comprovado avança; answer atrasado vira 409'
   })
   submit(s) // responde q1
   assert.equal(s.row().question.answered, true)
+  // Faz a janela expirar no simulador, sem apagar perguntas/reservas.
+  s.newerCommit({ last_polled_at: '2020-01-01T00:00:00Z' })
   // Chega pergunta nova (id q2): estado volta a aguardando_pergunta.
   s.invoke()
   assert.equal(s.row().state, 'aguardando_pergunta')

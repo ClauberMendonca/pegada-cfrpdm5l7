@@ -1,15 +1,8 @@
-// FATIA M1B1 — painel do copiloto em Capturas (SOMENTE LEITURA).
-// FATIA M1B2a — confirmação e comando de criação do esclarecimento.
-//
-// Integração real AINDA DESLIGADA: abrir/selecionar/consultar NÃO envia
-// nada ao Manus. A criação só ocorre após o clique explícito em
-// 'Revisar pedido de esclarecimento' e depois em 'Confirmar envio'
-// (card inline em ClarifyConfirmCard + clarifyService.ts). Fechar o
-// painel NÃO cancela eventual tarefa Manus nem libera reserva.
-
+// Marco 2: comandos explícitos para o pedido existente; abrir o painel só consulta o banco local.
 import React, { useEffect, useRef, useState } from 'react'
 import { Bot, Calendar, ExternalLink, RefreshCw, TriangleAlert } from 'lucide-react'
 import { ClarifyConfirmCard } from '@/components/ClarifyConfirmCard'
+import { CopilotRequestControls } from '@/components/CopilotRequestControls'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -38,6 +31,7 @@ interface CopilotPanelProps {
   capture: CaptureItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onUseProposal?: (request: AiRequestRecord) => Promise<void>
 }
 
 type LoadState =
@@ -54,10 +48,17 @@ export const CopilotPanel: React.FC<CopilotPanelProps> = (props) => {
   if (!props.open || !props.capture) return null
   return (
     <CopilotPanelSession
-      key={JSON.stringify([user?.id ?? '', props.capture.id])}
+      key={JSON.stringify([
+        user?.id ?? '',
+        props.capture.id,
+        props.capture.raw_text,
+        props.capture.updated,
+        props.capture.status,
+      ])}
       capture={props.capture}
       open={props.open}
       onOpenChange={props.onOpenChange}
+      onUseProposal={props.onUseProposal}
     />
   )
 }
@@ -70,6 +71,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
   capture,
   open,
   onOpenChange,
+  onUseProposal,
 }) => {
   const { user } = useAuth()
   const timezone = ownerTimezone(user?.timezone)
@@ -80,6 +82,13 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
 
   const captureId = capture.id
   const activeRef = useRef(true)
+  const busyRef = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const changeBusy = (value: boolean) => {
+    if (!activeRef.current) return
+    busyRef.current = value
+    setBusy(value)
+  }
 
   useEffect(() => {
     activeRef.current = true
@@ -91,7 +100,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
 
   // Invalidar no próprio evento, antes de qualquer efeito ou retorno tardio.
   const selectContext = (next: EntityContext) => {
-    if (!activeRef.current || next === context) return
+    if (!activeRef.current || busyRef.current || next === context) return
     ++requestIdRef.current
     setLoad({ phase: 'sem_contexto' })
     setContext(next)
@@ -128,7 +137,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
   // registros locais' e após um envio confirmado. Erro aqui não desfaz
   // confirmação anterior nem autoriza reenvio.
   const refreshLocalRequests = () => {
-    if (!open || !activeRef.current || !context) return
+    if (!open || !activeRef.current || !context || busyRef.current) return
     const reqId = ++requestIdRef.current
     setLoad({ phase: 'carregando', reqId })
     listAiRequestsForCapture({ originId: captureId, context, userId: user?.id }).then((res) => {
@@ -142,6 +151,21 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
   }
 
   const requests = load.phase === 'lista' ? load.requests : []
+  const localReady = load.phase === 'lista' || load.phase === 'vazio'
+  const updateRequest = (updated: AiRequestRecord) => {
+    if (
+      !activeRef.current ||
+      updated.user_id !== user?.id ||
+      updated.origin_id !== captureId ||
+      updated.context !== context
+    )
+      return
+    setLoad((current) =>
+      current.phase === 'lista'
+        ? { ...current, requests: current.requests.map((r) => (r.id === updated.id ? updated : r)) }
+        : current,
+    )
+  }
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
@@ -152,11 +176,11 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
         <DialogHeader>
           <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
             <Bot className="w-5 h-5 text-violet-400" />
-            Copiloto — pedidos locais
+            Copiloto — da captura ao próximo avanço
           </DialogTitle>
           <DialogDescription id="copilot-panel-desc" className="text-xs text-slate-400">
-            Visualização somente leitura dos pedidos registrados nesta captura. Fechar não cancela
-            nenhuma tarefa.
+            Revise o andamento, responda quando necessário e leve uma proposta ao formulário manual.
+            Fechar não cancela uma tarefa nem um envio em curso.
           </DialogDescription>
         </DialogHeader>
 
@@ -187,6 +211,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
                   key={c}
                   type="button"
                   onClick={() => selectContext(c)}
+                  disabled={busy}
                   aria-pressed={context === c}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                     context === c
@@ -227,7 +252,16 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
           ) : (
             <ul className="space-y-3">
               {requests.map((r) => (
-                <CopilotRequestItem key={r.id} request={r} capture={capture} timezone={timezone} />
+                <CopilotRequestItem
+                  key={JSON.stringify([r.id, context])}
+                  request={r}
+                  capture={capture}
+                  timezone={timezone}
+                  disabled={busy}
+                  onUpdated={updateRequest}
+                  onUseProposal={onUseProposal}
+                  onBusyChange={changeBusy}
+                />
               ))}
             </ul>
           )}
@@ -235,11 +269,21 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
           {/* M1B2a — comando explícito de criação; NUNCA no mount/consulta */}
           {user && (
             <ClarifyCommand
+              key={JSON.stringify([
+                user.id,
+                capture.id,
+                context,
+                capture.raw_text,
+                capture.updated,
+              ])}
               capture={capture}
               context={context}
               userId={user.id}
               existingRequests={requests}
               onSubmitted={refreshLocalRequests}
+              localReady={localReady}
+              disabled={busy}
+              onBusyChange={changeBusy}
             />
           )}
         </div>
@@ -269,7 +313,19 @@ const ClarifyCommand: React.FC<{
   userId: string
   existingRequests: AiRequestRecord[]
   onSubmitted: () => void
-}> = ({ capture, context, userId, existingRequests, onSubmitted }) => {
+  localReady: boolean
+  disabled: boolean
+  onBusyChange: (busy: boolean) => void
+}> = ({
+  capture,
+  context,
+  userId,
+  existingRequests,
+  onSubmitted,
+  localReady,
+  disabled,
+  onBusyChange,
+}) => {
   const [prepared, setPrepared] = useState<ClarifyIntent | null>(null)
   const [prepError, setPrepError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -319,11 +375,14 @@ const ClarifyCommand: React.FC<{
     !prepError &&
     !outcome &&
     !submittingPrep &&
-    !submitting
+    !submitting &&
+    localReady &&
+    !disabled
 
   const startPreparation = async () => {
-    if (!activeRef.current || busyRef.current || !context) return
+    if (!activeRef.current || busyRef.current || !context || !localReady || disabled) return
     busyRef.current = true
+    onBusyChange(true)
     setSubmittingPrep(true)
     setPrepError(null)
     try {
@@ -347,13 +406,25 @@ const ClarifyCommand: React.FC<{
       }
     } finally {
       busyRef.current = false
-      if (activeRef.current) setSubmittingPrep(false)
+      if (activeRef.current) {
+        setSubmittingPrep(false)
+        onBusyChange(false)
+      }
     }
   }
 
   const confirmSend = async () => {
     const intent = preparedRef.current
-    if (!activeRef.current || busyRef.current || submitting || !intent || !context) return
+    if (
+      !activeRef.current ||
+      busyRef.current ||
+      submitting ||
+      !intent ||
+      !context ||
+      !localReady ||
+      disabled
+    )
+      return
     // Checagem visual no clique final (não substitui a guarda transacional).
     if (
       intent.captureId !== capture.id ||
@@ -367,6 +438,7 @@ const ClarifyCommand: React.FC<{
       return
     }
     busyRef.current = true
+    onBusyChange(true)
     setSubmitting(true)
     setOutcome(null)
     setOutcomeKey(null)
@@ -383,17 +455,21 @@ const ClarifyCommand: React.FC<{
         result.request
       ) {
         // Releitura APENAS local (getFullList nativo); erro não desfaz nada.
+        onBusyChange(false)
         onSubmitted()
       }
     } finally {
       busyRef.current = false
-      if (activeRef.current) setSubmitting(false)
+      if (activeRef.current) {
+        setSubmitting(false)
+        onBusyChange(false)
+      }
     }
   }
 
   const key = prepared ? outcomeKeyOf(prepared) : null
   const outcomeStale = !!(prepared && outcome && outcomeKey !== key)
-  const sendBlocked = outcomeStale || !!prepError || alreadyRequested
+  const sendBlocked = outcomeStale || !!prepError || alreadyRequested || !localReady || disabled
 
   const buttonLabel =
     alreadyRequested && (!prepared || outcomeStale)
@@ -465,7 +541,11 @@ const CopilotRequestItem: React.FC<{
   request: AiRequestRecord
   capture: CaptureItem
   timezone?: string
-}> = ({ request, capture, timezone }) => {
+  disabled: boolean
+  onUpdated: (request: AiRequestRecord) => void
+  onUseProposal?: (request: AiRequestRecord) => Promise<void>
+  onBusyChange: (busy: boolean) => void
+}> = ({ request, capture, timezone, disabled, onUpdated, onUseProposal, onBusyChange }) => {
   const info = stateInfo(request)
   const question = questionText(request)
   const result = resultOf(request)
@@ -521,6 +601,15 @@ const CopilotRequestItem: React.FC<{
       )}
 
       {result && <CopilotResultView result={result} />}
+
+      <CopilotRequestControls
+        request={request}
+        capture={capture}
+        disabled={disabled}
+        onUpdated={onUpdated}
+        onUseProposal={onUseProposal}
+        onBusyChange={onBusyChange}
+      />
 
       {request.state === 'falha' &&
         typeof request.error === 'string' &&

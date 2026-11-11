@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { CaptureItem, CaptureStatus } from '@/types/execution'
 import { captureService } from '@/services/captureService'
 import { projectService } from '@/services/projectService'
 import { useGlobalFilter } from '@/contexts/FilterContext'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -24,20 +24,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Inbox,
-  Plus,
-  ArrowRight,
-  FolderKanban,
-  CheckSquare,
-  Trash2,
-  CheckCircle,
-  Archive,
-  Lightbulb,
-  Bot,
-} from 'lucide-react'
+import { Inbox, Plus, FolderKanban, CheckSquare, Trash2, Lightbulb, Bot } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { CopilotPanel } from '@/components/CopilotPanel'
+import { prepareProposalConversion } from '@/lib/skipAi/proposalService'
+import type { AiRequestRecord } from '@/lib/skipAi/types'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -56,6 +47,16 @@ export const CapturesPage: React.FC = () => {
   // FATIA M1B1 — Painel do Copiloto (estado SEPARADO da conversão manual)
   const [copilotCapture, setCopilotCapture] = useState<CaptureItem | null>(null)
   const [copilotOpen, setCopilotOpen] = useState(false)
+  const copilotSession = useRef(0)
+  const pageActive = useRef(true)
+  const [conversionFromCopilot, setConversionFromCopilot] = useState(false)
+  useEffect(() => {
+    pageActive.current = true
+    return () => {
+      pageActive.current = false
+      ++copilotSession.current
+    }
+  }, [])
 
   // Convert to Project form state
   const [projectTitle, setProjectTitle] = useState('')
@@ -134,6 +135,7 @@ export const CapturesPage: React.FC = () => {
   }
 
   const openConvertToProject = (capture: CaptureItem) => {
+    setConversionFromCopilot(false)
     setSelectedCapture(capture)
     setProjectTitle(capture.raw_text.split('\n')[0].slice(0, 80))
     setProjectContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
@@ -144,11 +146,41 @@ export const CapturesPage: React.FC = () => {
   }
 
   const openConvertToAction = (capture: CaptureItem) => {
+    setConversionFromCopilot(false)
     setSelectedCapture(capture)
     setActionTitle(capture.raw_text.slice(0, 100))
     setActionContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
     setActionProjectId('')
     setConversionType('action')
+  }
+
+  const useCopilotProposal = async (request: AiRequestRecord) => {
+    if (!copilotOpen || !copilotCapture) throw new Error('Abra a captura para revisar a proposta.')
+    const session = copilotSession.current
+    const prepared = await prepareProposalConversion(request, copilotCapture)
+    if (!pageActive.current || session !== copilotSession.current) {
+      throw new Error('O painel mudou; a proposta não foi levada ao formulário.')
+    }
+    const { capture, proposal } = prepared
+    ++copilotSession.current
+    setCopilotOpen(false)
+    setCopilotCapture(null)
+    setSelectedCapture(capture)
+    setConversionFromCopilot(true)
+    setCaptures((list) => list.map((item) => (item.id === capture.id ? capture : item)))
+    if (proposal.kind === 'projeto') {
+      setProjectTitle(proposal.title)
+      setProjectContext(proposal.context)
+      setProjectAspiration(proposal.aspiration ?? '')
+      setProjectControllable(proposal.controllable_delivery ?? '')
+      setProjectCompletion(proposal.completion_condition ?? '')
+      setConversionType('project')
+    } else {
+      setActionTitle(proposal.title)
+      setActionContext(proposal.context)
+      setActionProjectId('')
+      setConversionType('action')
+    }
   }
 
   const [isConverting, setIsConverting] = useState(false)
@@ -368,11 +400,12 @@ export const CapturesPage: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => {
+                        ++copilotSession.current
                         setCopilotCapture(item)
                         setCopilotOpen(true)
                       }}
                       className="border-slate-700 bg-slate-800/80 hover:bg-slate-800 hover:text-violet-400 text-xs gap-1.5"
-                      title="Ver pedidos locais do copiloto (somente leitura)"
+                      title="Ver pedidos e comandos explícitos do copiloto"
                     >
                       <Bot className="w-3.5 h-3.5 text-violet-400" />
                       Copiloto
@@ -412,7 +445,18 @@ export const CapturesPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 overflow-y-auto max-h-[60vh]">
+            {conversionFromCopilot && selectedCapture && (
+              <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-xs space-y-2">
+                <p>
+                  Proposta sugerida pelo Manus. Revise os campos; nada será criado antes de
+                  confirmar.
+                </p>
+                <p className="whitespace-pre-wrap break-words text-slate-300">
+                  {selectedCapture.raw_text}
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-slate-400">
                 Título do Projeto
@@ -466,6 +510,18 @@ export const CapturesPage: React.FC = () => {
                 className="bg-slate-950 border-slate-800 text-white text-xs"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wider text-slate-400">
+                Condição de término (opcional)
+              </Label>
+              <Textarea
+                rows={2}
+                value={projectCompletion}
+                onChange={(e) => setProjectCompletion(e.target.value)}
+                placeholder="Como reconhecerei que a entrega foi concluída?"
+                className="bg-slate-950 border-slate-800 text-white text-xs"
+              />
+            </div>
           </div>
 
           <DialogFooter>
@@ -504,6 +560,17 @@ export const CapturesPage: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {conversionFromCopilot && selectedCapture && (
+              <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-xs space-y-2">
+                <p>
+                  Proposta sugerida pelo Manus. Revise o título e contexto; confirmar cria somente
+                  esta ação.
+                </p>
+                <p className="whitespace-pre-wrap break-words text-slate-300">
+                  {selectedCapture.raw_text}
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-slate-400">
                 Título da Ação
@@ -580,7 +647,9 @@ export const CapturesPage: React.FC = () => {
       <CopilotPanel
         capture={copilotCapture}
         open={copilotOpen}
+        onUseProposal={useCopilotProposal}
         onOpenChange={(o) => {
+          if (!o) ++copilotSession.current
           setCopilotOpen(o)
           if (!o) setCopilotCapture(null)
         }}

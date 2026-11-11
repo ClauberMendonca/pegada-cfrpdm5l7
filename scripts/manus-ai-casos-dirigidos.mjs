@@ -1,4 +1,5 @@
-// Testes locais de EXPECTATIVAS CORRETAS do acompanhamento v0.0.17.
+// Testes locais de EXPECTATIVAS CORRETAS do acompanhamento (M1A1b + M1A2a).
+// Casos 1..17: GET/polling (M1A1b, intocados). answerSubmit/cases finais: M1A2a.
 // Hook original carregado em VM; HTTP, autenticação e banco são simulados.
 // Falha significa critério não atendido, não reprodução aprovada de um defeito.
 import assert from 'node:assert/strict'
@@ -72,7 +73,7 @@ const page = (messages, has_more = false, next_cursor = '') => ({
   statusCode: 200,
   json: { ok: true, messages, has_more, next_cursor },
 })
-function setup({ initial = {}, http, beforeReservation }) {
+function setup({ initial = {}, http, beforeReservation, authAs }) {
   let db = {
     id: 'pedido-ficticio',
     user_id: 'usuario-ficticio',
@@ -133,6 +134,7 @@ function setup({ initial = {}, http, beforeReservation }) {
   }
   vm.runInContext(source, vm.createContext(globals), { timeout: 1000 })
   return {
+    app,
     ...api,
     calls,
     invoke() {
@@ -151,6 +153,29 @@ function setup({ initial = {}, http, beforeReservation }) {
       const response = routes.get('GET /backend/v1/ai/requests/{id}')(e)
       assert.equal(response.status, 200)
       return response
+    },
+    // M1A2a: invocação do POST /answer real do hook.
+    answerSubmit(body) {
+      const e = {
+        auth: { id: authAs || 'usuario-ficticio' },
+        app,
+        request: {
+          pathValue() {
+            return 'pedido-ficticio'
+          },
+        },
+        requestInfo() {
+          return { body: clone(body) }
+        },
+        json(status, value) {
+          return { status, value }
+        },
+      }
+      try {
+        return { response: routes.get('POST /backend/v1/ai/requests/{id}/answer')(e) }
+      } catch (error) {
+        return { error }
+      }
     },
   }
 }
@@ -373,6 +398,355 @@ check(
     assert.equal(s.row().result, null)
   },
 )
+// ============================== M1A2a: answer ==============================
+// Período base comum dos casos answer: espera de pergunta comum com ID.
+const answerBase = {
+  state: 'aguardando_pergunta',
+  question: {
+    type: 'messageAskUser',
+    text: 'Pergunta exibida',
+    message_id: 'q1',
+    task_id: 'tarefa-ficticia',
+  },
+}
+const submit = (s, extra = {}) =>
+  s.answerSubmit({
+    text: 'Resposta fictícia',
+    answer_request_id: 'a1',
+    question_id: 'q1',
+    ...extra,
+  })
+const okRemote = () => ({ statusCode: 200, json: { ok: true, request_id: 'r-remoto' } })
+
+check('M1A2a: sucesso único — claim enviando antes do POST; confirmada + answered após', () => {
+  const claimsSeen = []
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      // O POST remoto SÓ acontece depois de o claim 'enviando' estar gravado.
+      claimsSeen.push(clone(s.row().question.answer_delivery))
+      return config.url.includes('task.sendMessage') ? okRemote() : page([])
+    },
+  })
+  const r = submit(s)
+  assert.equal(r.response.status, 200)
+  assert.equal(r.response.value.duplicate, false)
+  assert.ok(claimsSeen[0], 'sem claim gravado não pode haver POST')
+  assert.equal(claimsSeen[0].state, 'enviando')
+  const q = s.row().question
+  assert.equal(q.answered, true)
+  assert.equal(q.answer_delivery.state, 'confirmada')
+  assert.equal(s.row().state, 'em_execucao')
+  assert.equal(s.row().remote_request_id, 'r-remoto')
+  assert.equal(s.calls.length, 1) // só task.sendMessage
+})
+check('M1A2a: duplicate confirmado (mesmo ID, mesmo texto) devolve 200 sem HTTP', () => {
+  const s = setup({
+    initial: {
+      state: 'em_execucao',
+      question: {
+        type: 'messageAskUser',
+        text: 'Pergunta exibida',
+        message_id: 'q1',
+        task_id: 'tarefa-ficticia',
+        answered: true,
+        answer_request_id: 'a1',
+        answer_delivery: {
+          state: 'confirmada',
+          question_id: 'q1',
+          answer_request_id: 'a1',
+          remote_task_id: 'tarefa-ficticia',
+          text: 'Resposta fictícia',
+        },
+      },
+    },
+    http() {
+      throw new Error('HTTP não deveria ocorrer em duplicate')
+    },
+  })
+  const r = submit(s)
+  assert.equal(r.response.status, 200)
+  assert.equal(r.response.value.duplicate, true)
+  assert.equal(s.calls.length, 0)
+})
+check('M1A2a: mesmo ID com conteúdo diferente → 409; outro ID → 409', () => {
+  const confirmed = {
+    state: 'em_execucao',
+    question: {
+      type: 'messageAskUser',
+      text: 'Pergunta exibida',
+      message_id: 'q1',
+      task_id: 'tarefa-ficticia',
+      answered: true,
+      answer_request_id: 'a1',
+      answer_delivery: {
+        state: 'confirmada',
+        question_id: 'q1',
+        answer_request_id: 'a1',
+        remote_task_id: 'tarefa-ficticia',
+        text: 'Resposta fictícia',
+      },
+    },
+  }
+  const s = setup({
+    initial: confirmed,
+    http() {
+      throw new Error('HTTP não deveria ocorrer')
+    },
+  })
+  assert.equal(submit(s, { text: 'Outra resposta' }).error.status, 409)
+  assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+  // answered:true SEM answer_delivery (marcador antigo) também bloqueia.
+  const legacy = setup({
+    initial: {
+      state: 'em_execucao',
+      question: {
+        type: 'messageAskUser',
+        text: 'Pergunta exibida',
+        message_id: 'q1',
+        task_id: 'tarefa-ficticia',
+        answered: true,
+        answer_request_id: 'a0',
+      },
+    },
+    http() {
+      throw new Error('HTTP não deveria ocorrer')
+    },
+  })
+  assert.equal(submit(legacy).error.status, 409)
+  assert.equal(s.calls.length, 0)
+  assert.equal(legacy.calls.length, 0)
+})
+check('M1A2a: dois submits concorrentes (mesmo ID) — um envia, outro 409', () => {
+  let sent = 0
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      if (config.url.includes('task.sendMessage')) {
+        sent++
+        // Simula o submit B confirmando dentro da transação de A? Não: A está
+        // com o claim. B só chega ao HTTP se tomou a reserva — não deve.
+      }
+      return okRemote()
+    },
+  })
+  // A envia normalmente.
+  assert.equal(submit(s).response.status, 200)
+  const afterA = s.row()
+  // B chega com o MESMO ID: claim confirmado → duplicate; sem segundo POST.
+  const before = s.calls.length
+  const rb = submit(s)
+  assert.equal(rb.response.value.duplicate, true)
+  assert.equal(s.calls.length, before)
+  // C chega com OUTRO ID: 409 — pergunta já respondida.
+  assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+  assert.equal(sent, 1)
+  assert.equal(afterA.question.answer_delivery.state, 'confirmada')
+})
+check('M1A2a: dois submits com IDs diferentes — só o primeiro envia; segundo 409', () => {
+  let sent = 0
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      if (config.url.includes('task.sendMessage')) sent++
+      return okRemote()
+    },
+  })
+  assert.equal(submit(s).response.status, 200)
+  assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+  assert.equal(sent, 1)
+})
+check('M1A2a: timeout → claim incerta; duas tentativas bloqueadas; espera preservada', () => {
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      if (config.url.includes('task.sendMessage')) throw new Error('timeout fictício')
+      return page([])
+    },
+  })
+  assert.equal(submit(s).error.status, 502)
+  assert.equal(s.row().state, 'aguardando_pergunta')
+  assert.equal(s.row().question.answered, undefined)
+  assert.equal(s.row().question.answer_delivery.state, 'incerta')
+  // Segunda tentativa (mesmo ou outro ID): bloqueada — sem TTL, sem reenvio.
+  assert.equal(submit(s).error.status, 409)
+  assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+  assert.equal(s.calls.length, 1) // só o primeiro POST
+})
+check('M1A2a: claim enviando remanescente de crash bloqueia retry (sem HTTP)', () => {
+  const s = setup({
+    initial: {
+      state: 'aguardando_pergunta',
+      question: {
+        type: 'messageAskUser',
+        text: 'Pergunta exibida',
+        message_id: 'q1',
+        task_id: 'tarefa-ficticia',
+        answer_delivery: {
+          state: 'enviando',
+          question_id: 'q1',
+          answer_request_id: 'a1',
+          remote_task_id: 'tarefa-ficticia',
+          text: 'Resposta fictícia',
+        },
+      },
+    },
+    http() {
+      throw new Error('HTTP não deveria ocorrer com claim enviando remanescente')
+    },
+  })
+  assert.equal(submit(s).error.status, 409)
+  assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+  assert.equal(s.calls.length, 0)
+})
+check(
+  'M1A2a: remoto OK + save final falha → incerta; compensação falha → enviando persiste',
+  () => {
+    // Harness de falha de commit com snapshots independentes: save do FINAL sempre
+    // lança; rollback real restaura o valor de abertura da transação.
+    const s = setup({
+      initial: answerBase,
+      http(config) {
+        if (config.url.includes('task.sendMessage')) return okRemote()
+        return page([])
+      },
+    })
+    // Sobrescreve save do app para falhar APENAS na finalização (2ª transação em
+    // diante): o claim (1ª transação) grava normalmente.
+    let transactions = 0
+    const originalRunInTransaction = s.app.runInTransaction
+    s.app.runInTransaction = (cb) => {
+      transactions++
+      if (transactions >= 2) {
+        // Finalização: save lança; sem commit — banco volta ao valor de abertura.
+        const failing = {
+          ...s.app,
+          save: () => {
+            throw new Error('falha fictícia de persistência')
+          },
+        }
+        return originalRunInTransaction.call(s.app, (txApp) => cb(failing))
+      }
+      return originalRunInTransaction.call(s.app, cb)
+    }
+    const r = submit(s)
+    // Compensação também grava via txApp.save → também lança → claim 'enviando'
+    // permanece (o estado em disco é o do commit do claim).
+    assert.ok(r.error, 'esperava erro pós-HTTP')
+    assert.equal([502, 500].includes(r.error.status), true)
+    // Rollback real: o banco mantém o claim 'enviando' gravado pelo claim commitado.
+    const q = s.row().question
+    assert.ok(q && q.answer_delivery, 'claim deve persistir após falha de commit')
+    assert.equal(q.answer_delivery.state, 'enviando')
+    assert.equal(q.answered, undefined)
+    assert.equal(s.row().state, 'aguardando_pergunta')
+    // Retry: bloqueado pela reserva durável.
+    assert.equal(submit(s).error.status, 409)
+    assert.equal(submit(s, { answer_request_id: 'a2' }).error.status, 409)
+    assert.equal(s.calls.length, 1) // o POST remoto ocorreu UMA vez
+  },
+)
+check('M1A2a: pergunta obsoleta (question_id errado) → 409 sem HTTP; não dono → 403', () => {
+  const s = setup({
+    initial: answerBase,
+    http() {
+      throw new Error('não deveria')
+    },
+  })
+  assert.equal(submit(s, { question_id: 'q-antiga' }).error.status, 409)
+  assert.equal(s.calls.length, 0)
+  // Não dono: outro usuário tentando responder pedido alheio → 403.
+  const other = setup({
+    initial: answerBase,
+    http() {
+      throw new Error('não deveria')
+    },
+    authAs: 'outro-usuario',
+  })
+  assert.equal(submit(other).error.status, 403)
+})
+check('M1A2a: GET preserva claim da mesma pergunta e não reabre pergunta confirmada', () => {
+  const s = setup({
+    initial: {
+      state: 'em_execucao',
+      question: {
+        type: 'messageAskUser',
+        text: 'Pergunta exibida',
+        message_id: 'q1',
+        task_id: 'tarefa-ficticia',
+        answered: true,
+        answer_request_id: 'a1',
+        answer_delivery: {
+          state: 'confirmada',
+          question_id: 'q1',
+          answer_request_id: 'a1',
+          remote_task_id: 'tarefa-ficticia',
+          text: 'Resposta fictícia',
+        },
+      },
+    },
+    http(config) {
+      // Manus AINDA reporta waiting para a MESMA pergunta (espera antiga).
+      return config.url.includes('task.detail')
+        ? detail('waiting')
+        : page([waiting('q1'), message('q1', 'Pergunta exibida', 500)])
+    },
+  })
+  s.invoke()
+  // Espera antiga NÃO reabre a pergunta confirmada.
+  assert.equal(s.row().state, 'em_execucao')
+  assert.equal(s.row().question.answered, true)
+  assert.equal(s.row().question.answer_delivery.state, 'confirmada')
+})
+check('M1A2a: GET antes do claim mantém claim gravado por submit posterior', () => {
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      if (config.url.includes('task.sendMessage')) return okRemote()
+      return config.url.includes('task.detail')
+        ? detail('waiting')
+        : page([waiting('q1'), message('q1', 'Pergunta exibida', 500)])
+    },
+  })
+  s.invoke() // GET regravando a mesma pergunta (sem claim ainda)
+  assert.equal(s.row().question.message_id, 'q1')
+  const r = submit(s)
+  assert.equal(r.response.status, 200)
+  assert.equal(s.row().question.answer_delivery.state, 'confirmada')
+  // GET depois do claim: preserva answer_delivery e answered da mesma message_id.
+  s.invoke()
+  assert.equal(s.row().question.answer_delivery.state, 'confirmada')
+  assert.equal(s.row().question.answered, true)
+  assert.equal(s.row().state, 'em_execucao')
+})
+check('M1A2a: pergunta NOVA com ID comprovado avança; answer atrasado vira 409', () => {
+  const s = setup({
+    initial: answerBase,
+    http(config) {
+      if (config.url.includes('task.sendMessage')) return okRemote()
+      return config.url.includes('task.detail')
+        ? detail('waiting')
+        : page([waiting('q2'), message('q2', 'Pergunta nova de verdade', 900)])
+    },
+  })
+  submit(s) // responde q1
+  assert.equal(s.row().question.answered, true)
+  // Chega pergunta nova (id q2): estado volta a aguardando_pergunta.
+  s.invoke()
+  assert.equal(s.row().state, 'aguardando_pergunta')
+  assert.equal(s.row().question.message_id, 'q2')
+  assert.equal(s.row().question.answered, undefined)
+  // Answer atrasado para q1 NUNCA sobrescreve a pergunta nova.
+  const r = s.answerSubmit({
+    text: 'Resposta atrasada',
+    answer_request_id: 'a-atrasada',
+    question_id: 'q1',
+  })
+  assert.equal(r.error.status, 409)
+  assert.equal(s.row().question.message_id, 'q2')
+  assert.equal(s.row().question.answered, undefined)
+})
+
 console.log(
   'Resumo dirigido: ' + pass + ' aprovados; ' + fail + ' falhas. Sem JSVM/rede/banco reais.',
 )

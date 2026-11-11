@@ -119,6 +119,8 @@ function setup({ enabled = true, request = {}, capture = {}, httpStub, existing 
     },
     runInTransaction(cb) {
       // Contrato JSVM: callback void — retorno de objeto reverteria a transação.
+      // M1A2a: commit SOMENTE se o callback TERMINAR normalmente; erro = rollback
+      // real (registro volta ao valor de abertura), nunca mutação compartilhada.
       assert.equal(cb(app), undefined, 'callback de transação deve ser void')
     },
     save(r) {
@@ -658,6 +660,8 @@ check('GET: leitura sobreposta não regredi estado terminal mais novo (pronta)',
 })
 
 // ----------------------------------------------------------------- answer --
+// M1A2a: answer_request_id E question_id (message_id da pergunta exibida)
+// são OBRIGATÓRIOS; a rota revalida tudo dentro da transação do claim.
 const answerRec = {
   state: 'aguardando_pergunta',
   question: {
@@ -667,35 +671,37 @@ const answerRec = {
     task_id: 'tarefa-ficticia',
   },
 }
+const answerSubmit = (s, text = 'Resposta fictícia', extra = {}) =>
+  s.invoke(PATHS.answer, { text, answer_request_id: 'a1', question_id: 'q1', ...extra })
+
 check('answer: sucesso remoto confirma localmente (question.answered, estado em_execucao)', () => {
   const s = setup({
     request: answerRec,
     httpStub: () => ({ statusCode: 200, json: { ok: true, request_id: 'r' } }),
   })
-  const r = s.invoke(PATHS.answer, { text: 'Resposta fictícia', answer_request_id: 'a1' })
+  const r = answerSubmit(s)
   assert.equal(r.response.status, 200)
   assert.equal(r.response.value.duplicate, false)
   assert.equal(s.rec.getString('state'), 'em_execucao')
   assert.equal(s.rec.get('question').answered, true)
   assert.equal(s.rec.get('question').answer_request_id, 'a1')
+  assert.equal(s.rec.get('question').answer_delivery.state, 'confirmada')
+  // request_id remoto só se REALMENTE recebido — e gravado no registro.
+  assert.equal(s.rec.getString('remote_request_id'), 'r')
   const payload = JSON.parse(s.calls[0].body)
   assert.equal(s.calls[0].url, 'https://api.manus.ai/v2/task.sendMessage')
   assert.equal(payload.task_id, 'tarefa-ficticia')
 })
 check('answer: mesmo answer_request_id confirmado é duplicate sem segundo HTTP', () => {
   const s = setup({ request: answerRec, httpStub: () => ({ statusCode: 200, json: { ok: true } }) })
-  assert.equal(
-    s.invoke(PATHS.answer, { text: 'Resposta fictícia', answer_request_id: 'a1' }).response.value
-      .duplicate,
-    false,
-  )
+  assert.equal(answerSubmit(s).response.value.duplicate, false)
   const before = s.calls.length
-  const r = s.invoke(PATHS.answer, { text: 'Resposta fictícia', answer_request_id: 'a1' })
+  const r = answerSubmit(s)
   assert.equal(r.response.value.duplicate, true)
   assert.equal(s.calls.length, before)
 })
 check(
-  'answer: timeout preserva a espera e registra erro (reenvio cego continua possível — M1A2)',
+  'answer: timeout → claim incerta bloqueia reenvio; espera preservada; erro sanitizado',
   () => {
     const s = setup({
       request: answerRec,
@@ -703,21 +709,28 @@ check(
         throw new Error('timeout fictício')
       },
     })
-    assert.equal(
-      s.invoke(PATHS.answer, { text: 'Resposta fictícia', answer_request_id: 'a1' }).error.status,
-      502,
-    )
+    assert.equal(answerSubmit(s).error.status, 502)
+    // Estado geral segue somente valores existentes; sem answered.
     assert.equal(s.rec.getString('state'), 'aguardando_pergunta')
     assert.equal(s.rec.get('question').answered, undefined)
+    const d = s.rec.get('question').answer_delivery
+    assert.equal(d.state, 'incerta')
+    assert.equal(d.question_id, 'q1')
+    assert.equal(d.answer_request_id, 'a1')
+    assert.equal(d.remote_task_id, 'tarefa-ficticia')
+    // Mesmo ID: NÃO libera segundo POST.
+    assert.equal(answerSubmit(s).error.status, 409)
+    // Outro ID também não libera (sem TTL, sem reenvio).
+    assert.equal(
+      answerSubmit(s, 'Resposta fictícia', { answer_request_id: 'a2' }).error.status,
+      409,
+    )
     assert.ok(s.rec.getString('error').length > 0)
   },
 )
 check('answer: estado sem pergunta pendente é recusado com 409', () => {
   const s = setup({ request: { state: 'pronta' } })
-  assert.equal(
-    s.invoke(PATHS.answer, { text: 'Resposta fictícia', answer_request_id: 'a1' }).error.status,
-    409,
-  )
+  assert.equal(answerSubmit(s).error.status, 409)
   assert.equal(s.calls.length, 0)
 })
 check('answer: espera decisao_externa nunca é respondida', () => {
@@ -727,7 +740,18 @@ check('answer: espera decisao_externa nunca é respondida', () => {
       question: { type: 'confirmAction', text: 'Confirmar?', message_id: 'q2' },
     },
   })
-  assert.equal(s.invoke(PATHS.answer, { text: 'ok', answer_request_id: 'a1' }).error.status, 409)
+  assert.equal(answerSubmit(s, 'ok').error.status, 409)
+  assert.equal(s.calls.length, 0)
+})
+check('answer: question_id ausente é 400; id errado é 409; nada é enviado', () => {
+  const s = setup({ request: answerRec })
+  assert.equal(answerSubmit(s, 'x', { question_id: '' }).error.status, 400)
+  assert.equal(answerSubmit(s, 'x', { question_id: 'outra' }).error.status, 409)
+  assert.equal(s.calls.length, 0)
+})
+check('answer: answer_request_id ausente é 400', () => {
+  const s = setup({ request: answerRec })
+  assert.equal(answerSubmit(s, 'x', { answer_request_id: '' }).error.status, 400)
   assert.equal(s.calls.length, 0)
 })
 

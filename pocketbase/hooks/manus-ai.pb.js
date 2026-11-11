@@ -19,6 +19,8 @@
 // - Intenção local persistida ANTES do POST (state 'registrado'); falha do POST
 //   deixa 'criacao_incerta' (request_id só se recebido), SEM reenvio
 //   automático, sem revogar/limpar nada. Dedup local ≠ exactly-once remoto.
+// M1A2a: claim durável answer_delivery (enviando→incerta|confirmada) dentro de
+//   question — autoriza um único POST task.sendMessage; nada de campo novo.
 // - HTTP externo FORA de transação; runInTransaction void (resultado em
 //   variável local; resposta HTTP só após commit, status numérico — JSVM não
 //   expõe o pacote http).
@@ -54,8 +56,16 @@
 //   campo de schema novo: snapshot local da reserva, fora do JSON do modelo.
 // - NÃO codificar stop/cancel nem task.confirmAction nesta fatia. Timeout de
 //   consulta ≠ cancelamento remoto: nada vira "cancelada" sem confirmação.
-// - Envio de resposta (answer) ainda SEM claim durável antes do POST — reenvio
-//   em timeout/concorrência é limitação conhecida, corrigida em M1A2.
+// - CLAIM DURÁVEL DO ANSWER (M1A2a): question.answer_delivery = impressão
+//   digital nativa estável (campo json existente; NENHUM campo de schema novo).
+//   Estados: 'enviando' (gravado atomicamente ANTES do task.sendMessage — é a
+//   autorização para um ÚNICO POST), 'incerta' (timeout/rede/resposta não
+//   confirmatória) e 'confirmada' (2xx + ok:true + persistência local OK).
+//   Enquanto enviando/incerta, QUALQUER novo POST (mesmo ou outro
+//   answer_request_id) é 409 — sem TTL, sem reenvio automático; marcador
+//   answered:true antigo (sem delivery) também bloqueia. answered:true só
+//   significa SUCESSO CONFIRMADO. Sem promessa de idempotência remota.
+// - Criação/recuperação pós-POST do clarify (M1A2b) NÃO nesta fatia.
 //
 // NOTA (aplicação futura atômica): converter o resultado em action/project
 // NÃO é implementado aqui (capture-convert.pb.js intocado). Quando for,
@@ -776,6 +786,45 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       ]),
     )
   }
+  // ---- M1A2a: preservação do claim/answered da MESMA pergunta no GET ----
+  function answerDeliveryOf(q) {
+    if (!q || typeof q !== 'object' || Array.isArray(q)) return null
+    return q.answer_delivery && typeof q.answer_delivery === 'object' ? q.answer_delivery : null
+  }
+  function preserveExistingAnswer(currentQ, nextQ) {
+    // nextQ é a pergunta NOVA computada (pode ser null). Preserva answer_delivery
+    // e answered SOMENTE quando a pergunta nova é a MESMA (mesmo message_id) e
+    // ainda sem answered. Pergunta nova COM ID comprovado e DIFERENTE avança
+    // sem o claim; leitura inconclusiva/sem ID (nextQ null ou sem message_id)
+    // NUNCA apaga o claim.
+    if (!nextQ || typeof nextQ !== 'object') return nextQ
+    if (!currentQ || typeof currentQ !== 'object') return nextQ
+    const d = answerDeliveryOf(currentQ)
+    const sameQ =
+      !!d &&
+      str(nextQ.message_id || '') === str(currentQ.message_id || '') &&
+      currentQ.answered !== true
+    if (!sameQ) return nextQ
+    const out = {}
+    for (const k in nextQ) out[k] = nextQ[k]
+    out.answer_delivery = d
+    if (currentQ.answered === true) out.answered = true
+    return out
+  }
+  function keepWaitingAnswer(fresh, computed) {
+    // Espera antiga NÃO reabre pergunta já confirmada: se a pergunta confirmada
+    // (answered:true) continua sendo a pendente, o estado permanece em_execucao
+    // e a pergunta confirmada é mantida — o GET não regredi o ack do dono.
+    const q = fresh.get('question')
+    if (!q || typeof q !== 'object' || q.answered !== true) return computed
+    if (computed.state !== 'aguardando_pergunta') return computed
+    const curId = str(q.message_id || '')
+    const newId = computed.question ? str(computed.question.message_id || '') : ''
+    if (curId && newId && curId === newId) {
+      return { state: 'em_execucao', question: null, error: '' }
+    }
+    return computed
+  }
   const pollTicket = { snapshot: '', lastPolledAt: '' }
   let reserved = false
   e.app.runInTransaction((txApp) => {
@@ -997,6 +1046,8 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
   // recTerminal && isNewEvent: continuação legítima (pergunta/resultado/erro
   // comprovadamente novos) — invalida o estado/resultado antigo e grava abaixo.
   // !recTerminal: escrita normal como antes.
+  // Espera antiga NÃO reabre pergunta de resposta já confirmada (M1A2a).
+  computed = keepWaitingAnswer(rec, computed)
   // ---------- escrita guardada (transação void; resposta só após commit) ----------
   let outReq = null
   let wrote = false
@@ -1020,6 +1071,10 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       const fq = fresh.get('question')
       if (fq && typeof fq === 'object' && fq.answered === true) newQuestion = fq
     }
+    // M1A2a: preservar answer_delivery/answered da MESMA pergunta (mesmo
+    // message_id) quando a leitura nova a redefine; leitura sem ID de pergunta
+    // NUNCA apaga o claim (preservação só age com nextQ objeto com ID).
+    newQuestion = preserveExistingAnswer(fresh.get('question'), newQuestion)
     fresh.set('question', newQuestion)
     if (computed.result !== undefined) {
       fresh.set('result', computed.result)
@@ -1079,6 +1134,13 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     }
     return { ok: true }
   }
+  function normalizeAnswerText(t) {
+    // Texto normalizado da resposta — impressão digital nativa estável
+    // (trim + colapso de espaços). SEM hash inventado.
+    return String(t == null ? '' : t)
+      .trim()
+      .replace(/\s+/g, ' ')
+  }
   function serializeRequest(r) {
     const q = r.get('question')
     return {
@@ -1121,7 +1183,16 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
   const body = info.body || {}
   const text = str(body.text)
   const answerRequestId = str(body.answer_request_id)
+  const questionId = str(body.question_id)
+  // Contrato M1A2a: text, answer_request_id e question_id NÃO vazios
+  // (question_id = message_id da pergunta EXIBIDA ao dono).
   if (!text) throw new BadRequestError('text é obrigatório e não pode ser vazio.')
+  if (!answerRequestId) {
+    throw new BadRequestError('answer_request_id é obrigatório.')
+  }
+  if (!questionId) {
+    throw new BadRequestError('question_id é obrigatório (message_id da pergunta exibida).')
+  }
 
   let rec
   try {
@@ -1133,29 +1204,50 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
     throw new ForbiddenError('Pedido pertence a outro usuário.')
   }
 
-  // ---------- idempotência local da resposta ----------
-  // O marcador de resposta fica no JSON `question` (question.answered). Se o
-  // mesmo answer_request_id volta e a resposta já foi confirmada, devolve
-  // duplicate — sem reenviar ao Manus. (Claim durável ANTES do POST ainda não
-  // existe: reenvio em timeout/concorrência é limitação conhecida da M1A2.)
+  // ---------- leitura local (dedup sem transação) ----------
+  // Confirmação já finalizada para ESTA pergunta: duplicate sem HTTP.
   const q = rec.get('question')
-  const answeredMarker = q && typeof q === 'object' && q.answered ? q : null
-  if (answerRequestId && answeredMarker && answeredMarker.answer_request_id === answerRequestId) {
-    return e.json(200, { duplicate: true, request: serializeRequest(rec) })
+  const questionObj = q && typeof q === 'object' && !Array.isArray(q) ? q : null
+  const delivery =
+    questionObj && questionObj.answer_delivery && typeof questionObj.answer_delivery === 'object'
+      ? questionObj.answer_delivery
+      : null
+  if (questionObj && questionObj.answered === true) {
+    const confirmedSame =
+      !!delivery &&
+      delivery.state === 'confirmada' &&
+      str(delivery.question_id) === questionId &&
+      (!delivery.answer_request_id || delivery.answer_request_id === answerRequestId) &&
+      (typeof delivery.text !== 'string' || delivery.text === normalizeAnswerText(text))
+    if (confirmedSame) {
+      return e.json(200, { duplicate: true, request: serializeRequest(rec) })
+    }
+    // Marcador antigo answered:true SEM delivery (era anterior ao claim): bloqueia
+    // reenvio — nunca inferir nem reescrever históricos.
+    throw new ApiError(409, 'Resposta desta pergunta já foi confirmada anteriormente.')
+  }
+  // Claim vivo (enviando/incerta): bloqueia QUALQUER segundo POST (mesmo ou
+  // outro answer_request_id/texto) — sem TTL, sem refresh, sem reenvio.
+  if (delivery && (delivery.state === 'enviando' || delivery.state === 'incerta')) {
+    throw new ApiError(409, 'Resposta em envio/incerta: confirmação pendente; não reenviada.')
   }
 
   // ---------- pré-condição: espera de pergunta comum ----------
   if (rec.getString('state') !== 'aguardando_pergunta') {
     throw new ApiError(409, 'Pedido não está aguardando resposta do dono.')
   }
-  if (!q || typeof q !== 'object' || Array.isArray(q)) {
+  if (!questionObj) {
     throw new ApiError(409, 'Pedido sem pergunta pendente registrada.')
   }
-  const qType = str(q.type)
+  const qType = str(questionObj.type)
   // Apenas espera de pergunta comum (messageAskUser/cascadeAskUser): outras
   // esperas ficam em 'decisao_externa' — nunca responder/pular/confirmar.
   if (qType !== 'messageAskUser' && qType !== 'cascadeAskUser') {
     throw new ApiError(409, 'Espera atual não é uma pergunta ao dono; decisão externa necessária.')
+  }
+  // A pergunta respondida tem de ser a MESMA exibida ao dono (id esperado).
+  if (str(questionObj.message_id) !== questionId) {
+    throw new ApiError(409, 'Pergunta respondida não é mais a pergunta pendente.')
   }
   const taskId = rec.getString('remote_task_id')
   if (!taskId) {
@@ -1165,6 +1257,106 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
   if (!apiKey) {
     throw new ApiError(503, 'Integração Manus desligada/não configurada.')
   }
+
+  // ---------- CLAIM durável: gravar 'enviando' ANTES do POST ----------
+  // Transação void (contrato JSVM): resultado em variável local; resposta HTTP
+  // só após commit. Sem HTTP dentro da transação. task_id/owner derivados do
+  // registro RELIDO na transação — nunca do payload do cliente.
+  let claimOk = false
+  let claimErr = null
+  e.app.runInTransaction((txApp) => {
+    let fresh = null
+    try {
+      fresh = txApp.findRecordById('ai_requests', id)
+    } catch (_) {
+      fresh = null
+    }
+    if (!fresh || typeof fresh.getString !== 'function') {
+      claimErr = new NotFoundError('Pedido de esclarecimento não encontrado.')
+      return
+    }
+    // Revalidação ATÔMICA dentro da transação: dono, tarefa remota, estado,
+    // tipo de pergunta comum e ID esperado — tudo contra o registro fresco.
+    if (fresh.getString('user_id') !== userId) {
+      claimErr = new ForbiddenError('Pedido pertence a outro usuário.')
+      return
+    }
+    const fq = fresh.get('question')
+    const freshQ = fq && typeof fq === 'object' && !Array.isArray(fq) ? fq : null
+    const freshDelivery =
+      freshQ && freshQ.answer_delivery && typeof freshQ.answer_delivery === 'object'
+        ? freshQ.answer_delivery
+        : null
+    if (freshQ && freshQ.answered === true) {
+      claimErr = new ApiError(409, 'Resposta desta pergunta já foi confirmada anteriormente.')
+      return
+    }
+    if (
+      freshDelivery &&
+      (freshDelivery.state === 'enviando' || freshDelivery.state === 'incerta')
+    ) {
+      claimErr = new ApiError(
+        409,
+        'Resposta em envio/incerta: confirmação pendente; não reenviada.',
+      )
+      return
+    }
+    if (fresh.getString('state') !== 'aguardando_pergunta') {
+      claimErr = new ApiError(409, 'Pedido não está aguardando resposta do dono.')
+      return
+    }
+    if (
+      !freshQ ||
+      (str(freshQ.type) !== 'messageAskUser' && str(freshQ.type) !== 'cascadeAskUser')
+    ) {
+      claimErr = new ApiError(
+        409,
+        'Espera atual não é uma pergunta ao dono; decisão externa necessária.',
+      )
+      return
+    }
+    if (str(freshQ.message_id) !== questionId) {
+      claimErr = new ApiError(409, 'Pergunta respondida não é mais a pergunta pendente.')
+      return
+    }
+    const freshTaskId = fresh.getString('remote_task_id')
+    if (!freshTaskId) {
+      claimErr = new ApiError(409, 'Pedido sem tarefa remota vinculada.')
+      return
+    }
+    const freshQText = str(freshQ.text)
+    const claim = {
+      state: 'enviando',
+      question_id: questionId,
+      answer_request_id: answerRequestId,
+      remote_task_id: freshTaskId,
+      text: normalizeAnswerText(text),
+    }
+    const newQuestion = {
+      type: str(freshQ.type),
+      text: freshQText,
+      message_id: questionId,
+      task_id: freshTaskId,
+    }
+    if (freshQ.question_expectation && typeof freshQ.question_expectation === 'object') {
+      newQuestion.question_expectation = freshQ.question_expectation
+    }
+    newQuestion.answer_delivery = claim
+    fresh.set('question', newQuestion)
+    try {
+      txApp.save(fresh)
+      claimOk = true
+    } catch (_) {
+      // Falha ao gravar o claim: SEM POST — persistir é a autorização.
+      claimErr = new ApiError(
+        500,
+        'Não foi possível reservar o envio da resposta; nada foi enviado.',
+      )
+    }
+  })
+  if (claimErr) throw claimErr
+  if (!claimOk)
+    throw new ApiError(500, 'Não foi possível reservar o envio da resposta; nada foi enviado.')
 
   // ---------- task.sendMessage FORA de transação ----------
   const msgPayload = {
@@ -1179,32 +1371,165 @@ routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {
   } catch (err) {
     sendErr = err
   }
-  if (sendErr) {
-    // Sem retry cego: erro sanitizado, estado de espera preservado.
-    rec.set('error', sanitizeErr(sendErr, null))
-    e.app.save(rec)
-    throw new ApiError(502, 'Manus não confirmou o recebimento da resposta; não reenviada.')
-  }
-  const parsed = parseSendResponse(resp)
-  if (!parsed.ok) {
-    rec.set('error', parsed.error)
-    e.app.save(rec)
-    throw new ApiError(502, 'Manus recusou a resposta; não reenviada.')
-  }
 
-  // ---------- commit local (depois do 2xx remoto) ----------
-  rec.set('state', 'em_execucao')
-  rec.set('question', {
-    type: qType,
-    text: str(q.text),
-    message_id: str(q.message_id),
-    task_id: taskId,
-    answered: true,
-    answer_request_id: answerRequestId || '',
+  // ---------- finalização: reler em transação, validar dono e tuple ----------
+  // Nunca salvar snapshot pré-HTTP; nunca substituir pergunta NOVA. Timeout,
+  // rede ou resposta não confirmatória → claim 'incerta', erro sanitizado, sem
+  // answered — confirmação pendente, não cancelamento.
+  let outReq = null
+  let finishErr = null
+  e.app.runInTransaction((txApp) => {
+    let fresh = null
+    try {
+      fresh = txApp.findRecordById('ai_requests', id)
+    } catch (_) {
+      fresh = null
+    }
+    if (!fresh || typeof fresh.getString !== 'function') {
+      finishErr = new NotFoundError('Pedido de esclarecimento não encontrado.')
+      return
+    }
+    if (fresh.getString('user_id') !== userId) {
+      finishErr = new ForbiddenError('Pedido pertence a outro usuário.')
+      return
+    }
+    const fq = fresh.get('question')
+    const freshQ = fq && typeof fq === 'object' && !Array.isArray(fq) ? fq : null
+    const freshDelivery =
+      freshQ && freshQ.answer_delivery && typeof freshQ.answer_delivery === 'object'
+        ? freshQ.answer_delivery
+        : null
+    // Tuple do claim deve ser EXATAMENTE o nosso (pergunta nova não pode ter
+    // avançado; outro submit não pode ter tomado a reserva).
+    const tupleOk =
+      !!freshDelivery &&
+      freshDelivery.state === 'enviando' &&
+      str(freshDelivery.question_id) === questionId &&
+      str(freshDelivery.answer_request_id) === answerRequestId &&
+      str(freshDelivery.remote_task_id) === taskId &&
+      freshDelivery.text === normalizeAnswerText(text)
+    if (!tupleOk) {
+      // Pergunta avançou ou claim não é mais o nosso: NUNCA sobrescrever a
+      // pergunta nova nem fingir envio não ocorrido.
+      finishErr = new ApiError(
+        409,
+        'Envio já finalizado por outra tentativa; resposta não reenviada.',
+      )
+      return
+    }
+    const parsedSend = sendErr ? null : parseSendResponse(resp)
+    const okRemote = !!parsedSend && parsedSend.ok
+    // request_id remoto só se REALMENTE recebido no corpo ok:true.
+    const remoteRequestId =
+      okRemote && resp.json && typeof resp.json === 'object' && str(resp.json.request_id)
+        ? str(resp.json.request_id)
+        : ''
+    if (!okRemote) {
+      // Incerta: confirmação pendente; sem answered; estado de espera
+      // preservado; NUNCA apagar a reserva nem reenviar automaticamente.
+      const incerta = {
+        state: 'incerta',
+        question_id: questionId,
+        answer_request_id: answerRequestId,
+        remote_task_id: taskId,
+        text: normalizeAnswerText(text),
+      }
+      const newQuestion = {
+        type: str(freshQ.type),
+        text: str(freshQ.text),
+        message_id: questionId,
+        task_id: taskId,
+      }
+      if (freshQ.question_expectation && typeof freshQ.question_expectation === 'object') {
+        newQuestion.question_expectation = freshQ.question_expectation
+      }
+      newQuestion.answer_delivery = incerta
+      fresh.set('question', newQuestion)
+      fresh.set('error', sendErr ? sanitizeErr(sendErr, null) : sanitizeErr(null, resp))
+      try {
+        txApp.save(fresh)
+        outReq = serializeRequest(fresh)
+      } catch (saveErr) {
+        // Compensação falhou: a reserva 'enviando' persiste bloqueando retry
+        // (crash-safe). Nada é apagado nem fingido.
+        void saveErr
+        outReq = serializeRequest(fresh)
+      }
+      return
+    }
+    // Confirmação: persistência local confirmada dentro da transação.
+    const confirmed = {
+      state: 'confirmada',
+      question_id: questionId,
+      answer_request_id: answerRequestId,
+      remote_task_id: taskId,
+      text: normalizeAnswerText(text),
+    }
+    const newQuestion = {
+      type: str(freshQ.type),
+      text: str(freshQ.text),
+      message_id: questionId,
+      task_id: taskId,
+      answered: true,
+      answer_request_id: answerRequestId,
+      answer_delivery: confirmed,
+    }
+    if (freshQ.question_expectation && typeof freshQ.question_expectation === 'object') {
+      newQuestion.question_expectation = freshQ.question_expectation
+    }
+    fresh.set('state', 'em_execucao')
+    fresh.set('question', newQuestion)
+    fresh.set('last_polled_at', new Date().toISOString())
+    fresh.set('error', '')
+    if (remoteRequestId) fresh.set('remote_request_id', remoteRequestId)
+    try {
+      txApp.save(fresh)
+      outReq = serializeRequest(fresh)
+    } catch (saveErr) {
+      // Aceitação remota MAS persistência local falhou: claim 'enviando'
+      // persiste (crash-safe). Compensação: tentar marcar 'incerta'.
+      void saveErr
+      let comp = {
+        state: 'incerta',
+        question_id: questionId,
+        answer_request_id: answerRequestId,
+        remote_task_id: taskId,
+        text: normalizeAnswerText(text),
+      }
+      const cQ = {
+        type: str(freshQ.type),
+        text: str(freshQ.text),
+        message_id: questionId,
+        task_id: taskId,
+      }
+      if (freshQ.question_expectation && typeof freshQ.question_expectation === 'object') {
+        cQ.question_expectation = freshQ.question_expectation
+      }
+      cQ.answer_delivery = comp
+      fresh.set('question', cQ)
+      fresh.set('error', 'Resposta possivelmente recebida pelo Manus; confirmação pendente.')
+      try {
+        txApp.save(fresh)
+        outReq = serializeRequest(fresh)
+      } catch (_) {
+        // Compensação também falhou: reserva 'enviando' permanece — bloqueia
+        // retry; nunca fingir envio não ocorrido.
+        outReq = serializeRequest(fresh)
+      }
+    }
   })
-  rec.set('last_polled_at', new Date().toISOString())
-  rec.set('error', '')
-  e.app.save(rec)
-
-  return e.json(200, { duplicate: false, request: serializeRequest(rec) })
+  if (finishErr) throw finishErr
+  if (!outReq) throw new ApiError(500, 'Não foi possível ler o pedido atualizado.')
+  // Reexamina o resultado final da transação para decidir o status HTTP.
+  const finalQ = outReq.question && typeof outReq.question === 'object' ? outReq.question : null
+  const finalDelivery = finalQ && finalQ.answer_delivery ? finalQ.answer_delivery.state : ''
+  if (finalDelivery === 'confirmada') {
+    return e.json(200, { duplicate: false, request: outReq })
+  }
+  if (finalDelivery === 'enviando' && sendErr === null && resp !== null) {
+    // Aceitação remota, mas persistência local falhou (compensação incluída):
+    // confirmação pendente, nunca cancelamento/rejeição certa.
+    throw new ApiError(502, 'Resposta possivelmente recebida pelo Manus; confirmação pendente.')
+  }
+  throw new ApiError(502, 'Manus não confirmou o recebimento da resposta; confirmação pendente.')
 })

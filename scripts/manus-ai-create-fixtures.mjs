@@ -149,7 +149,8 @@ function runClarify({ db, auth, body, apiKey, http, newRecord }) {
     Record: function (col) {
       return newRecord(col)
     },
-    $os: { getenv: (k) => (k === 'MANUS_API_KEY' ? apiKey : '') },
+    // Gate ON apenas no ambiente fictício da VM; nenhuma variável real é alterada.
+    $os: { getenv: (k) => (k === 'MANUS_AI_ENABLED' ? '1' : k === 'MANUS_API_KEY' ? apiKey : '') },
     $http: {
       send: (opts) => {
         calls.push(opts)

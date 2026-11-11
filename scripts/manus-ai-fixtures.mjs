@@ -71,6 +71,7 @@ function setup({ enabled = true, request = {}, capture = {}, httpStub, existing 
   const routes = new Map()
   const calls = []
   const saves = []
+  const createdRecords = new Map() // somente registros salvos pelo callback de criação
 
   const rec = new Rec({
     user_id: 'usuario-ficticio',
@@ -96,9 +97,9 @@ function setup({ enabled = true, request = {}, capture = {}, httpStub, existing 
   })
 
   const app = {
-    findRecordById(col) {
+    findRecordById(col, id) {
       if (col === 'captures') return cap
-      if (col === 'ai_requests') return rec
+      if (col === 'ai_requests') return createdRecords.get(id) || rec
       throw new Error('Coleção inesperada no mock: ' + col)
     },
     findFirstRecordByFilter(col, filter, params) {
@@ -114,17 +115,41 @@ function setup({ enabled = true, request = {}, capture = {}, httpStub, existing 
       }
       throw new Error('Registro não encontrado no mock.')
     },
+    findRecordsByFilter(col, filter, sort, limit, offset, params) {
+      // Modela os dois contratos atuais da consulta, não SQL/JSVM nativo.
+      assert.equal(col, 'ai_requests')
+      assert.equal(sort, '')
+      assert.equal(limit, 1)
+      assert.equal(offset, 0)
+      const byId = 'user_id = {:u} && local_request_id = {:l}'
+      const byOrigin =
+        "user_id = {:u} && origin_id = {:o} && (state = 'registrado' || state = 'criacao_incerta')"
+      assert.ok(filter === byId || filter === byOrigin, 'filtro não modelado pelo harness')
+      const records = [...createdRecords.values()]
+      if (existing && !records.includes(rec)) records.push(rec)
+      return records
+        .filter((r) => {
+          if (r.getString('user_id') !== params.u) return false
+          if (filter === byId) return r.getString('local_request_id') === params.l
+          return (
+            r.getString('origin_id') === params.o &&
+            ['registrado', 'criacao_incerta'].includes(r.getString('state'))
+          )
+        })
+        .slice(0, limit)
+    },
     findCollectionByNameOrId() {
       return {}
     },
     runInTransaction(cb) {
       // Contrato JSVM: callback void — retorno de objeto reverteria a transação.
-      // M1A2a: commit SOMENTE se o callback TERMINAR normalmente; erro = rollback
-      // real (registro volta ao valor de abertura), nunca mutação compartilhada.
+      // Harness legado de referência: semântica de retorno void; não modela
+      // rollback geral. A suíte dedicada de criação possui snapshots/rollback.
       assert.equal(cb(app), undefined, 'callback de transação deve ser void')
     },
     save(r) {
       saves.push({ ...r.f })
+      if (r !== rec) createdRecords.set(r.id, r)
     },
   }
 

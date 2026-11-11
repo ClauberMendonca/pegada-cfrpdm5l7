@@ -18,7 +18,7 @@ export type AiRequestState =
 
 /** Estado de entrega da resposta à pergunta, dentro de question (M1A2a). */
 export interface AiAnswerDelivery {
-  status?: string // 'enviando' | 'incerta' | 'confirmada'
+  state?: string // 'enviando' | 'incerta' | 'confirmada' (campo real do backend)
   question_id?: string
   answer_request_id?: string
   [key: string]: unknown

@@ -22,7 +22,7 @@ export interface AiStateInfo {
 export function stateInfo(request: AiRequestRecord): AiStateInfo {
   const q = isObj(request.question) ? (request.question as AiQuestion) : null
   const delivery = q && isObj(q.answer_delivery) ? q.answer_delivery : null
-  const dStatus = delivery && typeof delivery.status === 'string' ? delivery.status : ''
+  const dStatus = delivery && typeof delivery.state === 'string' ? delivery.state : ''
   let deliveryNote: string | null = null
   if (dStatus === 'enviando' || dStatus === 'incerta') {
     deliveryNote =

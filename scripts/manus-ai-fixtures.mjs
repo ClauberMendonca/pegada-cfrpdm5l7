@@ -1,3 +1,5 @@
+// Variante local: a pergunta normal possui associação por ID explicitamente demonstrada.
+// VARIANTE LOCAL: somente expectativas de teste corrigidas. Hook original intacto.
 // Fixtures M1A1 — execução ISOLADA dos callbacks REAIS do hook
 // pocketbase/hooks/manus-ai.pb.js em Node VM (sem JSVM, rede ou banco real).
 // Nada aqui chama api.manus.ai: $http é stub; gate OFF é o cenário padrão.
@@ -306,8 +308,8 @@ check(
       local_request_id: 'l1',
     })
     assert.equal(r.error.status, 502)
-    assert.equal(s.rec.getString('state'), 'criacao_incerta')
-    assert.equal(s.rec.getString('remote_task_id'), '')
+    assert.equal(s.saves.at(-1).state, 'criacao_incerta')
+    assert.ok(!s.saves.at(-1).remote_task_id)
   },
 )
 check('clarify: HTTP 5xx com corpo ok:true NÃO é sucesso', () => {
@@ -320,9 +322,9 @@ check('clarify: HTTP 5xx com corpo ok:true NÃO é sucesso', () => {
     local_request_id: 'l1',
   })
   assert.equal(r.error.status, 502)
-  assert.equal(s.rec.getString('state'), 'criacao_incerta')
+  assert.equal(s.saves.at(-1).state, 'criacao_incerta')
 })
-check('clarify: contexto ausente/divergente é recusado antes de persistir', () => {
+check('clarify: contexto ausente/inválido é recusado antes de persistir', () => {
   const s = setup()
   assert.equal(
     s.invoke(PATHS.create, { capture_id: 'captura-ficticia', local_request_id: 'l1' }).error.status,
@@ -331,13 +333,23 @@ check('clarify: contexto ausente/divergente é recusado antes de persistir', () 
   assert.equal(
     s.invoke(PATHS.create, {
       capture_id: 'captura-ficticia',
-      context: 'trabalho',
+      context: 'pessoal',
       local_request_id: 'l2',
     }).error.status,
     400,
   )
   assert.equal(s.saves.length, 0)
   assert.equal(s.calls.length, 0)
+  for (const context of ['vida', 'trabalho']) {
+    const valid = setup()
+    const response = valid.invoke(PATHS.create, {
+      capture_id: 'captura-ficticia',
+      context,
+      local_request_id: 'valido-' + context,
+    })
+    assert.equal(response.response.status, 200)
+    assert.equal(JSON.parse(valid.calls[0].body).message.content.includes(context), true)
+  }
 })
 
 // -------------------------------------------------------------- GET: espera --
@@ -351,7 +363,10 @@ check(
         // order=desc: eventos mais recentes primeiro — espera (ts 200) vem antes
         // da assistant_message que a originou (ts 100).
         if (config.url.includes('task.listMessages'))
-          return listPage([waitEvent('messageAskUser', 200), askMsg('Qual o prazo?', 100)])
+          return listPage([
+            waitEvent('messageAskUser', 200),
+            { ...askMsg('Qual o prazo?', 100), id: 'ev-espera' },
+          ])
         throw new Error('URL inesperada: ' + config.url)
       },
     })

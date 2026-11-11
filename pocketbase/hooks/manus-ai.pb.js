@@ -46,12 +46,12 @@
 //   que aponte para essa mensagem exposta, ou assistant_message com
 //   question_expectation na execução corrente). Sem correspondência segura, a
 //   leitura fica inconclusiva — nunca texto de mensagem de progresso.
-// - Identidade de leitura (M1A1b): a escrita compara o snapshot lido (read_key)
+// - Identidade de leitura (M1A1b): a escrita compara o snapshot da reserva
 //   com o registro novo na transação. Leitura velha/fora de ordem NÃO substitui
 //   estado mais novo (vale para 'pronta' E para 'falha'); evento/execução
-//   comprovadamente nova (waited_after_done, ou user_message mais novo que o
+//   identificada pelos eventos atuais (ou user_message mais novo que o
 //   resultado gravado) invalida o resultado antigo e grava o estado novo. Sem
-//   campo de schema novo: identidade em question._read_key / result._read_key.
+//   campo de schema novo: snapshot local da reserva, fora do JSON do modelo.
 // - NÃO codificar stop/cancel nem task.confirmAction nesta fatia. Timeout de
 //   consulta ≠ cancelamento remoto: nada vira "cancelada" sem confirmação.
 // - Envio de resposta (answer) ainda SEM claim durável antes do POST — reenvio
@@ -511,7 +511,29 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
           // (continuation é evidência de execução nova: o caller invalida
           // resultados/estados anteriores a ela)
         } else if (mode === 'question') {
+          // Não buscar pergunta pertencente a execução anterior à mensagem do dono.
+          if (t === 'user_message') {
+            if (!waiting) return { found: { continuation: true } }
+            return {
+              found: { question: { type: waiting.type, id: waiting.id, text: '', expect: null } },
+            }
+          }
+          if (waiting && t === 'structured_output_result') {
+            return {
+              found: { question: { type: waiting.type, id: waiting.id, text: '', expect: null } },
+            }
+          }
           const su = m.status_update
+          if (waiting && t === 'status_update' && su && str(su.agent_status) === 'waiting') {
+            const older =
+              su.status_detail && typeof su.status_detail === 'object' ? su.status_detail : {}
+            const olderId = str(older.waiting_for_event_id)
+            if (olderId && olderId !== waiting.id) {
+              return {
+                found: { question: { type: waiting.type, id: waiting.id, text: '', expect: null } },
+              }
+            }
+          }
           if (
             !waiting &&
             t === 'status_update' &&
@@ -556,13 +578,9 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
               }
             }
             // assistant_message SEM correspondência provada com a espera:
-            // mensagem de progresso intercalada — a leitura fica INCONCLUSIVA
-            // (recuperável), sem improvisar texto de outra mensagem (M1A1b).
-            return {
-              found: {
-                question: { type: waiting.type, id: waiting.id, text: '', expect: null },
-              },
-            }
+            // mensagem de progresso intercalada — a candidata não corresponde;
+            // continuar nesta página e nas próximas (M1A1b).
+            continue
           }
         }
       }
@@ -727,30 +745,64 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
   }
 
   // ---------- RESERVA de polling (M1A1b/Ponto 1) ----------
-  // Reserva atomicamente sobre registro FRESCO (relido dentro da transação) e
-  // preserva a identidade/revisão do snapshot reservado: pollTicket guarda o
-  // 'updated' e o 'last_polled_at' DO REGISTRO RELIDO — a escrita posterior só
-  // é aceita se essa revisão continuar atual (escrita condicionada). Sem
-  // campos de schema novos: reusa updated/last_polled_at existentes.
-  const pollTicket = { updated: '', lastPolledAt: '' }
-  e.app.runInTransaction((txApp) => {
-    let fresh = null
-    try {
-      fresh = txApp.findRecordById('ai_requests', rec.id)
-    } catch (_) {
-      fresh = null
+  // Reserva local atômica; nenhum HTTP dentro da transação.
+  // Snapshot canônico dos campos relevantes, inclusive revisão automática.
+  function canonicalValue(v) {
+    if (Array.isArray(v)) return v.map(canonicalValue)
+    if (v && typeof v === 'object') {
+      const out = {}
+      Object.keys(v)
+        .sort()
+        .forEach((key) => {
+          out[key] = canonicalValue(v[key])
+        })
+      return out
     }
-    if (!fresh || typeof fresh.getString !== 'function') fresh = rec
-    pollTicket.updated = fresh.getString('updated')
-    pollTicket.lastPolledAt = fresh.getString('last_polled_at')
-    const pollNow = new Date().toISOString()
-    fresh.set('last_polled_at', pollNow)
-    txApp.save(fresh)
-    pollTicket.lastPolledAt = pollNow
-    // O rec de trabalho passa a ser o snapshot RESERVADO (fresco), com a nova
-    // last_polled_at — nunca a leitura velha pré-transação.
+    return v
+  }
+  function snapshotKey(r) {
+    return JSON.stringify(
+      canonicalValue([
+        r.getString('updated'),
+        r.getString('last_polled_at'),
+        r.getString('user_id'),
+        r.getString('remote_task_id'),
+        r.getString('state'),
+        r.getString('error'),
+        r.getString('context'),
+        r.getString('origin_revision'),
+        r.get('question'),
+        r.get('result'),
+      ]),
+    )
+  }
+  const pollTicket = { snapshot: '', lastPolledAt: '' }
+  let reserved = false
+  e.app.runInTransaction((txApp) => {
+    const fresh = txApp.findRecordById('ai_requests', rec.id)
+    if (fresh.getString('user_id') !== userId) {
+      throw new ForbiddenError('Pedido pertence a outro usuário.')
+    }
     rec = fresh
+    // Revalidar a janela DENTRO da transação: uma leitura prévia não reserva.
+    const freshPollMs = Date.parse(fresh.getString('last_polled_at')) || 0
+    if (freshPollMs && Date.now() - freshPollMs < COALESCE_MS) return
+    if (fresh.getString('remote_task_id') !== taskId) return
+    fresh.set('last_polled_at', new Date().toISOString())
+    txApp.save(fresh)
+    // updated pertence à versão APÓS salvar, não à anterior à reserva.
+    rec = txApp.findRecordById('ai_requests', fresh.id)
+    pollTicket.lastPolledAt = rec.getString('last_polled_at')
+    pollTicket.snapshot = snapshotKey(rec)
+    reserved = true
   })
+  if (!reserved) return e.json(200, { request: serializeRequest(rec), synced: false })
+  function stillOurs(fresh) {
+    return (
+      fresh.getString('last_polled_at') === pollTicket.lastPolledAt &&
+      snapshotKey(fresh) === pollTicket.snapshot
+    )
+  }
 
   // ---------- task.detail (metadados/status/background) — HTTP FORA da transação ----------
   let detail = null
@@ -783,12 +835,9 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
         fresh = null
       }
       if (!fresh || typeof fresh.getString !== 'function') {
-        return
+        throw new NotFoundError('Pedido de esclarecimento não encontrado.')
       }
-      const stillOurs =
-        fresh.getString('updated') === pollTicket.updated &&
-        fresh.getString('last_polled_at') === pollTicket.lastPolledAt
-      if (!stillOurs) {
+      if (!stillOurs(fresh)) {
         stale = true
         return
       }
@@ -810,14 +859,13 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     })
     if (stale || !outReq) {
       // Devolve o registro ATUAL (relido), não o rec velho.
-      let current = rec
-      try {
-        current = e.app.findRecordById('ai_requests', rec.id)
-      } catch (_) {}
+      const current = e.app.findRecordById('ai_requests', rec.id)
       return e.json(200, { request: serializeRequest(current), synced: false })
     }
     return e.json(200, { request: outReq, synced: false })
   }
+  const task = detail.json.task && typeof detail.json.task === 'object' ? detail.json.task : {}
+  const status = str(task.status)
   // has_running_background_jobs: true = pode acordar de novo; false =
   // encerrado de verdade; OMISSÃO = desconhecido → política conservadora:
   // NUNCA 'pronta' (só === false autoriza prontidão).
@@ -942,14 +990,16 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     // Leitura velha/fora de ordem sobre estado terminal: o estado gravado é
     // mais novo — nada é substituído (vale para pronta, falha E decisao;
     // M1A1b: o guard antigo protegia só 'pronta' e congelava o estado).
-    e.app.save(rec) // persiste last_polled_at sem tocar estado/pergunta/resultado
-    return e.json(200, { request: serializeRequest(rec), synced: true })
+    // A reserva já foi gravada. Nunca salvar o snapshot antigo nesta saída.
+    const current = e.app.findRecordById('ai_requests', rec.id)
+    return e.json(200, { request: serializeRequest(current), synced: false })
   }
   // recTerminal && isNewEvent: continuação legítima (pergunta/resultado/erro
   // comprovadamente novos) — invalida o estado/resultado antigo e grava abaixo.
   // !recTerminal: escrita normal como antes.
   // ---------- escrita guardada (transação void; resposta só após commit) ----------
   let outReq = null
+  let wrote = false
   e.app.runInTransaction((txApp) => {
     let fresh = null
     try {
@@ -957,7 +1007,13 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
     } catch (_) {
       fresh = null
     }
-    if (!fresh || typeof fresh.getString !== 'function') fresh = rec
+    if (!fresh || typeof fresh.getString !== 'function') {
+      throw new NotFoundError('Pedido de esclarecimento não encontrado.')
+    }
+    if (!stillOurs(fresh)) {
+      outReq = serializeRequest(fresh)
+      return
+    }
     fresh.set('state', computed.state)
     let newQuestion = computed.question !== undefined ? computed.question : null
     if (newQuestion === null) {
@@ -977,10 +1033,11 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
       fresh.set('error', computed.error !== undefined ? computed.error : '')
     }
     txApp.save(fresh)
+    wrote = true
     outReq = serializeRequest(fresh)
   })
-  if (!outReq) outReq = serializeRequest(rec)
-  return e.json(200, { request: outReq, synced: true })
+  if (!outReq) throw new ApiError(500, 'Não foi possível ler o pedido atualizado.')
+  return e.json(200, { request: outReq, synced: wrote })
 })
 
 routerAdd('POST', '/backend/v1/ai/requests/{id}/answer', (e) => {

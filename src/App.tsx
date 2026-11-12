@@ -17,10 +17,10 @@ const ProtectedRoutes = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs uppercase tracking-widest font-mono">Iniciando sistema...</span>
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm font-medium">Iniciando sistema...</span>
         </div>
       </div>
     )

@@ -192,12 +192,15 @@ export const CopilotRequestControls: React.FC<CopilotRequestControlsProps> = ({
   const normalizedPreview = normalizeAnswerText(answer)
 
   return (
-    <div className="space-y-3 text-sm text-slate-700" aria-busy={busy}>
+    <div className="space-y-3 text-sm text-foreground" aria-busy={busy}>
+      <p className="text-sm text-muted-foreground">
+        Abrir não envia nada. Atualizar andamento consulta o Manus e pode consumir créditos.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           variant="outline"
-          className="border-violet-200 text-violet-700 hover:bg-violet-50"
+          className="min-h-11 rounded-xl"
           disabled={disabled || busy}
           onClick={() => void update()}
         >
@@ -207,7 +210,7 @@ export const CopilotRequestControls: React.FC<CopilotRequestControlsProps> = ({
           <Button
             type="button"
             variant="outline"
-            className="border-violet-200 text-violet-700 hover:bg-violet-50"
+            className="min-h-11 rounded-xl"
             disabled={disabled || busy}
             onClick={() => void handleUseProposal()}
           >
@@ -218,13 +221,13 @@ export const CopilotRequestControls: React.FC<CopilotRequestControlsProps> = ({
 
       {showAnswer && question ? (
         <section
-          className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3"
+          className="space-y-2 rounded-2xl border border-border bg-card p-4"
           aria-label="Responder pergunta do Manus"
         >
           <p>
             <strong>Revise a pergunta antes de responder</strong>
           </p>
-          <blockquote className="border-l-2 border-violet-300 pl-3 text-slate-600">
+          <blockquote className="border-l-2 border-primary/40 pl-3 text-muted-foreground">
             {question.text}
           </blockquote>
           <label className="block space-y-1">
@@ -244,7 +247,7 @@ export const CopilotRequestControls: React.FC<CopilotRequestControlsProps> = ({
           </p>
           <Button
             type="button"
-            className="bg-violet-600 text-white hover:bg-violet-700"
+            className="min-h-11 rounded-xl"
             disabled={disabled || busy || !normalizedPreview}
             onClick={() => void confirmAnswer()}
           >
@@ -255,7 +258,7 @@ export const CopilotRequestControls: React.FC<CopilotRequestControlsProps> = ({
 
       {notice ? (
         <p
-          className="rounded-md bg-slate-50 px-3 py-2 text-slate-600"
+          className="rounded-xl bg-muted px-3 py-2 text-muted-foreground"
           role="status"
           aria-live="polite"
         >

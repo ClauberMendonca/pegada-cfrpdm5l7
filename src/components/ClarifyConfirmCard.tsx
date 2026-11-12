@@ -50,34 +50,34 @@ export const ClarifyConfirmCard: React.FC<ClarifyConfirmCardProps> = ({
     outcome && 'request' in outcome && outcome.request ? stateInfo(outcome.request).label : null
 
   const tone = !outcome
-    ? 'border-violet-500/30 bg-violet-500/5'
+    ? 'border-primary/25 bg-accent/60'
     : outcome.kind === 'confirmed' || outcome.kind === 'existing'
-      ? 'border-emerald-500/30 bg-emerald-500/5'
+      ? 'border-primary/25 bg-accent/60'
       : outcome.kind === 'blocked'
-        ? 'border-rose-500/30 bg-rose-500/5'
-        : 'border-amber-500/30 bg-amber-500/5'
+        ? 'border-destructive/30 bg-[#FFF0F2]'
+        : 'border-[#8A4B0F]/30 bg-[#FFF3E4]'
 
   return (
-    <div className={`rounded-lg border p-3 space-y-3 ${tone}`} data-testid="clarify-confirm-card">
-      <p className="text-sm font-semibold text-slate-100">Revisar pedido de esclarecimento</p>
+    <div className={`space-y-3 rounded-2xl border p-4 ${tone}`} data-testid="clarify-confirm-card">
+      <p className="text-base font-semibold text-foreground">Revisar pedido de esclarecimento</p>
 
       {/* Prévia EXATA da intenção — somente leitura */}
       <div className="space-y-1.5">
-        <Label className="text-xs uppercase tracking-wider text-slate-400">
+        <Label className="text-sm font-medium text-muted-foreground">
           Texto que será enviado (somente leitura)
         </Label>
-        <p className="text-sm text-slate-200 whitespace-pre-wrap break-words rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+        <p className="whitespace-pre-wrap break-words rounded-xl border border-border bg-card px-3 py-2 text-base text-foreground sm:text-sm">
           {intent.rawText}
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label className="text-xs uppercase tracking-wider text-slate-400">
+        <Label className="text-sm font-medium text-muted-foreground">
           Contexto enviado (somente leitura)
         </Label>
-        <p className="text-sm text-slate-200">
+        <p className="text-base text-foreground sm:text-sm">
           {contextLabel(intent.context)}
           {context !== intent.context && (
-            <span className="text-amber-300">
+            <span className="font-medium text-[#8A4B0F]">
               {' '}
               (contexto atual divergente — preparação inválida)
             </span>
@@ -86,32 +86,32 @@ export const ClarifyConfirmCard: React.FC<ClarifyConfirmCardProps> = ({
       </div>
 
       {/* Textos fixos desta fatia */}
-      <p className="text-xs text-slate-300">
+      <p className="text-sm text-muted-foreground">
         O Manus ajudará a esclarecer esta captura e propor um próximo avanço. Isso não cria ação ou
         projeto no gerenciador.
       </p>
-      <p className="text-xs text-slate-300">
+      <p className="text-sm text-muted-foreground">
         O envio transmitirá apenas esta captura e este contexto, com instruções metodológicas do
         projeto — não o banco inteiro nem o histórico.
       </p>
-      <p className="text-xs text-slate-400">
+      <p className="text-sm text-muted-foreground">
         O perfil usado é o standard definido no servidor; após a ativação da integração, o uso pode
         consumir créditos da conta. Nenhuma chave é pedida ou exibida aqui.
       </p>
 
       {prepError && (
-        <p className="text-xs text-rose-200 inline-flex items-start gap-1">
-          <TriangleAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+        <p className="inline-flex items-start gap-1 text-sm text-destructive">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           {prepError}
         </p>
       )}
 
       {/* Resultado REAL do serviço — exibido em texto, nada simulado */}
       {outcome && (
-        <div className="space-y-1.5 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2">
-          <p className="text-sm text-slate-200 break-words">{outcome.message}</p>
+        <div className="space-y-1.5 rounded-xl border border-border bg-card px-3 py-2">
+          <p className="break-words text-base text-foreground sm:text-sm">{outcome.message}</p>
           {stateLabel && (
-            <Badge variant="outline" className="text-slate-300 border-slate-700">
+            <Badge variant="outline" className="border-border text-foreground">
               Estado local do pedido: {stateLabel}
             </Badge>
           )}
@@ -120,38 +120,36 @@ export const ClarifyConfirmCard: React.FC<ClarifyConfirmCardProps> = ({
               href={taskUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
-              <ExternalLink className="w-3 h-3" />
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               Abrir no Manus
             </a>
           )}
           {outcome.kind === 'uncertain' && (
-            <p className="text-xs text-amber-200">
+            <p className="text-sm text-[#8A4B0F]">
               Conferir os registros locais antes de qualquer nova tentativa.
             </p>
           )}
         </div>
       )}
 
-      <div className="flex justify-end gap-2 pt-1">
+      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
         <Button
           type="button"
-          variant="ghost"
-          size="sm"
+          variant="outline"
           onClick={onBack}
           disabled={submitting}
-          className="text-slate-400"
+          className="min-h-11 rounded-xl"
         >
           Voltar
         </Button>
         {!outcome && (
           <Button
             type="button"
-            size="sm"
             onClick={onConfirm}
             disabled={submitting || sendBlocked || !!prepError}
-            className="bg-violet-600 hover:bg-violet-500 text-white"
+            className="min-h-11 rounded-xl"
           >
             {submitting ? 'Enviando…' : 'Confirmar envio'}
           </Button>

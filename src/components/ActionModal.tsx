@@ -130,39 +130,36 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
+      <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold text-white">
-            {actionToEdit ? 'Editar Ação' : 'Nova Ação'}
+          <DialogTitle className="text-xl font-semibold text-foreground">
+            {actionToEdit ? 'Editar ação' : 'Nova ação'}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label
-              htmlFor="actionTitle"
-              className="text-xs uppercase tracking-wider text-slate-400"
-            >
-              Título da Ação
+            <Label htmlFor="actionTitle" className="text-sm font-medium text-foreground">
+              Título da ação
             </Label>
             <Input
               id="actionTitle"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Ligar para fornecedor X e alinhar especificação"
-              className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-emerald-500"
+              className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">Contexto</Label>
+              <Label className="text-sm font-medium text-foreground">Contexto</Label>
               <Select value={context} onValueChange={(val) => setContext(val as EntityContext)}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectContent className="border-border bg-popover text-popover-foreground">
                   <SelectItem value="trabalho">Trabalho</SelectItem>
                   <SelectItem value="vida">Vida</SelectItem>
                 </SelectContent>
@@ -170,12 +167,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">Status</Label>
+              <Label className="text-sm font-medium text-foreground">Status</Label>
               <Select value={status} onValueChange={(val) => setStatus(val as ActionStatus)}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectContent className="border-border bg-popover text-popover-foreground">
                   <SelectItem value="pronta">Pronta</SelectItem>
                   <SelectItem value="em_andamento">Em andamento</SelectItem>
                   <SelectItem value="aguardando">Aguardando</SelectItem>
@@ -189,28 +186,26 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           {(status === 'aguardando' || status === 'bloqueada') && (
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
-                Motivo / Bloqueio
-              </Label>
+              <Label className="text-sm font-medium text-foreground">Motivo / bloqueio</Label>
               <Input
                 value={waitingFor}
                 onChange={(e) => setWaitingFor(e.target.value)}
                 placeholder="Pelo que está aguardando?"
-                className="bg-slate-950 border-slate-800 text-white text-xs"
+                className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
               />
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
-                Projeto Vinculado (Opcional)
+              <Label className="text-sm font-medium text-foreground">
+                Projeto vinculado (opcional)
               </Label>
               <Select value={projectId} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white text-xs truncate">
+                <SelectTrigger className="truncate border-input bg-card text-base text-foreground sm:text-sm">
                   <SelectValue placeholder="Ação solta (sem projeto)" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200 max-h-56">
+                <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
                   <SelectItem value="none">Ação solta (sem projeto)</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
@@ -222,23 +217,25 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
-                Prazo Factual (Opcional)
+              <Label className="text-sm font-medium text-foreground">
+                Prazo factual (opcional)
               </Label>
               <Input
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
-                className="bg-slate-950 border-slate-800 text-white text-xs"
+                className="border-input bg-card text-base text-foreground tabular-nums sm:text-sm"
               />
             </div>
           </div>
 
-          <div className="space-y-3 pt-2 border-t border-slate-800/80">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="text-sm font-medium text-white block">Selecionar para Hoje</Label>
-                <span className="text-xs text-slate-400">
+                <Label className="block text-base font-medium text-foreground">
+                  Selecionar para Hoje
+                </Label>
+                <span className="text-sm text-muted-foreground">
                   Coloca esta ação entre as poucas de Hoje
                 </span>
               </div>
@@ -249,13 +246,13 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               />
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="text-sm font-medium text-amber-300 block">
-                  Próximo Avanço Único
+                <Label className="block text-base font-medium text-foreground">
+                  Próximo avanço único
                 </Label>
-                <span className="text-xs text-slate-400">
-                  Destaque central absoluto de Hoje (escolha explícita por você)
+                <span className="text-sm text-muted-foreground">
+                  Destaque central de Hoje (escolha explícita por você)
                 </span>
               </div>
               <Switch
@@ -268,21 +265,21 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               onClick={onClose}
-              className="text-slate-400 hover:text-white"
+              className="min-h-11 rounded-xl"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={isSaving || !title.trim()}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white"
+              className="min-h-11 rounded-xl"
             >
-              {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar Ação'}
+              {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar ação'}
             </Button>
           </DialogFooter>
         </form>

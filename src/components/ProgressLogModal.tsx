@@ -74,68 +74,69 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
+      <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold text-white">
-            Registrar Progresso
+          <DialogTitle className="text-xl font-semibold text-foreground">
+            Registrar progresso
           </DialogTitle>
-          <DialogDescription className="text-slate-400 text-xs">
-            A Inteligência Pragmática separa estritamente o esforço controlável que você executou do
-            resultado final ou factual que aconteceu.
+          <DialogDescription className="text-sm text-muted-foreground">
+            Separe o esforço que você executou do resultado factual que aconteceu.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           {action && (
-            <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-300">
-              <span className="text-slate-500 block mb-0.5 font-medium">Vinculado à Ação:</span>
-              <span className="font-semibold text-white">{action.title}</span>
+            <div className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground">
+              <span className="mb-0.5 block font-medium text-muted-foreground">
+                Vinculado à ação:
+              </span>
+              <span className="font-semibold text-foreground">{action.title}</span>
             </div>
           )}
 
           <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-wider text-slate-400">
-              Tipo de Registro
-            </Label>
+            <Label className="text-sm font-medium text-foreground">Tipo de registro</Label>
             <RadioGroup
               value={logType}
               onValueChange={(val) => setLogType(val as ProgressLogType)}
-              className="grid grid-cols-2 gap-3"
+              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
             >
               <label
-                className={`flex flex-col gap-1 p-3 rounded-lg border cursor-pointer transition-all ${
+                className={`flex cursor-pointer flex-col gap-1 rounded-xl border p-3 transition-colors duration-150 ${
                   logType === 'executei'
-                    ? 'bg-emerald-950/40 border-emerald-500/80 text-emerald-300 ring-1 ring-emerald-500/30'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                    ? 'border-primary bg-accent text-accent-foreground ring-1 ring-primary'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-emerald-400" />
-                    <span className="font-semibold text-xs text-white">Executei</span>
+                    <Flame className="h-4 w-4 text-primary" aria-hidden="true" />
+                    <span className="text-base font-semibold text-foreground">Executei</span>
                   </div>
                   <RadioGroupItem value="executei" className="sr-only" />
                 </div>
-                <span className="text-[11px] text-slate-400 leading-snug">
+                <span className="text-sm leading-snug text-muted-foreground">
                   Ato sob seu controle: fiz uma ligação, escrevi um rascunho, apliquei 25 min.
                 </span>
               </label>
 
               <label
-                className={`flex flex-col gap-1 p-3 rounded-lg border cursor-pointer transition-all ${
+                className={`flex cursor-pointer flex-col gap-1 rounded-xl border p-3 transition-colors duration-150 ${
                   logType === 'resultado_aconteceu'
-                    ? 'bg-sky-950/40 border-sky-500/80 text-sky-300 ring-1 ring-sky-500/30'
-                    : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                    ? 'border-ginga-info bg-ginga-info-bg text-ginga-info ring-1 ring-ginga-info'
+                    : 'border-border bg-card text-muted-foreground hover:bg-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Trophy className="w-4 h-4 text-sky-400" />
-                    <span className="font-semibold text-xs text-white">Resultado Aconteceu</span>
+                    <Trophy className="h-4 w-4 text-ginga-info" aria-hidden="true" />
+                    <span className="text-base font-semibold text-foreground">
+                      Resultado aconteceu
+                    </span>
                   </div>
                   <RadioGroupItem value="resultado_aconteceu" className="sr-only" />
                 </div>
-                <span className="text-[11px] text-slate-400 leading-snug">
+                <span className="text-sm leading-snug text-muted-foreground">
                   Efeito factual do ambiente: contrato assinado, resposta recebida, métrica
                   atingida.
                 </span>
@@ -144,7 +145,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="logText" className="text-xs uppercase tracking-wider text-slate-400">
+            <Label htmlFor="logText" className="text-sm font-medium text-foreground">
               O que aconteceu? (fato observável)
             </Label>
             <Textarea
@@ -157,27 +158,27 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
                   ? 'Ex: Concluí a redação preliminar da proposta e enviei para revisão...'
                   : 'Ex: O cliente aprovou o escopo sem alterações adicionais...'
               }
-              className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-emerald-500 text-sm"
+              className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               onClick={onClose}
-              className="text-slate-400 hover:text-white"
+              className="min-h-11 rounded-xl"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={isSaving || !text.trim()}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+              className="min-h-11 gap-1.5 rounded-xl"
             >
-              <Check className="w-4 h-4" />
-              {isSaving ? 'Salvando...' : 'Salvar Registro'}
+              <Check className="h-4 w-4" aria-hidden="true" />
+              {isSaving ? 'Salvando...' : 'Salvar registro'}
             </Button>
           </DialogFooter>
         </form>

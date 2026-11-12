@@ -15,6 +15,19 @@ import {
   Clock,
 } from 'lucide-react'
 import { LifeWorkContext } from '@/types/execution'
+import { cn } from '@/lib/utils'
+
+/** Símbolo temporário: monograma G + nome, até haver asset oficial no projeto. */
+function GingaMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-primary ring-1 ring-primary/20"
+    >
+      G
+    </span>
+  )
+}
 
 export default function Layout() {
   const { user, logout } = useAuth()
@@ -33,122 +46,152 @@ export default function Layout() {
     { id: 'trabalho', label: 'Trabalho', icon: Briefcase },
   ]
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
-                EP
-              </div>
-              <div className="leading-none">
-                <span className="font-semibold text-sm tracking-tight text-white block">
-                  Execução Pragmática
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">Uso Exclusivo</span>
-              </div>
-            </div>
-
-            {/* Global Context Switcher (Vida / Trabalho) */}
-            <div className="hidden sm:flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs">
-              {contextOptions.map((opt) => {
-                const Icon = opt.icon
-                const isActive = contextFilter === opt.id
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => setContextFilter(opt.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all font-medium ${
-                      isActive
-                        ? 'bg-slate-800 text-white shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : ''}`} />
-                    <span>{opt.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Timezone badge */}
-            {user?.timezone && (
-              <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-400 bg-slate-900/60 border border-slate-800/80 px-2.5 py-1 rounded-md">
-                <Clock className="w-3 h-3 text-emerald-400" />
-                <span className="truncate max-w-[140px]">{user.timezone.replace('_', ' ')}</span>
-              </div>
+  const contextSwitcher = (
+    <div
+      role="group"
+      aria-label="Contexto global"
+      className="flex items-center gap-1 rounded-xl border border-border bg-card p-1 text-sm"
+    >
+      {contextOptions.map((opt) => {
+        const Icon = opt.icon
+        const isActive = contextFilter === opt.id
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => setContextFilter(opt.id)}
+            className={cn(
+              'flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-lg px-3 font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              isActive
+                ? 'bg-accent text-accent-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
+          >
+            <Icon className="h-4 w-4" aria-hidden="true" />
+            <span>{opt.label}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 
+  return (
+    <div className="flex min-h-screen flex-col bg-background text-foreground selection:bg-accent selection:text-accent-foreground lg:flex-row">
+      {/* Desktop sidebar (>= 1024 px) */}
+      <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-56 lg:flex-col lg:border-r lg:border-border lg:bg-card lg:px-4 lg:py-6">
+        <div className="flex items-center gap-3 px-2">
+          <GingaMark />
+          <span className="text-xl font-semibold tracking-tight text-foreground">Ginga</span>
+        </div>
+
+        <nav aria-label="Principal" className="mt-8 flex flex-col gap-1">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  cn(
+                    'flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isActive
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )
+                }
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span>{item.label}</span>
+              </NavLink>
+            )
+          })}
+        </nav>
+
+        <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
+          {user?.timezone && (
+            <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
+              <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">{user.timezone.replace('_', ' ')}</span>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            onClick={logout}
+            className="justify-start gap-2 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            <span>Sair da sessão</span>
+          </Button>
+        </div>
+      </aside>
+
+      {/* Mobile / tablet header (< 1024 px) */}
+      <header className="sticky top-0 z-40 w-full border-b border-border bg-card lg:hidden">
+        <div className="flex h-14 items-center justify-between gap-3 px-4">
+          <div className="flex items-center gap-2">
+            <GingaMark />
+            <span className="text-lg font-semibold tracking-tight text-foreground">Ginga</span>
+          </div>
+          <div className="flex items-center gap-1">
+            {user?.timezone && (
+              <span className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:flex">
+                <Clock className="h-4 w-4" aria-hidden="true" />
+                <span className="max-w-[140px] truncate">{user.timezone.replace('_', ' ')}</span>
+              </span>
+            )}
             <Button
               variant="ghost"
-              size="sm"
               onClick={logout}
-              title="Sair da sessão"
-              className="text-slate-400 hover:text-rose-400 hover:bg-rose-950/20 text-xs gap-1.5"
+              aria-label="Sair da sessão"
+              className="min-h-11 min-w-11 px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="h-4 w-4" aria-hidden="true" />
               <span className="hidden sm:inline">Sair</span>
             </Button>
           </div>
         </div>
-
-        {/* Mobile filter bar */}
-        <div className="sm:hidden px-4 py-2 border-t border-slate-900 bg-slate-925 flex justify-center">
-          <div className="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs w-full max-w-xs">
-            {contextOptions.map((opt) => {
-              const Icon = opt.icon
-              const isActive = contextFilter === opt.id
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => setContextFilter(opt.id)}
-                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded-md transition-all font-medium ${
-                    isActive ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Icon className={`w-3 h-3 ${isActive ? 'text-emerald-400' : ''}`} />
-                  <span>{opt.label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Navigation Tabs */}
-        <nav className="border-t border-slate-850 bg-slate-950">
-          <div className="max-w-6xl mx-auto px-4 flex gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                      isActive
-                        ? 'border-emerald-500 text-white bg-slate-900/40'
-                        : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-800'
-                    }`
-                  }
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
-                </NavLink>
-              )
-            })}
-          </div>
-        </nav>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6">
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col lg:ml-56">
+        {/* Contexto global sempre acessível, no topo do conteúdo */}
+        <div className="border-b border-border bg-background px-4 py-3 lg:px-8">
+          <div className="mx-auto w-full max-w-[1080px]">{contextSwitcher}</div>
+        </div>
+
+        <main className="mx-auto w-full max-w-[1080px] flex-1 px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] lg:px-8 lg:py-8 lg:pb-8">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* Mobile bottom navigation (< 1024 px) */}
+      <nav
+        aria-label="Principal"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+      >
+        <div className="mx-auto grid max-w-md grid-cols-4">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  cn(
+                    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isActive ? 'text-primary' : 'text-muted-foreground',
+                  )
+                }
+              >
+                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span>{item.label}</span>
+              </NavLink>
+            )
+          })}
+        </div>
+      </nav>
 
       {/* Modal for setting timezone if owner enters first time */}
       <TimezoneModal />

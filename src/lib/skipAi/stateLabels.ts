@@ -50,6 +50,32 @@ export function stateInfo(request: AiRequestRecord): AiStateInfo {
     }
   }
 
+  // Distinção de apresentação; não altera o estado técnico nem libera conversão.
+  if (
+    request.state === 'em_execucao' &&
+    request.error ===
+      'Tarefa encerrada no Manus; resultado estruturado atualizado ainda não disponível.'
+  ) {
+    const note =
+      'Leia o retorno no Manus. Nenhuma proposta atual foi importada; não reenviar o pedido.'
+    return {
+      label: 'Encerrada no Manus — resultado não importado',
+      tone: 'atencao',
+      deliveryNote: deliveryNote ? deliveryNote + ' ' + note : note,
+    }
+  }
+  if (
+    request.state === 'pronta' &&
+    isObj(request.result) &&
+    request.result.kind === 'esclarecimento'
+  ) {
+    return {
+      label: 'Esclarecimento disponível — sem proposta',
+      tone: 'ok',
+      deliveryNote,
+    }
+  }
+
   const base: Record<AiRequestState, { label: string; tone: AiStateInfo['tone'] }> = {
     registrado: {
       label: 'Pedido registrado; confirmação ainda não comprovada',

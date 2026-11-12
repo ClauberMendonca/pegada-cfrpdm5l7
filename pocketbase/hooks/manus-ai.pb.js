@@ -1090,7 +1090,14 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
         // resultado): resultado antigo NÃO é reaproveitado — continuação
         // comprovada também invalida um estado terminal gravado (M1A1b).
         continuationEvidence = true
-        computed = { state: 'em_execucao', result: null, error: '' }
+        // A tarefa está stopped e bg false, mas o resultado anterior foi superado.
+        // Manter não conversível; informar encerramento, sem inventar JSON novo.
+        computed = {
+          state: 'em_execucao',
+          result: null,
+          error:
+            'Tarefa encerrada no Manus; resultado estruturado atualizado ainda não disponível.',
+        }
       } else if (scan.found && scan.found.so) {
         const so = scan.found.so
         if (so.success === true) {
@@ -1111,7 +1118,11 @@ routerAdd('GET', '/backend/v1/ai/requests/{id}', (e) => {
         computed = { state: 'falha', error: 'Envelope do resultado estruturado malformado.' }
       } else {
         // Resultado ainda não encontrado (ausência/paginação/rede): recuperável.
-        computed = { state: 'em_execucao', error: 'Resultado estruturado ainda não disponível.' }
+        computed = {
+          state: 'em_execucao',
+          error:
+            'Tarefa encerrada no Manus; resultado estruturado atualizado ainda não disponível.',
+        }
       }
     }
   } else {

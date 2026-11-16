@@ -142,7 +142,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
         isNextAdvance
           ? 'border-primary/30 border-l-4 border-l-primary bg-accent'
           : 'border-border hover:border-primary/30',
-        (isDone || isCanceled) && 'opacity-70',
+        (isDone || isCanceled) && 'bg-muted/50',
       )}
     >
       <div className="flex items-start gap-3">

@@ -244,17 +244,23 @@ export const CapturesPage: React.FC = () => {
     switch (st) {
       case 'pendente':
         return (
-          <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">Pendente</Badge>
+          <Badge className="bg-ginga-warning-bg text-ginga-warning border-ginga-warning/30">
+            Pendente
+          </Badge>
         )
       case 'convertida_projeto':
-        return <Badge className="bg-sky-500/20 text-sky-300 border-sky-500/30">Projeto</Badge>
+        return (
+          <Badge className="bg-ginga-info-bg text-ginga-info border-ginga-info/30">Projeto</Badge>
+        )
       case 'convertida_acao':
         return (
-          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30">Ação</Badge>
+          <Badge className="bg-ginga-success-bg text-ginga-success border-ginga-success/30">
+            Ação
+          </Badge>
         )
       case 'descartada':
         return (
-          <Badge variant="outline" className="text-slate-500 border-slate-700 line-through">
+          <Badge variant="outline" className="text-muted-foreground border-border line-through">
             Descartada
           </Badge>
         )
@@ -264,20 +270,20 @@ export const CapturesPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Inbox className="w-6 h-6 text-emerald-400" />
+          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Inbox className="w-6 h-6 text-primary" />
             Capturas
           </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Caixa de entrada rápida para descarregar a mente sem fricção. Converta em Projeto ou
             Ação, ou descarte.
           </p>
         </div>
 
         {/* Filter by status */}
-        <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-lg text-xs">
+        <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
           {(
             ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
           ).map((st) => (
@@ -286,8 +292,8 @@ export const CapturesPage: React.FC = () => {
               onClick={() => setFilterStatus(st)}
               className={`px-2.5 py-1 rounded font-medium transition-colors ${
                 filterStatus === st
-                  ? 'bg-slate-800 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {st === 'todas'
@@ -305,10 +311,10 @@ export const CapturesPage: React.FC = () => {
       </div>
 
       {/* Input de Captura Rápida */}
-      <Card className="bg-slate-900/80 border-slate-800 shadow-md">
+      <Card className="bg-card border-border shadow-md">
         <form onSubmit={handleQuickAdd}>
           <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
               <Lightbulb className="w-3.5 h-3.5" />
               <span>Anotação Rápida em Texto Livre</span>
             </div>
@@ -317,16 +323,15 @@ export const CapturesPage: React.FC = () => {
               onChange={(e) => setNewCaptureText(e.target.value)}
               placeholder="O que está na sua cabeça? Ideia, insight, pendência que surgiu, oportunidade..."
               rows={3}
-              className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-emerald-500"
             />
             <div className="flex justify-between items-center pt-1">
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-muted-foreground">
                 Pressione Capturar para guardar sem precisar organizar agora.
               </span>
               <Button
                 type="submit"
                 disabled={isSubmitting || !newCaptureText.trim()}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                className="gap-1.5"
               >
                 <Plus className="w-4 h-4" />
                 Capturar Ideia
@@ -338,17 +343,17 @@ export const CapturesPage: React.FC = () => {
 
       {/* Lista de Capturas */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs text-slate-400 font-medium px-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
           <span>Itens na Caixa de Entrada ({captures.length})</span>
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-slate-500">Carregando capturas...</div>
+          <div className="p-8 text-center text-muted-foreground">Carregando capturas...</div>
         ) : captures.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/20 p-8 text-center">
-            <Inbox className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-sm text-slate-400 font-medium">Nenhuma captura encontrada.</p>
-            <p className="text-xs text-slate-500 mt-1">
+          <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
+            <Inbox className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-foreground font-medium">Nenhuma captura encontrada.</p>
+            <p className="text-xs text-muted-foreground mt-1">
               {filterStatus === 'pendente'
                 ? 'Sua caixa de entrada está limpa! Todas as ideias foram processadas.'
                 : 'Nenhum registro para este filtro.'}
@@ -359,30 +364,30 @@ export const CapturesPage: React.FC = () => {
             {captures.map((item) => (
               <div
                 key={item.id}
-                className="p-4 rounded-xl border border-slate-800 bg-slate-900/50 hover:bg-slate-900/80 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     {getStatusBadge(item.status)}
-                    <span className="text-xs font-mono text-slate-500">
+                    <span className="text-xs font-mono text-muted-foreground">
                       {new Date(item.created).toLocaleDateString('pt-BR')}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">
+                  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                     {item.raw_text}
                   </p>
                 </div>
 
                 {/* Ações de processamento */}
                 {item.status === 'pendente' && (
-                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => openConvertToAction(item)}
-                      className="border-slate-700 bg-slate-800/80 hover:bg-slate-800 hover:text-emerald-400 text-xs gap-1.5"
+                      className="text-xs gap-1.5"
                     >
-                      <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckSquare className="w-3.5 h-3.5 text-primary" />
                       Virar Ação
                     </Button>
 
@@ -390,9 +395,9 @@ export const CapturesPage: React.FC = () => {
                       size="sm"
                       variant="outline"
                       onClick={() => openConvertToProject(item)}
-                      className="border-slate-700 bg-slate-800/80 hover:bg-slate-800 hover:text-sky-400 text-xs gap-1.5"
+                      className="text-xs gap-1.5"
                     >
-                      <FolderKanban className="w-3.5 h-3.5 text-sky-400" />
+                      <FolderKanban className="w-3.5 h-3.5 text-primary" />
                       Virar Projeto
                     </Button>
 
@@ -404,10 +409,10 @@ export const CapturesPage: React.FC = () => {
                         setCopilotCapture(item)
                         setCopilotOpen(true)
                       }}
-                      className="border-slate-700 bg-slate-800/80 hover:bg-slate-800 hover:text-violet-400 text-xs gap-1.5"
+                      className="text-xs gap-1.5"
                       title="Ver pedidos e comandos explícitos do copiloto"
                     >
-                      <Bot className="w-3.5 h-3.5 text-violet-400" />
+                      <Bot className="w-3.5 h-3.5 text-primary" />
                       Copiloto
                     </Button>
 
@@ -415,7 +420,7 @@ export const CapturesPage: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       onClick={() => handleDiscard(item.id)}
-                      className="text-slate-500 hover:text-rose-400 hover:bg-rose-950/20 text-xs"
+                      className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
                       title="Descartar logicamente"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -433,13 +438,13 @@ export const CapturesPage: React.FC = () => {
         open={conversionType === 'project'}
         onOpenChange={(open) => !open && setConversionType(null)}
       >
-        <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
+        <DialogContent className="bg-card text-card-foreground max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
-              <FolderKanban className="w-5 h-5 text-sky-400" />
+            <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+              <FolderKanban className="w-5 h-5 text-primary" />
               Converter Captura em Projeto
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Crie o projeto como rascunho com título e contexto. Você pode preencher o resto
               depois.
             </DialogDescription>
@@ -447,38 +452,39 @@ export const CapturesPage: React.FC = () => {
 
           <div className="space-y-4 py-2 overflow-y-auto max-h-[60vh]">
             {conversionFromCopilot && selectedCapture && (
-              <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-xs space-y-2">
-                <p>
+              <div className="rounded-md border border-border bg-accent p-3 text-xs space-y-2">
+                <p className="text-foreground">
                   Proposta sugerida pelo Manus. Revise os campos; nada será criado antes de
                   confirmar.
                 </p>
-                <p className="whitespace-pre-wrap break-words text-slate-300">
+                <p className="whitespace-pre-wrap break-words text-muted-foreground">
                   {selectedCapture.raw_text}
                 </p>
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Título do Projeto
               </Label>
               <Input
                 value={projectTitle}
                 onChange={(e) => setProjectTitle(e.target.value)}
-                className="bg-slate-950 border-slate-800 text-white"
                 required
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">Contexto</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Contexto
+              </Label>
               <Select
                 value={projectContext}
                 onValueChange={(v) => setProjectContext(v as 'vida' | 'trabalho')}
               >
-                <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                <SelectContent>
                   <SelectItem value="trabalho">Trabalho</SelectItem>
                   <SelectItem value="vida">Vida</SelectItem>
                 </SelectContent>
@@ -486,7 +492,7 @@ export const CapturesPage: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Aspiração (O que quero alcançar? Opcional)
               </Label>
               <Textarea
@@ -494,12 +500,12 @@ export const CapturesPage: React.FC = () => {
                 value={projectAspiration}
                 onChange={(e) => setProjectAspiration(e.target.value)}
                 placeholder="Ex: Ampliar minha influência estratégica na empresa"
-                className="bg-slate-950 border-slate-800 text-white text-xs"
+                className="text-xs"
               />
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Entrega Controlável (O que vou entregar? Opcional)
               </Label>
               <Textarea
@@ -507,11 +513,11 @@ export const CapturesPage: React.FC = () => {
                 value={projectControllable}
                 onChange={(e) => setProjectControllable(e.target.value)}
                 placeholder="Ex: Entregar proposta escrita de revisão de processos com 3 reuniões de validação"
-                className="bg-slate-950 border-slate-800 text-white text-xs"
+                className="text-xs"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Condição de término (opcional)
               </Label>
               <Textarea
@@ -519,23 +525,18 @@ export const CapturesPage: React.FC = () => {
                 value={projectCompletion}
                 onChange={(e) => setProjectCompletion(e.target.value)}
                 placeholder="Como reconhecerei que a entrega foi concluída?"
-                className="bg-slate-950 border-slate-800 text-white text-xs"
+                className="text-xs"
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setConversionType(null)}
-              className="text-slate-400"
-            >
+            <Button variant="ghost" onClick={() => setConversionType(null)}>
               Cancelar
             </Button>
             <Button
               onClick={() => handleConfirmConvert('project')}
               disabled={isConverting || !projectTitle.trim()}
-              className="bg-sky-600 hover:bg-sky-500 text-white"
             >
               {isConverting ? 'Gravando…' : 'Criar Projeto Rascunho'}
             </Button>
@@ -548,52 +549,53 @@ export const CapturesPage: React.FC = () => {
         open={conversionType === 'action'}
         onOpenChange={(open) => !open && setConversionType(null)}
       >
-        <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-lg">
+        <DialogContent className="bg-card text-card-foreground max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-emerald-400" />
+            <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+              <CheckSquare className="w-5 h-5 text-primary" />
               Converter Captura em Ação
             </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400">
+            <DialogDescription className="text-xs text-muted-foreground">
               Crie uma ação executável vinculada ou solta, pronta para a execução.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             {conversionFromCopilot && selectedCapture && (
-              <div className="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 text-xs space-y-2">
-                <p>
+              <div className="rounded-md border border-border bg-accent p-3 text-xs space-y-2">
+                <p className="text-foreground">
                   Proposta sugerida pelo Manus. Revise o título e contexto; confirmar cria somente
                   esta ação.
                 </p>
-                <p className="whitespace-pre-wrap break-words text-slate-300">
+                <p className="whitespace-pre-wrap break-words text-muted-foreground">
                   {selectedCapture.raw_text}
                 </p>
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-slate-400">
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Título da Ação
               </Label>
               <Input
                 value={actionTitle}
                 onChange={(e) => setActionTitle(e.target.value)}
-                className="bg-slate-950 border-slate-800 text-white"
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-slate-400">Contexto</Label>
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                  Contexto
+                </Label>
                 <Select
                   value={actionContext}
                   onValueChange={(v) => setActionContext(v as 'vida' | 'trabalho')}
                 >
-                  <SelectTrigger className="bg-slate-950 border-slate-800 text-white">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                  <SelectContent>
                     <SelectItem value="trabalho">Trabalho</SelectItem>
                     <SelectItem value="vida">Vida</SelectItem>
                   </SelectContent>
@@ -601,17 +603,17 @@ export const CapturesPage: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-slate-400">
+                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                   Projeto (Opcional)
                 </Label>
                 <Select
                   value={actionProjectId}
                   onValueChange={(v) => setActionProjectId(v === 'none' ? '' : v)}
                 >
-                  <SelectTrigger className="bg-slate-950 border-slate-800 text-white truncate text-xs">
+                  <SelectTrigger className="truncate text-xs">
                     <SelectValue placeholder="Ação solta" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-900 border-slate-800 text-slate-200">
+                  <SelectContent>
                     <SelectItem value="none">Ação solta</SelectItem>
                     {availableProjects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
@@ -625,17 +627,12 @@ export const CapturesPage: React.FC = () => {
           </div>
 
           <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => setConversionType(null)}
-              className="text-slate-400"
-            >
+            <Button variant="ghost" onClick={() => setConversionType(null)}>
               Cancelar
             </Button>
             <Button
               onClick={() => handleConfirmConvert('action')}
               disabled={isConverting || !actionTitle.trim()}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white"
             >
               {isConverting ? 'Gravando…' : 'Criar Ação Pronta'}
             </Button>

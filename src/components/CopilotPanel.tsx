@@ -170,39 +170,39 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent
-        className="bg-slate-900 border-slate-800 text-slate-100 max-w-2xl max-h-[85vh] flex flex-col"
+        className="bg-card border-border text-card-foreground max-w-2xl max-h-[85vh] flex flex-col"
         aria-describedby="copilot-panel-desc"
       >
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
-            <Bot className="w-5 h-5 text-violet-400" />
+          <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
+            <Bot className="w-5 h-5 text-primary" />
             Copiloto — da captura ao próximo avanço
           </DialogTitle>
-          <DialogDescription id="copilot-panel-desc" className="text-xs text-slate-400">
+          <DialogDescription id="copilot-panel-desc" className="text-xs text-muted-foreground">
             Revise o andamento, responda quando necessário e leve uma proposta ao formulário manual.
             Fechar não cancela uma tarefa nem um envio em curso.
           </DialogDescription>
         </DialogHeader>
 
         {/* Aviso persistente — texto exato exigido nesta fatia */}
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        <div className="rounded-md border border-ginga-warning/30 bg-ginga-warning-bg px-3 py-2 text-xs text-ginga-warning">
           {AVISO_PERSISTENTE}
         </div>
 
         <div className="space-y-4 py-1 overflow-y-auto pr-1">
           {/* Origem: raw_text em modo SOMENTE LEITURA */}
           <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider text-slate-400">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
               Captura (somente leitura)
             </Label>
-            <p className="text-sm text-slate-200 whitespace-pre-wrap break-words rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
+            <p className="text-sm text-foreground whitespace-pre-wrap break-words rounded-md border border-border bg-muted/50 px-3 py-2">
               {capture ? capture.raw_text : ''}
             </p>
           </div>
 
           {/* Contexto explícito — começa sem seleção */}
           <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider text-slate-400">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
               Contexto (apenas filtra a visualização — não grava nem envia)
             </Label>
             <div className="flex gap-2">
@@ -215,8 +215,8 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
                   aria-pressed={context === c}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                     context === c
-                      ? 'bg-violet-500/20 border-violet-500/40 text-violet-200'
-                      : 'bg-slate-950/70 border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'bg-accent border-primary/40 text-accent-foreground'
+                      : 'bg-card border-border text-foreground hover:border-input'
                   }`}
                 >
                   {c === 'vida' ? 'Vida' : 'Trabalho'}
@@ -227,26 +227,28 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
 
           {/* Pedidos locais */}
           {!context ? (
-            <p className="text-sm text-slate-400 py-4 text-center">
+            <p className="text-sm text-muted-foreground py-4 text-center">
               Escolha Vida ou Trabalho para carregar os pedidos locais desta captura.
             </p>
           ) : load.phase === 'carregando' || load.phase === 'sem_contexto' ? (
-            <p className="text-sm text-slate-400 py-4 text-center">Carregando pedidos locais…</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              Carregando pedidos locais…
+            </p>
           ) : load.phase === 'erro' ? (
-            <div className="rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-3 space-y-2">
-              <p className="text-sm text-rose-200 break-words">{load.message}</p>
+            <div className="rounded-md border border-destructive/30 bg-ginga-danger-bg px-3 py-3 space-y-2">
+              <p className="text-sm text-destructive break-words">{load.message}</p>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={refreshLocalRequests}
-                className="border-rose-500/40 text-rose-200 hover:bg-rose-500/10 gap-1.5"
+                className="border-destructive/40 text-destructive hover:bg-ginga-danger-bg gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Tentar novamente
               </Button>
             </div>
           ) : load.phase === 'vazio' ? (
-            <p className="text-sm text-slate-400 py-4 text-center">
+            <p className="text-sm text-muted-foreground py-4 text-center">
               Nenhum pedido local registrado para esta captura neste contexto.
             </p>
           ) : (
@@ -289,7 +291,7 @@ const CopilotPanelSession: React.FC<CopilotPanelSessionProps> = ({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => changeOpen(false)} className="text-slate-400">
+          <Button variant="ghost" onClick={() => changeOpen(false)}>
             Fechar
           </Button>
         </DialogFooter>
@@ -482,15 +484,17 @@ const ClarifyCommand: React.FC<{
 
   return (
     <div
-      className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+      className="space-y-2 rounded-lg border border-border bg-muted/40 p-3"
       data-testid="clarify-command"
     >
       {outcome && !prepared && outcome.kind === 'unavailable' && (
-        <p className="text-xs text-amber-200 break-words">{outcome.message}</p>
+        <p className="text-xs text-ginga-warning break-words">{outcome.message}</p>
       )}
-      {prepError && !prepared && <p className="text-xs text-rose-200 break-words">{prepError}</p>}
+      {prepError && !prepared && (
+        <p className="text-xs text-destructive break-words">{prepError}</p>
+      )}
       {alreadyRequested && !prepared && !outcome && (
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-muted-foreground">
           Já existe pedido registrado para esta captura nesta revisão e contexto — exibido acima;
           não há nova execução desta intenção.
         </p>
@@ -501,7 +505,7 @@ const ClarifyCommand: React.FC<{
           size="sm"
           onClick={startPreparation}
           disabled={submittingPrep || submitting}
-          className="bg-violet-600 hover:bg-violet-500 text-white gap-1.5"
+          className="gap-1.5"
         >
           <Bot className="w-3.5 h-3.5" />
           {submittingPrep ? 'Preparando…' : buttonLabel}
@@ -527,11 +531,11 @@ const ClarifyCommand: React.FC<{
         />
       )}
       {prepared && outcomeStale && (
-        <p className="text-xs text-amber-200 break-words">
+        <p className="text-xs text-ginga-warning break-words">
           Os dados da captura ou o contexto mudaram; esta preparação não é mais válida.
         </p>
       )}
-      {refreshNote && <p className="text-xs text-slate-500">{refreshNote}</p>}
+      {refreshNote && <p className="text-xs text-muted-foreground">{refreshNote}</p>}
     </div>
   )
 }
@@ -558,34 +562,34 @@ const CopilotRequestItem: React.FC<{
   const createdLabel = formatInstantInZone(request.created, timezone) || 'data indisponível'
 
   return (
-    <li className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 space-y-2.5">
+    <li className="rounded-lg border border-border bg-card p-3 space-y-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Badge
           className={
             info.tone === 'ok'
-              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+              ? 'bg-ginga-success-bg text-ginga-success border-ginga-success/30'
               : info.tone === 'erro'
-                ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                ? 'bg-ginga-danger-bg text-destructive border-destructive/30'
                 : info.tone === 'atencao'
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  : 'bg-slate-500/20 text-slate-300 border-slate-500/30'
+                  ? 'bg-ginga-warning-bg text-ginga-warning border-ginga-warning/30'
+                  : 'bg-muted text-muted-foreground border-border'
           }
         >
           {info.label}
         </Badge>
-        <Badge variant="outline" className="text-slate-400 border-slate-700">
+        <Badge variant="outline" className="text-muted-foreground border-border">
           {request.context === 'vida' ? 'Vida' : 'Trabalho'}
         </Badge>
-        <span className="text-xs text-slate-500 inline-flex items-center gap-1">
+        <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
           <Calendar className="w-3 h-3" />
           {createdLabel}
         </span>
       </div>
 
-      {info.deliveryNote && <p className="text-xs text-amber-200">{info.deliveryNote}</p>}
+      {info.deliveryNote && <p className="text-xs text-ginga-warning">{info.deliveryNote}</p>}
 
       {captureChanged && (
-        <p className="text-xs text-amber-200 inline-flex items-start gap-1">
+        <p className="text-xs text-ginga-warning inline-flex items-start gap-1">
           <TriangleAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           A captura mudou desde este pedido — o conteúdo abaixo pode estar desatualizado.
         </p>
@@ -593,10 +597,10 @@ const CopilotRequestItem: React.FC<{
 
       {question && (
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
             Pergunta do Manus (somente leitura)
           </p>
-          <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">{question}</p>
+          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{question}</p>
         </div>
       )}
 
@@ -614,7 +618,9 @@ const CopilotRequestItem: React.FC<{
       {request.state === 'falha' &&
         typeof request.error === 'string' &&
         request.error.trim() !== '' && (
-          <p className="text-xs text-rose-200 break-words">Detalhe registrado: {request.error}</p>
+          <p className="text-xs text-destructive break-words">
+            Detalhe registrado: {request.error}
+          </p>
         )}
 
       {taskUrl && (
@@ -622,7 +628,7 @@ const CopilotRequestItem: React.FC<{
           href={taskUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1"
+          className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 inline-flex items-center gap-1"
         >
           <ExternalLink className="w-3 h-3" />
           Abrir no Manus
@@ -643,44 +649,46 @@ const CopilotResultView: React.FC<{ result: ReturnType<typeof resultOf> }> = ({ 
     <div className="space-y-2">
       {explanation !== null && explanation.trim() !== '' && (
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
             Explicação
           </p>
-          <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">{explanation}</p>
+          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{explanation}</p>
         </div>
       )}
 
       {proposal && (
-        <div className="space-y-1.5 rounded-md border border-slate-800 bg-slate-900/60 p-2.5">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Proposta</p>
+        <div className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+            Proposta
+          </p>
           {typeof proposal.title === 'string' && proposal.title.trim() !== '' && (
-            <p className="text-sm text-slate-100 font-medium">{proposal.title}</p>
+            <p className="text-sm text-foreground font-medium">{proposal.title}</p>
           )}
           {proposal.kind === 'projeto' ? (
             <dl className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-              <dt className="text-slate-500">Aspiração</dt>
-              <dd className="text-slate-200 whitespace-pre-wrap break-words">
+              <dt className="text-muted-foreground">Aspiração</dt>
+              <dd className="text-foreground whitespace-pre-wrap break-words">
                 {textOrNull(proposal.aspiration)}
               </dd>
-              <dt className="text-slate-500">Entrega controlável</dt>
-              <dd className="text-slate-200 whitespace-pre-wrap break-words">
+              <dt className="text-muted-foreground">Entrega controlável</dt>
+              <dd className="text-foreground whitespace-pre-wrap break-words">
                 {textOrNull(proposal.controllable_delivery)}
               </dd>
-              <dt className="text-slate-500">Condição de término</dt>
-              <dd className="text-slate-200 whitespace-pre-wrap break-words">
+              <dt className="text-muted-foreground">Condição de término</dt>
+              <dd className="text-foreground whitespace-pre-wrap break-words">
                 {textOrNull(proposal.completion_condition)}
               </dd>
             </dl>
           ) : (
             <dl className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-xs">
-              <dt className="text-slate-500">Título da ação</dt>
-              <dd className="text-slate-200">
+              <dt className="text-muted-foreground">Título da ação</dt>
+              <dd className="text-foreground">
                 {typeof proposal.title === 'string' && proposal.title.trim() !== ''
                   ? proposal.title
                   : '—'}
               </dd>
-              <dt className="text-slate-500">Contexto</dt>
-              <dd className="text-slate-200">{contextLabel(proposal.context)}</dd>
+              <dt className="text-muted-foreground">Contexto</dt>
+              <dd className="text-foreground">{contextLabel(proposal.context)}</dd>
             </dl>
           )}
         </div>
@@ -688,10 +696,10 @@ const CopilotResultView: React.FC<{ result: ReturnType<typeof resultOf> }> = ({ 
 
       {nextStep !== null && nextStep.trim() !== '' && (
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
             Próximo avanço sugerido
           </p>
-          <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">{nextStep}</p>
+          <p className="text-sm text-foreground whitespace-pre-wrap break-words">{nextStep}</p>
         </div>
       )}
     </div>

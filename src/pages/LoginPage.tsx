@@ -36,22 +36,22 @@ export const LoginPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 text-slate-100">
+    <div className="min-h-screen bg-background flex flex-col justify-center items-center p-4 text-foreground">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 mb-3 text-slate-200">
-            <ShieldCheck className="w-6 h-6 text-emerald-400" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent border border-border mb-3 text-primary">
+            <ShieldCheck className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Execução Pragmática</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Execução Pragmática</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Sistema pessoal de execução para uso exclusivo do dono
           </p>
         </div>
 
-        <Card className="bg-slate-900/90 border-slate-800 text-slate-100 shadow-2xl backdrop-blur">
+        <Card className="bg-card border-border text-card-foreground shadow-2xl">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-lg font-medium text-white">Acesso Privado</CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardTitle className="text-lg font-medium text-foreground">Acesso Privado</CardTitle>
+            <CardDescription className="text-muted-foreground">
               Acesso exclusivo do dono. Use suas credenciais privadas.
             </CardDescription>
           </CardHeader>
@@ -60,7 +60,7 @@ export const LoginPage: React.FC = () => {
               {error && (
                 <Alert
                   variant="destructive"
-                  className="bg-rose-950/50 border-rose-800 text-rose-200"
+                  className="bg-ginga-danger-bg border-destructive/30 text-destructive"
                 >
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
@@ -68,11 +68,14 @@ export const LoginPage: React.FC = () => {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs uppercase tracking-wider text-slate-300">
+                <Label
+                  htmlFor="email"
+                  className="text-xs uppercase tracking-wider text-muted-foreground"
+                >
                   E-mail do Dono
                 </Label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <Mail className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
                   <Input
                     id="email"
                     type="email"
@@ -80,7 +83,7 @@ export const LoginPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="dono@exemplo.com"
-                    className="pl-9 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -88,12 +91,12 @@ export const LoginPage: React.FC = () => {
               <div className="space-y-2">
                 <Label
                   htmlFor="password"
-                  className="text-xs uppercase tracking-wider text-slate-300"
+                  className="text-xs uppercase tracking-wider text-muted-foreground"
                 >
                   Senha
                 </Label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
                   <Input
                     id="password"
                     type="password"
@@ -101,7 +104,7 @@ export const LoginPage: React.FC = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="pl-9 bg-slate-800/80 border-slate-700 text-white placeholder:text-slate-500 focus-visible:ring-emerald-500"
+                    className="pl-9"
                   />
                 </div>
               </div>
@@ -111,13 +114,13 @@ export const LoginPage: React.FC = () => {
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors"
+                className="w-full font-medium transition-colors"
               >
                 {isLoading ? 'Verificando...' : 'Entrar no Sistema'}
                 {!isLoading && <ArrowRight className="w-4 h-4 ml-2" />}
               </Button>
 
-              <div className="text-xs text-center text-slate-500">
+              <div className="text-xs text-center text-muted-foreground">
                 Uso restrito. Sem cadastro público ou convites.
               </div>
             </CardFooter>

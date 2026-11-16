@@ -49,13 +49,13 @@ export const ReviewPage: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-900">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Compass className="w-6 h-6 text-emerald-400" />
+          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <Compass className="w-6 h-6 text-primary" />
             Revisão
           </h2>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <p className="text-sm text-muted-foreground mt-0.5">
             Área de revisão periódica de projetos e calibração de foco.
           </p>
         </div>
@@ -65,8 +65,8 @@ export const ReviewPage: React.FC = () => {
             variant="outline"
             className={`text-xs uppercase font-medium ${
               contextFilter === 'trabalho'
-                ? 'border-sky-500/40 text-sky-400 bg-sky-950/30'
-                : 'border-amber-500/40 text-amber-400 bg-amber-950/30'
+                ? 'border-ginga-info/30 text-ginga-info bg-ginga-info-bg'
+                : 'border-ginga-warning/30 text-ginga-warning bg-ginga-warning-bg'
             }`}
           >
             Filtro: {contextFilter}
@@ -75,13 +75,15 @@ export const ReviewPage: React.FC = () => {
       </div>
 
       {/* ESTADO VAZIO / GUIA PRAGMÁTICO CONFORME ESPECIFICAÇÃO */}
-      <Card className="bg-slate-900/60 border-slate-800 text-slate-100">
+      <Card className="bg-card border-border text-card-foreground">
         <CardHeader className="text-center pb-2">
-          <div className="mx-auto w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-2">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-ginga-success-bg border border-ginga-success/30 flex items-center justify-center text-ginga-success mb-2">
             <Compass className="w-6 h-6" />
           </div>
-          <CardTitle className="text-xl font-bold text-white">Rito de Revisão Periódica</CardTitle>
-          <CardDescription className="text-slate-400 max-w-xl mx-auto text-sm">
+          <CardTitle className="text-xl font-bold text-foreground">
+            Rito de Revisão Periódica
+          </CardTitle>
+          <CardDescription className="text-muted-foreground max-w-xl mx-auto text-sm">
             Conforme planejado para esta primeira versão, a área de Revisão começa com estado vazio
             estruturado para orientar o alinhamento da mente do dono entre Vida e Trabalho.
           </CardDescription>
@@ -90,50 +92,58 @@ export const ReviewPage: React.FC = () => {
         <CardContent className="space-y-6 pt-4">
           {/* Diagnóstico Rápido Atual */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-xs text-slate-400 block font-medium">Projetos Ativos</span>
-              <span className="text-2xl font-bold text-white mt-1 block">
+            <div className="p-4 rounded-xl bg-muted border border-border">
+              <span className="text-xs text-muted-foreground block font-medium">
+                Projetos Ativos
+              </span>
+              <span className="text-2xl font-bold text-foreground mt-1 block">
                 {activeProjects.length}
               </span>
-              <span className="text-[11px] text-slate-500">Frentes em andamento simultâneo</span>
+              <span className="text-[11px] text-muted-foreground">
+                Frentes em andamento simultâneo
+              </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-xs text-amber-300 block font-medium">
+            <div className="p-4 rounded-xl bg-ginga-warning-bg border border-ginga-warning/30">
+              <span className="text-xs text-ginga-warning block font-medium">
                 Ativos sem Ação Pronta
               </span>
-              <span className="text-2xl font-bold text-amber-300 mt-1 block">
+              <span className="text-2xl font-bold text-ginga-warning mt-1 block">
                 {projectsWithoutReadyAction.length}
               </span>
-              <span className="text-[11px] text-slate-500">
+              <span className="text-[11px] text-ginga-warning/80">
                 Projetos que necessitam de desdobramento
               </span>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
-              <span className="text-xs text-slate-400 block font-medium">Projetos Pausados</span>
-              <span className="text-2xl font-bold text-slate-300 mt-1 block">
+            <div className="p-4 rounded-xl bg-muted border border-border">
+              <span className="text-xs text-muted-foreground block font-medium">
+                Projetos Pausados
+              </span>
+              <span className="text-2xl font-bold text-foreground mt-1 block">
                 {pausedProjects.length}
               </span>
-              <span className="text-[11px] text-slate-500">Preservados sem pressão de entrega</span>
+              <span className="text-[11px] text-muted-foreground">
+                Preservados sem pressão de entrega
+              </span>
             </div>
           </div>
 
           {/* Checklist de Reflexão da Inteligência Pragmática */}
-          <div className="p-5 rounded-2xl bg-slate-950/40 border border-slate-800 space-y-4">
-            <h4 className="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <div className="p-5 rounded-2xl bg-muted border border-border space-y-4">
+            <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-ginga-success" />
               Perguntas-Chave para o Fechamento Semanal
             </h4>
 
-            <div className="space-y-3 text-xs sm:text-sm text-slate-300">
+            <div className="space-y-3 text-xs sm:text-sm text-foreground">
               <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs shrink-0 font-bold">
+                <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs shrink-0 font-bold">
                   1
                 </span>
                 <div>
-                  <strong className="text-white">A entrega controlável ainda faz sentido?</strong>
-                  <p className="text-slate-400 text-xs mt-0.5">
+                  <strong>A entrega controlável ainda faz sentido?</strong>
+                  <p className="text-muted-foreground text-xs mt-0.5">
                     Avalie se o que você se comprometeu a entregar diretamente ainda é a alavanca
                     certa para a aspiração desejada.
                   </p>
@@ -141,14 +151,12 @@ export const ReviewPage: React.FC = () => {
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs shrink-0 font-bold">
+                <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs shrink-0 font-bold">
                   2
                 </span>
                 <div>
-                  <strong className="text-white">
-                    Existe algum projeto estagnado sem próximo passo?
-                  </strong>
-                  <p className="text-slate-400 text-xs mt-0.5">
+                  <strong>Existe algum projeto estagnado sem próximo passo?</strong>
+                  <p className="text-muted-foreground text-xs mt-0.5">
                     Se um projeto ativo não possui nenhuma ação "pronta", defina a próxima ação
                     imediatamente ou pause-o formalmente.
                   </p>
@@ -156,14 +164,12 @@ export const ReviewPage: React.FC = () => {
               </div>
 
               <div className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center text-xs shrink-0 font-bold">
+                <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs shrink-0 font-bold">
                   3
                 </span>
                 <div>
-                  <strong className="text-white">
-                    Os aprendizados e ativos duráveis foram registrados?
-                  </strong>
-                  <p className="text-slate-400 text-xs mt-0.5">
+                  <strong>Os aprendizados e ativos duráveis foram registrados?</strong>
+                  <p className="text-muted-foreground text-xs mt-0.5">
                     Mesmo que o resultado de mercado não tenha vindo, documente o que você construiu
                     como ativo intelectual ou operacional.
                   </p>
@@ -173,7 +179,7 @@ export const ReviewPage: React.FC = () => {
           </div>
 
           <div className="flex justify-center pt-2">
-            <Button asChild className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2">
+            <Button asChild className="gap-2">
               <Link to="/projetos">
                 <span>Ir para Projetos e Calibrar Fichas</span>
                 <ArrowRight className="w-4 h-4" />

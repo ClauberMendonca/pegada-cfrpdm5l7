@@ -10,32 +10,32 @@
 @layer base {
   :root {
     /* Ginga: tema claro quente, verde-floresta (tokens HSL mapeados em tailwind.config.ts) */
-    --background: 80 17.65% 96.67%; /* #F7F8F5 */
-    --foreground: 165 30.3% 12.94%; /* #172B26 */
-    --card: 0 0% 100%; /* #FFFFFF */
-    --card-foreground: 165 30.3% 12.94%; /* #172B26 */
-    --popover: 0 0% 100%; /* #FFFFFF */
-    --popover-foreground: 165 30.3% 12.94%; /* #172B26 */
-    --primary: 162.08 63.64% 23.73%; /* #16634C */
-    --primary-foreground: 0 0% 100%; /* #FFFFFF */
-    --secondary: 120 12.5% 93.73%; /* #EDF1ED */
-    --secondary-foreground: 165 30.3% 12.94%; /* #172B26 */
-    --muted: 90 14.29% 94.51%; /* #F1F3EF */
-    --muted-foreground: 150 8.79% 35.69%; /* #53635B */
-    --accent: 145 40% 94.12%; /* #EAF6EF */
-    --accent-foreground: 162.08 63.64% 23.73%; /* #16634C */
-    --destructive: 352.14 67.44% 42.16%; /* #B42336 */
-    --destructive-foreground: 0 0% 100%; /* #FFFFFF */
-    --border: 127.5 12.9% 87.84%; /* #DCE4DD */
-    --input: 143.33 7.76% 54.51%; /* #829489 */
-    --ring: 162.08 63.64% 23.73%; /* #16634C */
+    --background: 80 17.647059% 96.666667%;
+    --foreground: 165 30.30303% 12.941176%;
+    --card: 0 0% 100%;
+    --card-foreground: 165 30.30303% 12.941176%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 165 30.30303% 12.941176%;
+    --primary: 162.077922 63.636364% 23.72549%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 132 16.129032% 93.921569%;
+    --secondary-foreground: 165 30.30303% 12.941176%;
+    --muted: 132 16.129032% 93.921569%;
+    --muted-foreground: 146.666667 12.328767% 28.627451%;
+    --accent: 145 40% 94.117647%;
+    --accent-foreground: 162.077922 63.636364% 23.72549%;
+    --destructive: 351.023622 67.195767% 37.058824%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 127.5 12.903226% 87.843137%;
+    --input: 147 8.196721% 47.843137%;
+    --ring: 210.315789 59.748428% 31.176471%;
     --radius: 1rem;
     --ginga-primary-hover: #124e3d;
     --ginga-mint: #35e0ac; /* só acento/símbolo, não texto pequeno sobre branco */
-    --ginga-warning: #8a4b0f;
+    --ginga-warning: #79400b;
     --ginga-warning-bg: #fff3e4;
     --ginga-danger-bg: #fff0f2;
-    --ginga-info: #245b91;
+    --ginga-info: #204f7f;
     --ginga-info-bg: #eef5fc;
     --ginga-shadow: 0 4px 18px rgb(23 43 38 / 0.045);
     --ginga-font:
@@ -43,64 +43,101 @@
     color-scheme: light;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 165 30.3% 12.94%;
-    --sidebar-primary: 162.08 63.64% 23.73%;
+    --sidebar-foreground: 165 30.30303% 12.941176%;
+    --sidebar-primary: 162.077922 63.636364% 23.72549%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 145 40% 94.12%;
-    --sidebar-accent-foreground: 162.08 63.64% 23.73%;
-    --sidebar-border: 127.5 12.9% 87.84%;
-    --sidebar-ring: 162.08 63.64% 23.73%;
+    --sidebar-accent: 145 40% 94.117647%;
+    --sidebar-accent-foreground: 162.077922 63.636364% 23.72549%;
+    --sidebar-border: 127.5 12.903226% 87.843137%;
+    --sidebar-ring: 210.315789 59.748428% 31.176471%;
 
     --chart-1: 34 100% 44%;
     --chart-2: 189 100% 38%;
     --chart-3: 209 100% 32%;
     --chart-4: 42 100% 50%;
     --chart-5: 33 100% 50%;
+
+    /* Pares semânticos Ginga: status e interações. */
+    --ginga-primary-pressed: #103f33;
+    --ginga-destructive-hover: #831b2c;
+    --ginga-destructive-pressed: #681521;
+    --ginga-mint-foreground: #10231a;
+    --ginga-success: #16634c;
+    --ginga-success-bg: #eaf6ef;
+    --ginga-info-hsl: 210.315789 59.748428% 31.176471%;
+    --ginga-info-bg-hsl: 210 70% 96.078431%;
+    --ginga-warning-hsl: 28.909091 83.333333% 25.882353%;
+    --ginga-warning-bg-hsl: 33.333333 100% 94.705882%;
+    --ginga-danger-bg-hsl: 352 100% 97.058824%;
+    --ginga-success-hsl: 162.077922 63.636364% 23.72549%;
+    --ginga-success-bg-hsl: 145 40% 94.117647%;
   }
 
   .dark {
-    /* Change the colors to match the design system consistent with the dark mode */
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Esquema inverso correspondente; não ativa nem cria um seletor de tema. */
+    --background: 158.181818 24.444444% 8.823529%;
+    --foreground: 140 27.272727% 95.686275%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 156 23.076923% 12.745098%;
+    --card-foreground: 140 27.272727% 95.686275%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 152.727273 25% 17.254902%;
+    --popover-foreground: 140 27.272727% 95.686275%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 84% 4.9%;
+    --primary: 159.130435 60.846561% 62.941176%;
+    --primary-foreground: 151.578947 37.254902% 10%;
 
-    --secondary: 222.2 84% 4.9%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 151.764706 20% 16.666667%;
+    --secondary-foreground: 140 27.272727% 95.686275%;
 
-    --muted: 222.2 84% 4.9%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 151.764706 20% 16.666667%;
+    --muted-foreground: 137.647059 15.88785% 79.019608%;
 
-    --accent: 222.2 84% 4.9%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 156 31.914894% 18.431373%;
+    --accent-foreground: 157.5 68.085106% 81.568627%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 351.2 100% 85.294118%;
+    --destructive-foreground: 340.5 51.282051% 15.294118%;
 
-    --border: 222.2 84% 4.9%;
-    --input: 222.2 84% 4.9%;
-    --ring: 214.3 31.8% 91.4%;
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 222.2 84% 4.9%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222.2 84% 4.9%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222.2 84% 4.9%;
-    --sidebar-ring: 222.2 84% 4.9%;
+    --border: 152.307692 18.84058% 27.058824%;
+    --input: 150 12.698413% 49.411765%;
+    --ring: 211.698113 96.363636% 78.431373%;
+    --sidebar-background: 156 23.076923% 12.745098%;
+    --sidebar-foreground: 140 27.272727% 95.686275%;
+    --sidebar-primary: 159.130435 60.846561% 62.941176%;
+    --sidebar-primary-foreground: 151.578947 37.254902% 10%;
+    --sidebar-accent: 156 31.914894% 18.431373%;
+    --sidebar-accent-foreground: 157.5 68.085106% 81.568627%;
+    --sidebar-border: 152.307692 18.84058% 27.058824%;
+    --sidebar-ring: 211.698113 96.363636% 78.431373%;
 
     --chart-1: 270 100% 44%;
     --chart-2: 164 100% 38%;
     --chart-3: 43 100% 32%;
     --chart-4: 340 100% 50%;
     --chart-5: 10 100% 50%;
+
+    /* Pares semânticos Ginga: status e interações. */
+    --ginga-primary-hover: #88e4c3;
+    --ginga-primary-pressed: #b0f0d8;
+    --ginga-destructive-hover: #ffcbd2;
+    --ginga-destructive-pressed: #ffe0e5;
+    --ginga-mint: #35e0ac;
+    --ginga-mint-foreground: #10231a;
+    --ginga-warning: #f6cd85;
+    --ginga-warning-bg: #40301c;
+    --ginga-danger-bg: #421f27;
+    --ginga-info: #add0ff;
+    --ginga-info-bg: #1c3048;
+    --ginga-success: #9bdfc1;
+    --ginga-success-bg: #203e32;
+    --ginga-info-hsl: 214.390244 100% 83.921569%;
+    --ginga-info-bg-hsl: 212.727273 44% 19.607843%;
+    --ginga-warning-hsl: 38.230088 86.259542% 74.313725%;
+    --ginga-warning-bg-hsl: 33.333333 39.130435% 18.039216%;
+    --ginga-danger-bg-hsl: 346.285714 36.082474% 19.019608%;
+    --ginga-success-hsl: 153.529412 51.515152% 74.117647%;
+    --ginga-success-bg-hsl: 156 31.914894% 18.431373%;
   }
 
   html,

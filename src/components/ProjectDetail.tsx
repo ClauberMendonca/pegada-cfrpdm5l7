@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { TimeEntry } from '@/services/timeService'
 import { Project, ActionItem, ProgressLog, ActionStatus, ProjectStatus } from '@/types/execution'
 import { projectService } from '@/services/projectService'
 import { actionService } from '@/services/actionService'
@@ -23,17 +24,15 @@ import {
   Flame,
   Trophy,
   Edit3,
-  Archive,
   PauseCircle,
   PlayCircle,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
-import { useAuth } from '@/contexts/AuthContext'
+import { formatCalendarDay } from '@/lib/datetime'
 import { ProjectTimeHistory } from '@/components/TimeControl'
 import { TimeControl } from '@/components/TimeControlCompact'
 import { useProjectTimeTotals } from '@/components/TimeControlCompact'
-import { useRunningSeconds } from '@/contexts/TimeContext'
+import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
 
 interface ProjectDetailProps {
@@ -49,8 +48,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const { toast } = useToast()
   // FATIA P1C — fuso de referência para instantes (created/updated) e rótulo "hoje".
-  const { user } = useAuth()
-  const ownerTz = ownerTimezone(user?.timezone)
+  const timeTotals = useProjectTimeTotals(projectId)
+  const { running } = useTimer()
   const [project, setProject] = useState<Project | null>(null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [logs, setLogs] = useState<ProgressLog[]>([])
@@ -150,6 +149,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     }
   }
 
+  const projectTimeEntries = useMemo(() => timeTotals.entries ?? [], [timeTotals.entries])
+  const directTimeEntries = useMemo(
+    () => projectTimeEntries.filter((entry) => entry.target_type === 'project'),
+    [projectTimeEntries],
+  )
+  const actionTimeEntries = useMemo(() => {
+    const grouped = new Map<string, TimeEntry[]>()
+    projectTimeEntries.forEach((entry) => {
+      if (entry.target_type !== 'action' || !entry.action_id) return
+      const current = grouped.get(entry.action_id) ?? []
+      current.push(entry)
+      grouped.set(entry.action_id, current)
+    })
+    return grouped
+  }, [projectTimeEntries])
+
   if (isLoading || !project) {
     return (
       <div className="p-8 text-center text-muted-foreground">Carregando ficha do projeto...</div>
@@ -169,6 +184,29 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const activeActions = actions.filter((a) => a.status !== 'feita' && a.status !== 'cancelada')
   const completedActions = actions.filter((a) => a.status === 'feita' || a.status === 'cancelada')
+  const timeTotalLabel = (seconds: number) =>
+    timeTotals.loading || timeTotals.error
+      ? '—'
+      : projectTimeEntries.some((e) => !e.is_deleted && e.status !== 'running')
+        ? formatDuration(seconds)
+        : 'Não registrado'
+  const runningInProject = running?.project_id === project.id ? running : null
+  const renderActionTimeControl = (action: ActionItem) => (
+    <TimeControl
+      targetType="action"
+      targetId={action.id}
+      targetTitle={action.title}
+      contextLabel={project.title}
+      targetStatus={action.status}
+      projectStatus={action.project_id ? project.status : null}
+      actionHasProject={Boolean(action.project_id)}
+      entries={actionTimeEntries.get(action.id) ?? []}
+      entriesLoading={timeTotals.loading}
+      entriesError={timeTotals.error}
+      onRetryEntries={timeTotals.reload}
+      onChanged={timeTotals.reload}
+    />
+  )
 
   return (
     <div className="space-y-6">
@@ -395,6 +433,79 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         )}
       </div>
 
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-lg font-bold tracking-tight text-foreground">Tempo do projeto</h3>
+            <p className="text-xs text-muted-foreground">
+              Total encerrado, separado entre ações vinculadas e tempo direto no projeto.
+            </p>
+          </div>
+          {timeTotals.error && (
+            <Button size="sm" variant="outline" onClick={timeTotals.reload}>
+              Tentar novamente
+            </Button>
+          )}
+        </div>
+
+        {timeTotals.error && (
+          <p role="alert" className="text-sm text-destructive">
+            Não foi possível carregar os registros de tempo: {timeTotals.error}
+          </p>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border bg-muted/40 p-3">
+            <span className="text-xs text-muted-foreground">Total encerrado</span>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {timeTotalLabel(timeTotals.totalSeconds)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/40 p-3">
+            <span className="text-xs text-muted-foreground">Das ações</span>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {timeTotalLabel(timeTotals.fromActionsSeconds)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-muted/40 p-3">
+            <span className="text-xs text-muted-foreground">Direto no projeto</span>
+            <p className="mt-1 text-lg font-semibold tabular-nums">
+              {timeTotalLabel(timeTotals.directSeconds)}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium">Cronometrar diretamente neste projeto</p>
+            <p className="text-xs text-muted-foreground">
+              O registro direto fica separado do tempo das ações.
+            </p>
+          </div>
+          <TimeControl
+            targetType="project"
+            targetId={project.id}
+            targetTitle={project.title}
+            contextLabel="Direto no projeto"
+            targetStatus={project.status}
+            projectStatus={project.status}
+            entries={directTimeEntries}
+            entriesLoading={timeTotals.loading}
+            entriesError={timeTotals.error}
+            onRetryEntries={timeTotals.reload}
+            onChanged={timeTotals.reload}
+          />
+        </div>
+
+        <ProjectTimeHistory
+          entries={projectTimeEntries}
+          runningEntry={runningInProject}
+          loading={timeTotals.loading}
+          error={timeTotals.error}
+          onRetry={timeTotals.reload}
+        />
+      </section>
+
       {/* AÇÕES VINCULADAS AO PROJETO */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -443,6 +554,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       setLogAction(a)
                       setIsLogModalOpen(true)
                     }}
+                    timeControl={renderActionTimeControl(action)}
                     onEdit={(a) => {
                       setEditingAction(a)
                       setIsActionModalOpen(true)
@@ -467,6 +579,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                         setLogAction(a)
                         setIsLogModalOpen(true)
                       }}
+                      timeControl={renderActionTimeControl(action)}
                     />
                   ))}
                 </div>

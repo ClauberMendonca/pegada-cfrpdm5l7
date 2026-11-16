@@ -1,11 +1,3 @@
-// FATIA — REGISTRO DE TEMPO V1: provider compartilhado do cronômetro.
-//
-// Um único intervalo correndo por dono (o servidor garante transacionalmente;
-// aqui apenas reconciliamos e evitamos cliques repetidos). Fechar diálogo,
-// trocar página, recarregar ou sair da sessão NÃO encerra o registro: ao
-// voltar, reconciliamos com o estado do servidor (getRunning). Contador é
-// exibição apenas — duração real deriva dos instantes persistidos no stop.
-
 import React, {
   createContext,
   useCallback,
@@ -25,14 +17,13 @@ export interface PendingOp {
   targetId: string
   message: string
 }
-
 interface TimeContextValue {
   running: TimeEntry | null
-  /** true enquanto reconcilia com o servidor (após foco/mount). */
   isReconciling: boolean
-  /** Operação cujo commit ainda não confirmou — bloqueia novo clique. */
   pending: PendingOp | null
   error: string | null
+  revision: number
+  nowMs: number
   startTimer: (
     targetType: TimeTargetType,
     targetId: string,
@@ -42,196 +33,208 @@ interface TimeContextValue {
   endTimer: () => Promise<TimeServiceError | null>
   resumeTimer: (entryId: string) => Promise<TimeServiceError | null>
   reconcile: () => Promise<void>
-  nowMs: number
 }
-
 const TimeContext = createContext<TimeContextValue | undefined>(undefined)
 
 export const TimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user } = useAuth()
   const [running, setRunning] = useState<TimeEntry | null>(null)
   const [isReconciling, setIsReconciling] = useState(true)
   const [pending, setPending] = useState<PendingOp | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [revision, setRevision] = useState(0)
   const [nowMs, setNowMs] = useState(() => Date.now())
-  const reconciled = useRef(false)
-
-  // Tique de exibição: 1s. A duração REAL continua derivada dos instantes
-  // persistidos (hook no stop); este valor é só o relógio da tela.
+  const busy = useRef(false)
+  const version = useRef(0)
+  const confirmed = useRef(false)
+  const mounted = useRef(true)
   useEffect(() => {
-    if (!running) return
-    const t = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(t)
-  }, [running])
-
-  const reconcile = useCallback(async () => {
-    if (!pb.authStore.isValid) {
-      setRunning(null)
-      setIsReconciling(false)
-      return
-    }
-    setIsReconciling(true)
-    try {
-      const r = await timeService.getRunning()
-      setRunning(r)
-      setError(null)
-    } catch {
-      setError('Não foi possível confirmar o estado do cronômetro no servidor.')
-    } finally {
-      setIsReconciling(false)
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      version.current++
     }
   }, [])
 
-  // Primeira conciliação após login/mount; e re-conciliação ao voltar o foco
-  // (aba em segundo plano / telefone bloqueado não apaga o início).
   useEffect(() => {
-    if (!isAuthenticated) {
-      reconciled.current = false
-      setRunning(null)
-      setIsReconciling(false)
-      return
+    if (running?.status !== 'running') return
+    const t = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [running?.id, running?.status])
+
+  const reconcile = useCallback(async () => {
+    if (busy.current || !pb.authStore.isValid) return
+    const token = ++version.current
+    const owner = pb.authStore.record?.id
+    setIsReconciling(true)
+    try {
+      const r = await timeService.getRunning()
+      if (!mounted.current || token !== version.current || pb.authStore.record?.id !== owner) return
+      setRunning(r)
+      setNowMs(Date.now())
+      confirmed.current = true
+      setError(null)
+      setRevision((n) => n + 1)
+    } catch {
+      if (mounted.current && token === version.current) {
+        confirmed.current = false
+        setError('Não foi possível confirmar o cronômetro. Tente novamente antes de iniciar outro.')
+      }
+    } finally {
+      if (mounted.current && token === version.current) setIsReconciling(false)
     }
-    if (!reconciled.current) {
-      reconciled.current = true
+  }, [])
+
+  useEffect(() => {
+    ++version.current
+    confirmed.current = false
+    setRunning(null)
+    setPending(null)
+    setError(null)
+    if (isAuthenticated) {
       reconcile()
+    } else {
+      setIsReconciling(false)
     }
-  }, [isAuthenticated, reconcile])
+  }, [isAuthenticated, user?.id, reconcile])
 
   useEffect(() => {
     if (!isAuthenticated) return
     const onVisible = () => {
       if (document.visibilityState === 'visible') reconcile()
     }
-    const onFocus = () => reconcile()
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'ginga-time-refresh') reconcile()
+    }
     document.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onFocus)
+    window.addEventListener('focus', reconcile)
+    window.addEventListener('ginga-time-changed', reconcile)
+    window.addEventListener('storage', onStorage)
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('focus', reconcile)
+      window.removeEventListener('ginga-time-changed', reconcile)
+      window.removeEventListener('storage', onStorage)
     }
   }, [isAuthenticated, reconcile])
 
+  const operate = useCallback(
+    async (op: PendingOp, work: () => Promise<TimeEntry>): Promise<TimeServiceError | null> => {
+      if (busy.current)
+        return new TimeServiceError('Aguarde a confirmação da operação anterior.', 409, 'pending')
+      if (!confirmed.current && (op.kind === 'start' || op.kind === 'resume')) {
+        return new TimeServiceError(
+          'Confirme o cronômetro no servidor antes de iniciar.',
+          409,
+          'unconfirmed',
+        )
+      }
+      busy.current = true
+      const owner = pb.authStore.record?.id
+      const token = ++version.current
+      setIsReconciling(false)
+      setPending(op)
+      setError(null)
+      let failure: TimeServiceError | null = null
+      try {
+        const entry = await work()
+        if (!mounted.current || token !== version.current || pb.authStore.record?.id !== owner)
+          return null
+        setRunning(
+          entry.status === 'running' ||
+            (entry.status === 'paused' && !entry.is_deleted && !entry.resumed_by)
+            ? entry
+            : null,
+        )
+        setNowMs(Date.now())
+        setRevision((n) => n + 1)
+      } catch (err) {
+        failure =
+          err instanceof TimeServiceError
+            ? err
+            : new TimeServiceError('Operação sem confirmação.', 502, 'uncertain')
+        if (mounted.current && token === version.current) setError(failure.message)
+      } finally {
+        busy.current = false
+        if (mounted.current && token === version.current) setPending(null)
+      }
+      if (mounted.current && pb.authStore.record?.id === owner) {
+        await reconcile()
+        if (failure) setError(failure.message)
+      }
+      return failure
+    },
+    [reconcile],
+  )
+
   const startTimer = useCallback(
-    async (targetType: TimeTargetType, targetId: string, title: string) => {
-      if (pending) {
-        const err = new TimeServiceError('Operação anterior ainda não confirmada.', 409, 'pending')
-        setError(err.message)
-        return err
-      }
-      setPending({ kind: 'start', targetId, message: title })
-      setError(null)
-      try {
-        const entry = await timeService.start(targetType, targetId)
-        setRunning(entry)
-        setNowMs(Date.now())
-        return null
-      } catch (err) {
-        const e = err as TimeServiceError
-        setError(e.message)
-        // Estado do servidor pode ter mudado: reconcilia (mostra o ativo).
-        if (e.status === 409) reconcile()
-        return e
-      } finally {
-        setPending(null)
-      }
-    },
-    [pending, reconcile],
+    (type: TimeTargetType, id: string, title: string) =>
+      operate({ kind: 'start', targetId: id, message: title }, () => timeService.start(type, id)),
+    [operate],
   )
-
-  const stopWith = useCallback(
-    async (kind: 'pause' | 'end') => {
-      if (!running) return null
-      if (pending) {
-        const err = new TimeServiceError('Operação anterior ainda não confirmada.', 409, 'pending')
-        setError(err.message)
-        return err
-      }
-      const entryId = running.id
-      setPending({ kind, targetId: entryId, message: running.target_title || '' })
-      setError(null)
-      try {
-        const entry = await timeService.stop(entryId, kind)
-        setRunning(null)
-        return null
-      } catch (err) {
-        const e = err as TimeServiceError
-        setError(e.message)
-        reconcile()
-        return e
-      } finally {
-        setPending(null)
-      }
-    },
-    [running, pending, reconcile],
+  const pauseTimer = useCallback(
+    () =>
+      running
+        ? operate(
+            { kind: 'pause', targetId: running.id, message: running.target_title || '' },
+            () => timeService.stop(running.id, 'pause'),
+          )
+        : Promise.resolve(null),
+    [running, operate],
   )
-
-  const pauseTimer = useCallback(() => stopWith('pause'), [stopWith])
-  const endTimer = useCallback(() => stopWith('end'), [stopWith])
-
+  const endTimer = useCallback(
+    () =>
+      running
+        ? operate({ kind: 'end', targetId: running.id, message: running.target_title || '' }, () =>
+            timeService.stop(running.id, 'end'),
+          )
+        : Promise.resolve(null),
+    [running, operate],
+  )
   const resumeTimer = useCallback(
-    async (entryId: string) => {
-      if (pending) {
-        const err = new TimeServiceError('Operação anterior ainda não confirmada.', 409, 'pending')
-        setError(err.message)
-        return err
-      }
-      setPending({ kind: 'resume', targetId: entryId, message: running?.target_title || '' })
-      setError(null)
-      try {
-        const entry = await timeService.resume(entryId)
-        setRunning(entry)
-        setNowMs(Date.now())
-        return null
-      } catch (err) {
-        const e = err as TimeServiceError
-        setError(e.message)
-        if (e.status === 409) reconcile()
-        return e
-      } finally {
-        setPending(null)
-      }
-    },
-    [pending, running, reconcile],
+    (id: string) =>
+      operate({ kind: 'resume', targetId: id, message: running?.target_title || '' }, () =>
+        timeService.resume(id),
+      ),
+    [running, operate],
   )
-
-  const value = useMemo<TimeContextValue>(
+  const value = useMemo(
     () => ({
       running,
       isReconciling,
       pending,
       error,
+      revision,
+      nowMs,
       startTimer,
       pauseTimer,
       endTimer,
       resumeTimer,
       reconcile,
-      nowMs,
     }),
     [
       running,
       isReconciling,
       pending,
       error,
+      revision,
+      nowMs,
       startTimer,
       pauseTimer,
       endTimer,
       resumeTimer,
       reconcile,
-      nowMs,
     ],
   )
-
   return <TimeContext.Provider value={value}>{children}</TimeContext.Provider>
 }
-
 export function useTimer(): TimeContextValue {
   const ctx = useContext(TimeContext)
   if (!ctx) throw new Error('useTimer deve ser usado dentro de um TimeProvider')
   return ctx
 }
-
-/** Duração corrente em exibição (derivada do started_at persistido). */
 export function useRunningSeconds(): number {
   const { running, nowMs } = useTimer()
+  if (running?.status === 'paused') return running.duration_seconds || 0
   return currentRunningSeconds(running, nowMs)
 }

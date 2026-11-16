@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { ActionItem, ActionStatus, Project } from '@/types/execution'
+import { TimeEntry, timeService } from '@/services/timeService'
 import { actionService } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
 import {
@@ -31,6 +32,7 @@ import {
 } from 'lucide-react'
 import { todayInZone, ownerTimezone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
+import { useTimer } from '@/contexts/TimeContext'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'projeto pausado'
@@ -50,15 +52,27 @@ function errorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
+function groupTimeEntriesByAction(entries: TimeEntry[]): Record<string, TimeEntry[]> {
+  return entries.reduce<Record<string, TimeEntry[]>>((grouped, entry) => {
+    if (!entry.action_id) return grouped
+    ;(grouped[entry.action_id] ??= []).push(entry)
+    return grouped
+  }, {})
+}
+
 export const TodayPage: React.FC = () => {
   const { user } = useAuth()
   const { contextFilter } = useGlobalFilter()
   const { toast } = useToast()
+  const { revision } = useTimer()
 
   const [actions, setActions] = useState<ActionItem[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [timeLoading, setTimeLoading] = useState(true)
+  const [timeError, setTimeError] = useState<string | null>(null)
 
   // FATIA 3 — gravação em andamento (impede submissão duplicada por controle)
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
@@ -99,6 +113,30 @@ export const TodayPage: React.FC = () => {
     loadData()
   }, [loadData])
 
+  const loadTimeEntries = useCallback(async () => {
+    const actionIds = [...new Set(actions.map((action) => action.id))]
+    if (actionIds.length === 0) {
+      setTimeEntries([])
+      setTimeError(null)
+      setTimeLoading(false)
+      return
+    }
+    setTimeLoading(true)
+    setTimeError(null)
+    try {
+      const list = await timeService.listByActions(actionIds)
+      setTimeEntries(list)
+    } catch (err: unknown) {
+      setTimeError(errorMessage(err, 'Não foi possível carregar o tempo das ações.'))
+    } finally {
+      setTimeLoading(false)
+    }
+  }, [actions])
+
+  useEffect(() => {
+    if (!isLoading) void loadTimeEntries()
+  }, [isLoading, loadTimeEntries, revision])
+
   // FATIA 2 — resolvedor de situação REAL do projeto: usa a lista carregada do
   // backend (mesma consulta). Nunca assume "ativo" para relação não carregada:
   // sem expand e fora da lista = impedimento visível na seção Reavaliar.
@@ -106,6 +144,26 @@ export const TodayPage: React.FC = () => {
     (a: ActionItem): Project | null | undefined => resolveProjectState(a, projects),
     [projects],
   )
+  const timeEntriesByAction = useMemo(() => groupTimeEntriesByAction(timeEntries), [timeEntries])
+  const renderActionTimeControl = (action: ActionItem) => {
+    const actionProject = resolveProject(action)
+    return (
+      <TimeControl
+        targetType="action"
+        targetId={action.id}
+        targetTitle={action.title}
+        contextLabel={actionProject?.title ?? ''}
+        targetStatus={action.status}
+        projectStatus={actionProject?.status ?? null}
+        actionHasProject={Boolean(action.project_id)}
+        entries={timeEntriesByAction[action.id] ?? []}
+        entriesLoading={timeLoading}
+        entriesError={timeError}
+        onRetryEntries={loadTimeEntries}
+        onChanged={loadTimeEntries}
+      />
+    )
+  }
 
   // FATIA 2 — RENDERIZAÇÃO do foco já escolhido: pronta ou em andamento, e
   // nunca se o projeto estiver pausado/arquivado/encerrado, mesmo com flags antigas.
@@ -342,6 +400,21 @@ export const TodayPage: React.FC = () => {
         </div>
       )}
 
+      {timeError && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-destructive">
+              Falha ao carregar tempos das ações.
+            </p>
+            <p className="mt-0.5 text-xs text-destructive">{timeError}</p>
+            <Button size="sm" variant="outline" onClick={loadTimeEntries} className="mt-2 text-xs">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* 1. SEÇÃO PRINCIPAL: Próximo Avanço (singular, deliberado) */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -375,6 +448,7 @@ export const TodayPage: React.FC = () => {
               onToggleTodaySelected={handleToggleTodaySelected}
               onStatusChange={handleStatusChange}
               onOpenLogModal={setLogModalAction}
+              timeControl={renderActionTimeControl(nextAdvanceAction)}
               onEdit={(a) => {
                 setEditingAction(a)
                 setIsActionModalOpen(true)
@@ -415,6 +489,7 @@ export const TodayPage: React.FC = () => {
                 onToggleTodaySelected={handleToggleTodaySelected}
                 onStatusChange={handleStatusChange}
                 onOpenLogModal={setLogModalAction}
+                timeControl={renderActionTimeControl(action)}
                 onEdit={(a) => {
                   setEditingAction(a)
                   setIsActionModalOpen(true)
@@ -459,6 +534,7 @@ export const TodayPage: React.FC = () => {
                 onToggleTodaySelected={handleToggleTodaySelected}
                 onStatusChange={handleStatusChange}
                 onOpenLogModal={setLogModalAction}
+                timeControl={renderActionTimeControl(action)}
                 onEdit={(a) => {
                   setEditingAction(a)
                   setIsActionModalOpen(true)
@@ -520,6 +596,7 @@ export const TodayPage: React.FC = () => {
                       onToggleTodaySelected={handleToggleTodaySelected}
                       onStatusChange={handleStatusChange}
                       onOpenLogModal={setLogModalAction}
+                      timeControl={renderActionTimeControl(action)}
                       onEdit={(a) => {
                         setEditingAction(a)
                         setIsActionModalOpen(true)
@@ -551,6 +628,7 @@ export const TodayPage: React.FC = () => {
                         onToggleTodaySelected={handleToggleTodaySelected}
                         onStatusChange={handleStatusChange}
                         onOpenLogModal={setLogModalAction}
+                        timeControl={renderActionTimeControl(action)}
                         onEdit={(a) => {
                           setEditingAction(a)
                           setIsActionModalOpen(true)

@@ -17,6 +17,7 @@ import {
 import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
+import { useTimer } from '@/contexts/TimeContext'
 
 /** Símbolo temporário: monograma G + nome, até haver asset oficial no projeto. */
 function GingaMark() {
@@ -33,6 +34,7 @@ function GingaMark() {
 export default function Layout() {
   const { user, logout } = useAuth()
   const { contextFilter, setContextFilter } = useGlobalFilter()
+  const { running, error } = useTimer()
 
   const navItems = [
     { to: '/', label: 'Hoje', icon: SunMedium },
@@ -161,7 +163,14 @@ export default function Layout() {
           <div className="mx-auto w-full max-w-[1080px]">{contextSwitcher}</div>
         </div>
 
-        <main className="mx-auto w-full max-w-[1080px] flex-1 px-4 py-6 pb-[calc(env(safe-area-inset-bottom)+6rem)] lg:px-8 lg:py-8 lg:pb-8">
+        <main
+          className={cn(
+            'mx-auto w-full max-w-[1080px] flex-1 px-4 py-6 lg:px-8 lg:py-8',
+            running || error
+              ? 'pb-[calc(env(safe-area-inset-bottom)+14rem)] lg:pb-32'
+              : 'pb-[calc(env(safe-area-inset-bottom)+6rem)] lg:pb-8',
+          )}
+        >
           <Outlet />
         </main>
       </div>

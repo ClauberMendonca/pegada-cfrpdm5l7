@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T16:23:06.651Z",
+  "generatedAt": "2026-11-16T18:07:15.359Z",
   "collections": [
     {
       "name": "users",
@@ -623,7 +623,7 @@
         {
           "name": "duration_seconds",
           "type": "number",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -713,6 +713,24 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "target_title",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "operation_history",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resumed_by",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

@@ -42,7 +42,7 @@ export function statusLabel(entry: TimeEntry): string {
 
 /** Correção identificável: tem valores anteriores preservados. */
 export function isCorrectedEntry(entry: TimeEntry): boolean {
-  return Boolean(entry.correction_of) || entry.previous_duration_seconds != null
+  return Boolean(entry.correction_of)
 }
 
 /**
@@ -51,7 +51,7 @@ export function isCorrectedEntry(entry: TimeEntry): boolean {
  */
 export function currentRunningSeconds(entry: TimeEntry | null, nowMs: number): number {
   if (!entry || !entry.started_at) return 0
-  const startedMs = Date.parse(entry.started_at)
+  const startedMs = Date.parse(entry.started_at.replace(' ', 'T'))
   if (!Number.isFinite(startedMs)) return 0
   return Math.max(0, Math.floor((nowMs - startedMs) / 1000))
 }

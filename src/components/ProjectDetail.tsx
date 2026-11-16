@@ -28,6 +28,7 @@ import {
   PlayCircle,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatCalendarDay } from '@/lib/datetime'
 import { ProjectTimeHistory } from '@/components/TimeControl'
 import { TimeControl } from '@/components/TimeControlCompact'
@@ -48,6 +49,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onProjectUpdated,
 }) => {
   const { toast } = useToast()
+  const { user } = useAuth()
   // FATIA P1C — fuso de referência para instantes (created/updated) e rótulo "hoje".
   const timeTotals = useProjectTimeTotals(projectId)
   const { running } = useTimer()
@@ -59,7 +61,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
 
   // Ações do projeto — apresentação Cards/Lista (chave comum aos detalhes de projeto).
-  const [view, setView] = useViewPreference('detalhe-projeto', undefined)
+  const [view, setView] = useViewPreference('detalhe-projeto', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
   const toggleRow = useCallback((id: string) => {
     setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))

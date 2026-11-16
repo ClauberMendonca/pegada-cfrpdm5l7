@@ -22,6 +22,7 @@ import {
   Play,
   Plus,
   Loader2,
+  Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -35,6 +36,8 @@ interface ActionRowProps {
   onStatusChange?: (id: string, status: ActionStatus, reason?: string) => void
   onOpenLogModal?: (action: ActionItem) => void
   onEdit?: (action: ActionItem) => void
+  /** REGISTRO DE TEMPO V1: controles de tempo embutidos (iniciar/histórico/manual). */
+  timeControl?: React.ReactNode
 }
 
 /** Botão de toque com área mínima de 44×44 px. */
@@ -50,6 +53,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
   onStatusChange,
   onOpenLogModal,
   onEdit,
+  timeControl,
 }) => {
   const [waitingReason, setWaitingReason] = useState('')
   const [showReasonInput, setShowReasonInput] = useState(false)
@@ -219,6 +223,14 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             <p className="mt-2 inline-block rounded-md border border-ginga-warning/30 bg-ginga-warning-bg px-2 py-1 text-sm text-ginga-warning">
               Motivo: {action.waiting_for}
             </p>
+          )}
+
+          {/* REGISTRO DE TEMPO V1: controle de tempo discreto (não substitui progresso/status) */}
+          {timeControl && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+              <Timer className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              {timeControl}
+            </div>
           )}
 
           {/* Segunda linha de controles: registrar progresso com texto visível, estrela e menu */}

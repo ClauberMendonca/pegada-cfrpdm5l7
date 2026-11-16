@@ -4,6 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { FilterProvider } from '@/contexts/FilterContext'
+import { TimeProvider } from '@/contexts/TimeContext'
 import Layout from '@/components/Layout'
 import { TodayPage } from '@/pages/TodayPage'
 import { CapturesPage } from '@/pages/CapturesPage'
@@ -32,15 +33,17 @@ const ProtectedRoutes = () => {
 
   return (
     <FilterProvider>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<TodayPage />} />
-          <Route path="/capturas" element={<CapturesPage />} />
-          <Route path="/projetos" element={<ProjectsPage />} />
-          <Route path="/revisao" element={<ReviewPage />} />
-        </Route>
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <TimeProvider>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<TodayPage />} />
+            <Route path="/capturas" element={<CapturesPage />} />
+            <Route path="/projetos" element={<ProjectsPage />} />
+            <Route path="/revisao" element={<ReviewPage />} />
+          </Route>
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </TimeProvider>
     </FilterProvider>
   )
 }

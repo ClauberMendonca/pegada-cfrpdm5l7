@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
+import { GlobalTimerIndicator } from '@/components/TimeControl'
 
 /** Símbolo temporário: monograma G + nome, até haver asset oficial no projeto. */
 function GingaMark() {
@@ -195,6 +196,9 @@ export default function Layout() {
 
       {/* Modal for setting timezone if owner enters first time */}
       <TimezoneModal />
+
+      {/* REGISTRO DE TEMPO V1: indicador global do cronômetro (compacto, acima da navegação) */}
+      <GlobalTimerIndicator />
     </div>
   )
 }

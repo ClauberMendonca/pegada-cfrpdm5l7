@@ -14,6 +14,7 @@ import {
 import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
+import { TimeControl } from '@/components/TimeControlCompact'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'

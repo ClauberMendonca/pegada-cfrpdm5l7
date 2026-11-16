@@ -30,6 +30,11 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
 import { useAuth } from '@/contexts/AuthContext'
+import { ProjectTimeHistory } from '@/components/TimeControl'
+import { TimeControl } from '@/components/TimeControlCompact'
+import { useProjectTimeTotals } from '@/components/TimeControlCompact'
+import { useRunningSeconds } from '@/contexts/TimeContext'
+import { formatDuration } from '@/lib/timeHelpers'
 
 interface ProjectDetailProps {
   projectId: string

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   SunMedium,
   Inbox,
+  ListChecks,
   FolderKanban,
   Compass,
   LogOut,
@@ -39,6 +40,7 @@ export default function Layout() {
   const navItems = [
     { to: '/', label: 'Hoje', icon: SunMedium },
     { to: '/capturas', label: 'Capturas', icon: Inbox },
+    { to: '/acoes', label: 'Ações', icon: ListChecks },
     { to: '/projetos', label: 'Projetos', icon: FolderKanban },
     { to: '/revisao', label: 'Revisão', icon: Compass },
   ]
@@ -180,7 +182,7 @@ export default function Layout() {
         aria-label="Principal"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        <div className="mx-auto grid max-w-md grid-cols-4">
+        <div className="mx-auto grid max-w-md grid-cols-5">
           {navItems.map((item) => {
             const Icon = item.icon
             return (

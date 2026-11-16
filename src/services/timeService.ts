@@ -198,20 +198,16 @@ export const timeService = {
   async listByTarget(targetType: TimeTargetType, targetId: string): Promise<TimeEntry[]> {
     const field = targetType === 'action' ? 'action_id' : 'project_id'
     const extra = targetType === 'project' ? " && target_type = 'project'" : ''
-    return pb
-      .collection('time_entries')
-      .getFullList<TimeEntry>({
-        filter: ownedFilter(field, targetId, extra),
-        sort: '-entry_date,-created',
-      })
+    return pb.collection('time_entries').getFullList<TimeEntry>({
+      filter: ownedFilter(field, targetId, extra),
+      sort: '-entry_date,-created',
+    })
   },
   async listByProject(projectId: string): Promise<TimeEntry[]> {
-    return pb
-      .collection('time_entries')
-      .getFullList<TimeEntry>({
-        filter: ownedFilter('project_id', projectId),
-        sort: '-entry_date,-created',
-      })
+    return pb.collection('time_entries').getFullList<TimeEntry>({
+      filter: ownedFilter('project_id', projectId),
+      sort: '-entry_date,-created',
+    })
   },
   async listByActions(actionIds: string[]): Promise<TimeEntry[]> {
     if (!actionIds.length) return []
@@ -223,11 +219,9 @@ export const timeService = {
       parameters[`a${i}`] = id
       return `action_id = {:a${i}}`
     })
-    return pb
-      .collection('time_entries')
-      .getFullList<TimeEntry>({
-        filter: pb.filter(`user_id = {:owner} && (${clauses.join(' || ')})`, parameters),
-        sort: '-entry_date,-created',
-      })
+    return pb.collection('time_entries').getFullList<TimeEntry>({
+      filter: pb.filter(`user_id = {:owner} && (${clauses.join(' || ')})`, parameters),
+      sort: '-entry_date,-created',
+    })
   },
 }

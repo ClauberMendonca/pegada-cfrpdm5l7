@@ -8,6 +8,7 @@ import { TimeProvider } from '@/contexts/TimeContext'
 import Layout from '@/components/Layout'
 import { TodayPage } from '@/pages/TodayPage'
 import { CapturesPage } from '@/pages/CapturesPage'
+import { ActionsPage } from '@/pages/ActionsPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ReviewPage } from '@/pages/ReviewPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -38,6 +39,7 @@ const ProtectedRoutes = () => {
           <Route element={<Layout />}>
             <Route path="/" element={<TodayPage />} />
             <Route path="/capturas" element={<CapturesPage />} />
+            <Route path="/acoes" element={<ActionsPage />} />
             <Route path="/projetos" element={<ProjectsPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
           </Route>

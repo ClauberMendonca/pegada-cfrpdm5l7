@@ -1,0 +1,535 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
+import { useGlobalFilter } from '@/contexts/FilterContext'
+import { ActionItem, ActionStatus, Project } from '@/types/execution'
+import { TimeEntry, timeService } from '@/services/timeService'
+import { actionService } from '@/services/actionService'
+import { projectService } from '@/services/projectService'
+import { checkEligibility, isSelectableForFocus, resolveProjectState } from '@/lib/eligibility'
+import { ActionRow } from '@/components/ActionRow'
+import { ActionModal } from '@/components/ActionModal'
+import { ProgressLogModal } from '@/components/ProgressLogModal'
+import { TimeControl } from '@/components/TimeControlCompact'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { ListChecks, Plus, AlertCircle, Search, RotateCcw, Star, SunMedium } from 'lucide-react'
+import { ownerTimezone, todayInZone } from '@/lib/datetime'
+import { useToast } from '@/hooks/use-toast'
+import { useTimer } from '@/contexts/TimeContext'
+import { cn } from '@/lib/utils'
+
+function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'object' && err !== null) {
+    const anyErr = err as { message?: unknown; response?: { message?: unknown } }
+    if (typeof anyErr.message === 'string' && anyErr.message) return anyErr.message
+    if (typeof anyErr.response?.message === 'string' && anyErr.response.message)
+      return anyErr.response.message
+  }
+  return fallback
+}
+
+function groupTimeEntriesByAction(entries: TimeEntry[]): Record<string, TimeEntry[]> {
+  return entries.reduce<Record<string, TimeEntry[]>>((grouped, entry) => {
+    if (!entry.action_id) return grouped
+    ;(grouped[entry.action_id] ??= []).push(entry)
+    return grouped
+  }, {})
+}
+
+const STATUS_OPTIONS: { value: ActionStatus | 'todos'; label: string }[] = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'pronta', label: 'Pronta' },
+  { value: 'em_andamento', label: 'Em andamento' },
+  { value: 'aguardando', label: 'Aguardando' },
+  { value: 'bloqueada', label: 'Bloqueada' },
+  { value: 'feita', label: 'Feita' },
+  { value: 'cancelada', label: 'Cancelada' },
+]
+
+const LINK_OPTIONS: { value: 'todas' | 'sem_projeto' | 'com_projeto'; label: string }[] = [
+  { value: 'todas', label: 'Todas' },
+  { value: 'sem_projeto', label: 'Sem projeto' },
+  { value: 'com_projeto', label: 'Com projeto' },
+]
+
+export const ActionsPage: React.FC = () => {
+  const { user } = useAuth()
+  const { contextFilter } = useGlobalFilter()
+  const { toast } = useToast()
+  const { revision } = useTimer()
+
+  const [actions, setActions] = useState<ActionItem[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [timeLoading, setTimeLoading] = useState(true)
+  const [timeError, setTimeError] = useState<string | null>(null)
+
+  // Filtros locais do catálogo (não mexem no filtro global nem no recorte do Hoje).
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<ActionStatus | 'todos'>('todos')
+  const [linkFilter, setLinkFilter] = useState<'todas' | 'sem_projeto' | 'com_projeto'>('todas')
+
+  // FATIA 3 — gravação em andamento (impede submissão duplicada por controle).
+  const [savingActionId, setSavingActionId] = useState<string | null>(null)
+
+  // Modals state
+  const [isActionModalOpen, setIsActionModalOpen] = useState(false)
+  const [editingAction, setEditingAction] = useState<ActionItem | null>(null)
+  const [logModalAction, setLogModalAction] = useState<ActionItem | null>(null)
+
+  // FATIA P1C — "hoje" no fuso do dono (fonte única: lib/datetime).
+  const todayStr = todayInZone(ownerTimezone(user?.timezone))
+
+  // Catálogo: TODAS as ações do dono no contexto global (sem recorte de Hoje,
+  // sem filtro de elegibilidade — ações de projetos pausados/concluídos/arquivados
+  // continuam localizáveis). Consulta conjunta, sem chamada por linha.
+  const loadData = useCallback(async () => {
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      const filterContext = contextFilter === 'todos' ? undefined : contextFilter
+      const [allActions, allProjects] = await Promise.all([
+        actionService.list(filterContext),
+        projectService.list(filterContext),
+      ])
+      setActions(allActions)
+      setProjects(allProjects)
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Erro ao carregar dados. Verifique sua conexão e tente novamente.',
+      )
+      setLoadError(msg)
+      toast({ variant: 'destructive', title: 'Erro ao carregar', description: msg })
+    } finally {
+      setIsLoading(false)
+    }
+  }, [contextFilter, toast])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const loadTimeEntries = useCallback(async () => {
+    const actionIds = [...new Set(actions.map((action) => action.id))]
+    if (actionIds.length === 0) {
+      setTimeEntries([])
+      setTimeError(null)
+      setTimeLoading(false)
+      return
+    }
+    setTimeLoading(true)
+    setTimeError(null)
+    try {
+      const list = await timeService.listByActions(actionIds)
+      setTimeEntries(list)
+    } catch (err: unknown) {
+      setTimeError(errorMessage(err, 'Não foi possível carregar o tempo das ações.'))
+    } finally {
+      setTimeLoading(false)
+    }
+  }, [actions])
+
+  useEffect(() => {
+    if (!isLoading) void loadTimeEntries()
+  }, [isLoading, loadTimeEntries, revision])
+
+  // FATIA 2 — resolvedor de situação REAL do projeto: usa a lista carregada do
+  // backend (mesma consulta). Nunca assume "ativo" para relação não carregada.
+  const resolveProject = useCallback(
+    (a: ActionItem): Project | null | undefined => resolveProjectState(a, projects),
+    [projects],
+  )
+
+  const timeEntriesByAction = useMemo(() => groupTimeEntriesByAction(timeEntries), [timeEntries])
+
+  const renderActionTimeControl = (action: ActionItem) => {
+    const actionProject = resolveProject(action)
+    return (
+      <TimeControl
+        targetType="action"
+        targetId={action.id}
+        targetTitle={action.title}
+        contextLabel={actionProject?.title ?? ''}
+        targetStatus={action.status}
+        projectStatus={actionProject?.status ?? null}
+        actionHasProject={Boolean(action.project_id)}
+        entries={timeEntriesByAction[action.id] ?? []}
+        entriesLoading={timeLoading}
+        entriesError={timeError}
+        onRetryEntries={loadTimeEntries}
+        onChanged={loadTimeEntries}
+      />
+    )
+  }
+
+  // Catálogo filtrado: busca + status + vínculo. O filtro global de contexto já
+  // veio da consulta; aqui só recorta a exibição local.
+  const filteredActions = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return actions.filter((a) => {
+      if (query && !a.title.toLowerCase().includes(query)) return false
+      if (statusFilter !== 'todos' && a.status !== statusFilter) return false
+      if (linkFilter === 'sem_projeto' && a.project_id) return false
+      if (linkFilter === 'com_projeto' && !a.project_id) return false
+      return true
+    })
+  }, [actions, search, statusFilter, linkFilter])
+
+  const hasActiveLocalFilters =
+    search.trim() !== '' || statusFilter !== 'todos' || linkFilter !== 'todas'
+
+  const clearLocalFilters = () => {
+    setSearch('')
+    setStatusFilter('todos')
+    setLinkFilter('todas')
+  }
+
+  // FATIA 2 + FATIA 3 — seleção de foco com a MESMA regra compartilhada do Hoje;
+  // estado pendente; sucesso só após confirmação real do backend.
+  const handleToggleNextStep = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    const action = actions.find((a) => a.id === id)
+    if (!current && action) {
+      const check = checkEligibility(action, resolveProject(action))
+      if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
+        toast({
+          variant: 'destructive',
+          title: 'Não é possível selecionar',
+          description:
+            check.label ||
+            'Somente ações "pronta" podem ser o próximo avanço único. Tente outra ação ou reavalie esta.',
+        })
+        return
+      }
+    }
+    setSavingActionId(id)
+    try {
+      if (current) {
+        await actionService.unsetNextStep(id)
+      } else {
+        await actionService.setAsNextStep(id)
+      }
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({ variant: 'destructive', title: 'Falha ao gravar escolha', description: msg })
+    } finally {
+      setSavingActionId(null)
+    }
+  }
+
+  const handleToggleTodaySelected = async (id: string, current: boolean) => {
+    if (savingActionId) return
+    const action = actions.find((a) => a.id === id)
+    if (!current && action) {
+      const check = checkEligibility(action, resolveProject(action))
+      if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
+        toast({
+          variant: 'destructive',
+          title: 'Não é possível selecionar',
+          description:
+            check.label ||
+            'Somente ações "pronta" podem ir para as Poucas Ações de Hoje. Tente outra ação ou reavalie esta.',
+        })
+        return
+      }
+    }
+    setSavingActionId(id)
+    try {
+      await actionService.setTodaySelected(id, !current)
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({ variant: 'destructive', title: 'Falha ao gravar escolha', description: msg })
+    } finally {
+      setSavingActionId(null)
+    }
+  }
+
+  const handleStatusChange = async (id: string, status: ActionStatus, reason?: string) => {
+    if (savingActionId) return
+    setSavingActionId(id)
+    try {
+      await actionService.updateStatus(id, status, reason)
+      await loadData()
+    } catch (err: unknown) {
+      const msg = errorMessage(
+        err,
+        'Não foi possível gravar. Verifique a conexão e tente novamente.',
+      )
+      toast({ variant: 'destructive', title: 'Falha ao atualizar status', description: msg })
+    } finally {
+      setSavingActionId(null)
+    }
+  }
+
+  const handleModalSaved = () => {
+    void loadData()
+  }
+
+  const renderActionRow = (action: ActionItem) => {
+    const project = resolveProject(action)
+    const linkLabel = project ? project.title : action.project_id ? 'vínculo indisponível' : null
+    return (
+      <div key={action.id} className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+          {/* Vínculo: título do projeto carregado, ou indisponível sem inventar projeto. */}
+          {linkLabel && (
+            <span
+              className={cn('inline-flex items-center gap-1', !project && 'text-ginga-warning')}
+            >
+              {project ? (
+                <span className="truncate">Projeto: {project.title}</span>
+              ) : (
+                <span>Vínculo de projeto indisponível</span>
+              )}
+            </span>
+          )}
+          {!linkLabel && <span>Sem projeto</span>}
+          {project && ['pausado', 'arquivado', 'concluido'].includes(project.status) && (
+            <Badge variant="outline" className="text-[10px] uppercase">
+              {project.status}
+            </Badge>
+          )}
+          {action.deadline && (
+            <span className="tabular-nums">
+              Prazo: {action.deadline}
+              {action.deadline < todayStr &&
+              action.status !== 'feita' &&
+              action.status !== 'cancelada'
+                ? ' (atrasada)'
+                : ''}
+            </span>
+          )}
+          {action.is_next_step && (
+            <span className="inline-flex items-center gap-1 text-ginga-warning">
+              <Star className="h-3 w-3 fill-current" aria-hidden="true" />
+              Próximo avanço
+            </span>
+          )}
+          {!action.is_next_step && action.is_today_selected && (
+            <span className="inline-flex items-center gap-1 text-primary">
+              <SunMedium className="h-3 w-3" aria-hidden="true" />
+              Selecionada para Hoje
+            </span>
+          )}
+        </div>
+        <ActionRow
+          action={action}
+          saving={savingActionId === action.id}
+          onToggleNextStep={handleToggleNextStep}
+          onToggleTodaySelected={handleToggleTodaySelected}
+          onStatusChange={handleStatusChange}
+          onOpenLogModal={setLogModalAction}
+          timeControl={renderActionTimeControl(action)}
+          onEdit={(a) => {
+            setEditingAction(a)
+            setIsActionModalOpen(true)
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Cabeçalho */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-ginga-info-bg text-ginga-info border border-ginga-info/30">
+              <ListChecks className="w-4 h-4" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Ações</h2>
+            {contextFilter !== 'todos' && (
+              <Badge
+                variant="outline"
+                className="text-xs uppercase font-medium border-border text-foreground bg-muted"
+              >
+                Filtro: {contextFilter}
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Catálogo completo de todas as suas ações, com ou sem projeto, independentemente da
+            seleção para Hoje. Hoje continua sendo um recorte deliberado, não o catálogo.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setEditingAction(null)
+              setIsActionModalOpen(true)
+            }}
+            disabled={savingActionId !== null}
+            className="gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Ação
+          </Button>
+        </div>
+      </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-destructive font-medium">Falha ao carregar o catálogo.</p>
+            <p className="text-xs text-destructive mt-0.5">{loadError}</p>
+            <Button size="sm" variant="outline" onClick={loadData} className="mt-2 text-xs">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {timeError && (
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-destructive">
+              Falha ao carregar tempos das ações.
+            </p>
+            <p className="mt-0.5 text-xs text-destructive">{timeError}</p>
+            <Button size="sm" variant="outline" onClick={loadTimeEntries} className="mt-2 text-xs">
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Busca + filtros locais */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por título…"
+            aria-label="Buscar ações por título"
+            className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
+          />
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(val) => setStatusFilter(val as ActionStatus | 'todos')}
+        >
+          <SelectTrigger
+            aria-label="Filtrar por status"
+            className="min-h-11 w-full border-input bg-card text-base text-foreground sm:w-44 sm:text-sm"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-popover text-popover-foreground">
+            {STATUS_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                Status: {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={linkFilter} onValueChange={(val) => setLinkFilter(val as typeof linkFilter)}>
+          <SelectTrigger
+            aria-label="Filtrar por vínculo de projeto"
+            className="min-h-11 w-full border-input bg-card text-base text-foreground sm:w-40 sm:text-sm"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-popover text-popover-foreground">
+            {LINK_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                Vínculo: {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Lista */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground">Carregando ações…</span>
+          </div>
+        </div>
+      ) : filteredActions.length === 0 ? (
+        /* Vazio: distingue "nenhuma cadastrada" de "nada corresponde aos filtros". */
+        <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
+          {actions.length === 0 ? (
+            <>
+              <p className="text-sm font-medium text-muted-foreground">
+                Nenhuma ação cadastrada ainda.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+                Crie sua primeira ação com "Nova Ação" — não precisa estar vinculada a um projeto.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-muted-foreground">
+                Nenhuma ação corresponde aos filtros atuais.
+              </p>
+              {hasActiveLocalFilters && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={clearLocalFilters}
+                  className="mt-3 gap-1.5 text-xs"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  Limpar filtros
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-3">{filteredActions.map(renderActionRow)}</div>
+      )}
+
+      {/* Action Create/Edit Modal */}
+      <ActionModal
+        isOpen={isActionModalOpen}
+        onClose={() => {
+          setIsActionModalOpen(false)
+          setEditingAction(null)
+        }}
+        actionToEdit={editingAction}
+        defaultContext={contextFilter === 'todos' ? 'trabalho' : contextFilter}
+        onSaved={handleModalSaved}
+      />
+
+      {/* Progress Log Modal */}
+      <ProgressLogModal
+        isOpen={Boolean(logModalAction)}
+        onClose={() => setLogModalAction(null)}
+        action={logModalAction}
+        onSaved={handleModalSaved}
+      />
+    </div>
+  )
+}

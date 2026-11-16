@@ -462,7 +462,8 @@ export const TodayPage: React.FC = () => {
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
               Escolha deliberadamente uma ação "pronta" da sua lista (estrela) para torná-la o foco
-              do dia. Nada é promovido automaticamente.
+              do dia. Nada é promovido automaticamente. O catálogo completo está em{' '}
+              <span className="font-medium text-foreground">Ações</span>.
             </p>
           </div>
         )}
@@ -500,8 +501,9 @@ export const TodayPage: React.FC = () => {
         ) : (
           <div className="rounded-xl border border-border bg-muted p-4 text-center">
             <p className="text-xs text-muted-foreground">
-              Nenhuma outra ação secundária selecionada para hoje. Você pode navegar em Projetos e
-              marcar as que deseja puxar.
+              Nenhuma outra ação secundária selecionada para hoje. Você pode puxar mais do catálogo
+              em <span className="font-medium text-foreground">Ações</span> — o recorte de Hoje
+              continua sendo escolha deliberada, não o catálogo completo.
             </p>
           </div>
         )}

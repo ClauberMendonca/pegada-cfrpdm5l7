@@ -25,6 +25,7 @@ import {
   Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { ActionDescriptionBlock } from '@/components/ActionDescriptionBlock'
 
 interface ActionRowProps {
   action: ActionItem
@@ -224,6 +225,12 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               Motivo: {action.waiting_for}
             </p>
           )}
+
+          {/* DESCRIÇÃO OPCIONAL: leitura completa inline, antes dos controles de execução */}
+          <ActionDescriptionBlock
+            description={action.description}
+            idPrefix={`action-${action.id}`}
+          />
 
           {/* REGISTRO DE TEMPO V1: controle de tempo discreto (não substitui progresso/status) */}
           {timeControl && (

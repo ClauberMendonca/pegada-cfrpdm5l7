@@ -228,6 +228,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           is_next_step: expanded.getBool('is_next_step'),
           is_today_selected: expanded.getBool('is_today_selected'),
           waiting_for: expanded.getString('waiting_for'),
+          description: expanded.getString('description'),
           expand: expanded.expand('project_id')
             ? { project_id: expanded.expand('project_id') }
             : undefined,

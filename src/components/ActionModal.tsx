@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -49,6 +50,10 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [isNextStep, setIsNextStep] = useState(false)
   const [isTodaySelected, setIsTodaySelected] = useState(false)
   const [waitingFor, setWaitingFor] = useState('')
+  // DESCRIÇÃO OPCIONAL: texto livre de notas/orientações. Carrega no editar,
+  // inicia vazio na criação, aceita multilinha/colagem e envia string vazia
+  // explícita ao limpar — nunca herda o valor anterior.
+  const [description, setDescription] = useState('')
   const [projects, setProjects] = useState<Project[]>([])
   const [isSaving, setIsSaving] = useState(false)
 
@@ -74,6 +79,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsNextStep(Boolean(actionToEdit.is_next_step))
         setIsTodaySelected(Boolean(actionToEdit.is_today_selected))
         setWaitingFor(actionToEdit.waiting_for || '')
+        setDescription(typeof actionToEdit.description === 'string' ? actionToEdit.description : '')
       } else {
         setTitle('')
         setContext(defaultContext)
@@ -83,6 +89,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsNextStep(false)
         setIsTodaySelected(true)
         setWaitingFor('')
+        setDescription('')
       }
     }
   }, [isOpen, actionToEdit, defaultContext, defaultProjectId])
@@ -104,6 +111,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         is_next_step: isNextStep,
         is_today_selected: isTodaySelected || isNextStep,
         waiting_for: waitingFor.trim() || undefined,
+        // DESCRIÇÃO OPCIONAL: preserva quebras de linha e acentos; vazio segue
+        // explícito (string ''), nunca undefined — limpar o campo apaga no banco.
+        // Sem truncamento silencioso; PocketBase rejeita acima de 20000 e o
+        // erro aparece visível com o texto preservado no formulário.
+        description: description,
       }
 
       if (actionToEdit) {
@@ -150,6 +162,30 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="actionDescription" className="text-sm font-medium text-foreground">
+              Descrição e notas (opcional)
+            </Label>
+            <Textarea
+              id="actionDescription"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Detalhes, orientações e informações úteis para executar esta ação."
+              aria-describedby="actionDescriptionHelp"
+              maxLength={20000}
+              rows={4}
+              className="min-h-24 border-input bg-card text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
+            />
+            <p id="actionDescriptionHelp" className="text-sm text-muted-foreground">
+              O que você precisa saber antes de agir?
+              {description.length > 18000 && (
+                <span className="ml-1 font-medium text-ginga-warning">
+                  {description.length}/20000 caracteres (limite)
+                </span>
+              )}
+            </p>
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

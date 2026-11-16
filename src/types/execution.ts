@@ -59,6 +59,7 @@ export interface ActionItem {
   is_next_step: boolean // Próximo avanço do Hoje
   is_today_selected: boolean // Selecionada explicitamente para Hoje
   waiting_for?: string // motivo de aguardando / bloqueada
+  description?: string // notas/orientações de execução (opcional; ausente = vazio)
   created: string
   updated: string
   // expand relation optional

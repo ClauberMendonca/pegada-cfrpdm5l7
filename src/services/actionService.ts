@@ -4,6 +4,8 @@ import { ActionItem, EntityContext, ActionStatus } from '@/types/execution'
 export interface CreateActionInput {
   title: string
   context: EntityContext
+  /** DESCRIÇÃO OPCIONAL: texto livre de notas/orientações (não é waiting_for). */
+  description?: string
   project_id?: string
   status?: ActionStatus
   deadline?: string

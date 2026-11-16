@@ -25,6 +25,7 @@ import { ownerTimezone, todayInZone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
 import { cn } from '@/lib/utils'
+import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
@@ -82,6 +83,13 @@ export const ActionsPage: React.FC = () => {
 
   // FATIA 3 — gravação em andamento (impede submissão duplicada por controle).
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
+
+  // Catálogo de Ações — apresentação Cards/Lista (preferência por dono nesta área).
+  const [view, setView] = useViewPreference('acoes', user?.id)
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
+  const toggleRow = useCallback((id: string) => {
+    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
 
   // Modals state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -374,7 +382,8 @@ export const ActionsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewToggle view={view} onChange={setView} />
           <Button
             onClick={() => {
               setEditingAction(null)
@@ -507,8 +516,24 @@ export const ActionsPage: React.FC = () => {
             </>
           )}
         </div>
-      ) : (
+      ) : view === 'cards' ? (
         <div className="grid gap-3">{filteredActions.map(renderActionRow)}</div>
+      ) : (
+        /* Lista: apenas o título em cada linha; abrir expande a apresentação
+           completa existente (descrição, comandos, tempo) — recolher só altera
+           a visualização, sem encerrar cronômetro nem gravar nada. */
+        <div className="grid gap-2">
+          {filteredActions.map((action) => (
+            <ListRow
+              key={action.id}
+              title={action.title}
+              open={Boolean(openRows[action.id])}
+              onToggle={() => toggleRow(action.id)}
+            >
+              {renderActionRow(action)}
+            </ListRow>
+          ))}
+        </div>
       )}
 
       {/* Action Create/Edit Modal */}

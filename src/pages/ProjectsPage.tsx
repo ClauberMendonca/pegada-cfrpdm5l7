@@ -19,6 +19,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
 import { useAuth } from '@/contexts/AuthContext'
+import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
 export const ProjectsPage: React.FC = () => {
   const { toast } = useToast()
@@ -33,6 +34,9 @@ export const ProjectsPage: React.FC = () => {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
 
   const [isLoading, setIsLoading] = useState(true)
+
+  // Projetos — apresentação Cards/Lista (preferência por dono nesta área).
+  const [view, setView] = useViewPreference('projetos', user?.id)
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true)
@@ -111,7 +115,8 @@ export const ProjectsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <ViewToggle view={view} onChange={setView} />
           <Button onClick={() => setIsProjectModalOpen(true)} className="gap-1.5 shadow-sm">
             <Plus className="w-4 h-4" />
             Novo Projeto
@@ -148,6 +153,19 @@ export const ProjectsPage: React.FC = () => {
           <p className="text-xs text-muted-foreground mt-1">
             Crie um novo projeto para gerenciar aspiração e entregas controláveis.
           </p>
+        </div>
+      ) : view === 'list' ? (
+        /* Lista: título abre o detalhe existente do projeto, sem ficha/modal paralelo. */
+        <div className="grid gap-2">
+          {projects.map((project) => (
+            <ListRow
+              key={project.id}
+              title={project.title}
+              open={false}
+              onToggle={() => setSelectedProjectId(project.id)}
+              hint={getStatusBadge(project.status)}
+            />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -34,6 +34,7 @@ import { TimeControl } from '@/components/TimeControlCompact'
 import { useProjectTimeTotals } from '@/components/TimeControlCompact'
 import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
+import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
 interface ProjectDetailProps {
   projectId: string
@@ -56,6 +57,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [isLoading, setIsLoading] = useState(true)
   // FATIA 3 — gravação em andamento (impede submissão duplicada)
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
+
+  // Ações do projeto — apresentação Cards/Lista (chave comum aos detalhes de projeto).
+  const [view, setView] = useViewPreference('detalhe-projeto', undefined)
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
+  const toggleRow = useCallback((id: string) => {
+    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
 
   // Modals
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -518,17 +526,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </p>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => {
-              setEditingAction(null)
-              setIsActionModalOpen(true)
-            }}
-            className="text-xs gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            Adicionar Ação
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ViewToggle view={view} onChange={setView} />
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingAction(null)
+                setIsActionModalOpen(true)
+              }}
+              className="text-xs gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar Ação
+            </Button>
+          </div>
         </div>
 
         {actions.length === 0 ? (
@@ -542,24 +553,30 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {activeActions.length > 0 && (
               <div className="grid gap-2.5">
                 {activeActions.map((action) => (
-                  <ActionRow
+                  <ListRow
                     key={action.id}
-                    action={action}
-                    isNextAdvance={action.is_next_step}
-                    saving={savingActionId === action.id}
-                    onToggleNextStep={handleToggleNextStep}
-                    onToggleTodaySelected={handleToggleTodaySelected}
-                    onStatusChange={handleStatusChange}
-                    onOpenLogModal={(a) => {
-                      setLogAction(a)
-                      setIsLogModalOpen(true)
-                    }}
-                    timeControl={renderActionTimeControl(action)}
-                    onEdit={(a) => {
-                      setEditingAction(a)
-                      setIsActionModalOpen(true)
-                    }}
-                  />
+                    title={action.title}
+                    open={view === 'cards' || Boolean(openRows[action.id])}
+                    onToggle={() => view === 'list' && toggleRow(action.id)}
+                  >
+                    <ActionRow
+                      action={action}
+                      isNextAdvance={action.is_next_step}
+                      saving={savingActionId === action.id}
+                      onToggleNextStep={handleToggleNextStep}
+                      onToggleTodaySelected={handleToggleTodaySelected}
+                      onStatusChange={handleStatusChange}
+                      onOpenLogModal={(a) => {
+                        setLogAction(a)
+                        setIsLogModalOpen(true)
+                      }}
+                      timeControl={renderActionTimeControl(action)}
+                      onEdit={(a) => {
+                        setEditingAction(a)
+                        setIsActionModalOpen(true)
+                      }}
+                    />
+                  </ListRow>
                 ))}
               </div>
             )}
@@ -571,16 +588,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 </span>
                 <div className="grid gap-2">
                   {completedActions.map((action) => (
-                    <ActionRow
+                    <ListRow
                       key={action.id}
-                      action={action}
-                      onStatusChange={handleStatusChange}
-                      onOpenLogModal={(a) => {
-                        setLogAction(a)
-                        setIsLogModalOpen(true)
-                      }}
-                      timeControl={renderActionTimeControl(action)}
-                    />
+                      title={action.title}
+                      open={view === 'cards' || Boolean(openRows[action.id])}
+                      onToggle={() => view === 'list' && toggleRow(action.id)}
+                    >
+                      <ActionRow
+                        action={action}
+                        onStatusChange={handleStatusChange}
+                        onOpenLogModal={(a) => {
+                          setLogAction(a)
+                          setIsLogModalOpen(true)
+                        }}
+                        timeControl={renderActionTimeControl(action)}
+                      />
+                    </ListRow>
                   ))}
                 </div>
               </div>

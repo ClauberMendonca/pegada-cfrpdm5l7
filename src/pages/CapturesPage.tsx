@@ -29,16 +29,42 @@ import { useToast } from '@/hooks/use-toast'
 import { CopilotPanel } from '@/components/CopilotPanel'
 import { prepareProposalConversion } from '@/lib/skipAi/proposalService'
 import type { AiRequestRecord } from '@/lib/skipAi/types'
+import { useAuth } from '@/contexts/AuthContext'
+import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
   const { contextFilter } = useGlobalFilter()
+  const { user } = useAuth()
 
   const [captures, setCaptures] = useState<CaptureItem[]>([])
   const [filterStatus, setFilterStatus] = useState<CaptureStatus | 'todas'>('pendente')
   const [newCaptureText, setNewCaptureText] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  // Captura com Enter: trava síncrona além do estado visual — Enter repetido,
+  // tecla segurada ou Enter seguido de clique não gravam duas vezes.
+  const savingRef = useRef(false)
+
+  // CAPTURA RÁPIDA — apresentação Cards/Lista (preferência por dono nesta área).
+  const [view, setView] = useViewPreference('captures', user?.id)
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
+  const toggleRow = useCallback((id: string) => {
+    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
+
+  // Título de exibição: primeira linha não vazia do raw_text (somente leitura,
+  // sem criar título no banco e sem IA).
+  const captureDisplayTitle = useCallback((raw: string): string => {
+    const first = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line !== '')
+    if (!first) return '(captura vazia)'
+    const clipped = first.length > 80 ? `${first.slice(0, 80)}…` : first
+    return clipped
+  }, [])
 
   // Conversion Modals
   const [selectedCapture, setSelectedCapture] = useState<CaptureItem | null>(null)
@@ -102,25 +128,52 @@ export const CapturesPage: React.FC = () => {
       })
   }, [toast])
 
-  const handleQuickAdd = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newCaptureText.trim()) return
+  // Envio único compartilhado por teclado e botão (captureService.create).
+  const submitCapture = useCallback(async () => {
+    // Trava síncrona: Enter repetido, tecla segurada ou clique durante o envio
+    // não disparam uma segunda gravação.
+    if (savingRef.current || isSubmitting) return
+    const text = newCaptureText
+    if (!text.trim()) return
 
+    savingRef.current = true
     setIsSubmitting(true)
     try {
-      await captureService.create(newCaptureText.trim())
-      setNewCaptureText('')
+      await captureService.create(text.trim())
+      // Texto limpo SOMENTE após confirmação do backend; se a pessoa já digitou
+      // algo novo enquanto o envio estava pendente, o rascunho novo é preservado.
+      setNewCaptureText((current) => (current === text ? '' : current))
       toast({
         title: 'Ideia capturada',
         description: 'Armazenada com segurança para processar depois.',
       })
       loadCaptures()
     } catch (err: unknown) {
+      // Em erro, mantém o texto para nova tentativa manual.
       const msg = err instanceof Error ? err.message : 'Erro ao capturar'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
     } finally {
+      savingRef.current = false
       setIsSubmitting(false)
+      // Devolve o foco ao campo para a próxima ideia, sem apagar rascunho:
+      // só se o texto atual ainda for o que foi enviado (nada novo digitado).
+      const field = quickAddRef.current
+      if (field && newCaptureText === text) field.focus()
     }
+  }, [newCaptureText, isSubmitting, loadCaptures, toast])
+
+  const quickAddRef = useRef<HTMLTextAreaElement>(null)
+
+  // Enter (sem modificadores, sem repetição e fora de composição IME) captura;
+  // Shift+Enter insere quebra de linha; Ctrl/Alt/Meta+Enter não ganham atalho.
+  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter') return
+    if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return
+    // Confirmação de palavra no teclado de composição (IME) não salva.
+    if (e.nativeEvent.isComposing) return
+    e.preventDefault()
+    if (e.repeat) return
+    void submitCapture()
   }
 
   const handleDiscard = async (id: string) => {
@@ -240,6 +293,73 @@ export const CapturesPage: React.FC = () => {
     }
   }
 
+  const renderCaptureCard = (item: CaptureItem) => (
+    <div
+      key={item.id}
+      className="p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+    >
+      <div className="space-y-1.5 flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          {getStatusBadge(item.status)}
+          <span className="text-xs font-mono text-muted-foreground">
+            {new Date(item.created).toLocaleDateString('pt-BR')}
+          </span>
+        </div>
+        <p className="text-sm text-foreground whitespace-pre-wrap break-words">{item.raw_text}</p>
+      </div>
+
+      {/* Ações de processamento */}
+      {item.status === 'pendente' && (
+        <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openConvertToAction(item)}
+            className="text-xs gap-1.5"
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-primary" />
+            Virar Ação
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openConvertToProject(item)}
+            className="text-xs gap-1.5"
+          >
+            <FolderKanban className="w-3.5 h-3.5 text-primary" />
+            Virar Projeto
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              ++copilotSession.current
+              setCopilotCapture(item)
+              setCopilotOpen(true)
+            }}
+            className="text-xs gap-1.5"
+            title="Ver pedidos e comandos explícitos do copiloto"
+          >
+            <Bot className="w-3.5 h-3.5 text-primary" />
+            Copiloto
+          </Button>
+
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handleDiscard(item.id)}
+            className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
+            title="Descartar logicamente"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+
   const getStatusBadge = (st: CaptureStatus) => {
     switch (st) {
       case 'pendente':
@@ -282,63 +402,74 @@ export const CapturesPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Filter by status */}
-        <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
-          {(
-            ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
-          ).map((st) => (
-            <button
-              key={st}
-              onClick={() => setFilterStatus(st)}
-              className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                filterStatus === st
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {st === 'todas'
-                ? 'Todas'
-                : st === 'pendente'
-                  ? 'Pendentes'
-                  : st === 'convertida_projeto'
-                    ? 'Projetos'
-                    : st === 'convertida_acao'
-                      ? 'Ações'
-                      : 'Descartadas'}
-            </button>
-          ))}
+        {/* Filter by status + modo de apresentação Cards/Lista */}
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewToggle view={view} onChange={setView} />
+          <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
+            {(
+              ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
+            ).map((st) => (
+              <button
+                key={st}
+                onClick={() => setFilterStatus(st)}
+                className={`px-2.5 py-1 rounded font-medium transition-colors ${
+                  filterStatus === st
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {st === 'todas'
+                  ? 'Todas'
+                  : st === 'pendente'
+                    ? 'Pendentes'
+                    : st === 'convertida_projeto'
+                      ? 'Projetos'
+                      : st === 'convertida_acao'
+                        ? 'Ações'
+                        : 'Descartadas'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Input de Captura Rápida */}
       <Card className="bg-card border-border shadow-md">
-        <form onSubmit={handleQuickAdd}>
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
-              <Lightbulb className="w-3.5 h-3.5" />
-              <span>Anotação Rápida em Texto Livre</span>
-            </div>
-            <Textarea
-              value={newCaptureText}
-              onChange={(e) => setNewCaptureText(e.target.value)}
-              placeholder="O que está na sua cabeça? Ideia, insight, pendência que surgiu, oportunidade..."
-              rows={3}
-            />
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-xs text-muted-foreground">
-                Pressione Capturar para guardar sem precisar organizar agora.
-              </span>
-              <Button
-                type="submit"
-                disabled={isSubmitting || !newCaptureText.trim()}
-                className="gap-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                Capturar Ideia
-              </Button>
-            </div>
-          </CardContent>
-        </form>
+        <CardContent className="pt-4 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+            <Lightbulb className="w-3.5 h-3.5" />
+            <span>Anotação Rápida em Texto Livre</span>
+          </div>
+          <Textarea
+            ref={quickAddRef}
+            value={newCaptureText}
+            onChange={(e) => setNewCaptureText(e.target.value)}
+            onKeyDown={handleQuickAddKeyDown}
+            placeholder="O que está na sua cabeça? Ideia, insight, pendência que surgiu, oportunidade..."
+            rows={3}
+            disabled={isSubmitting}
+          />
+          <div className="flex justify-between items-center pt-1 gap-3">
+            <span className="text-xs text-muted-foreground">
+              Enter para capturar · Shift+Enter para nova linha
+            </span>
+            <Button
+              type="button"
+              onClick={() => void submitCapture()}
+              disabled={isSubmitting || !newCaptureText.trim()}
+              className="gap-1.5 shrink-0"
+            >
+              {isSubmitting ? (
+                'Gravando…'
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Capturar Ideia
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
       </Card>
 
       {/* Lista de Capturas */}
@@ -359,75 +490,74 @@ export const CapturesPage: React.FC = () => {
                 : 'Nenhum registro para este filtro.'}
             </p>
           </div>
+        ) : view === 'cards' ? (
+          <div className="grid gap-3">{captures.map(renderCaptureCard)}</div>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             {captures.map((item) => (
-              <div
+              <ListRow
                 key={item.id}
-                className="p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                title={captureDisplayTitle(item.raw_text)}
+                open={Boolean(openRows[item.id])}
+                onToggle={() => toggleRow(item.id)}
+                hint={new Date(item.created).toLocaleDateString('pt-BR')}
               >
-                <div className="space-y-1.5 flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(item.status)}
-                    <span className="text-xs font-mono text-muted-foreground">
-                      {new Date(item.created).toLocaleDateString('pt-BR')}
-                    </span>
-                  </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">{getStatusBadge(item.status)}</div>
                   <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                     {item.raw_text}
                   </p>
+                  {item.status === 'pendente' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openConvertToAction(item)}
+                        className="text-xs gap-1.5"
+                      >
+                        <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                        Virar Ação
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openConvertToProject(item)}
+                        className="text-xs gap-1.5"
+                      >
+                        <FolderKanban className="w-3.5 h-3.5 text-primary" />
+                        Virar Projeto
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          ++copilotSession.current
+                          setCopilotCapture(item)
+                          setCopilotOpen(true)
+                        }}
+                        className="text-xs gap-1.5"
+                        title="Ver pedidos e comandos explícitos do copiloto"
+                      >
+                        <Bot className="w-3.5 h-3.5 text-primary" />
+                        Copiloto
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDiscard(item.id)}
+                        className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
+                        title="Descartar logicamente"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Descartar
+                      </Button>
+                    </div>
+                  )}
                 </div>
-
-                {/* Ações de processamento */}
-                {item.status === 'pendente' && (
-                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openConvertToAction(item)}
-                      className="text-xs gap-1.5"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                      Virar Ação
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openConvertToProject(item)}
-                      className="text-xs gap-1.5"
-                    >
-                      <FolderKanban className="w-3.5 h-3.5 text-primary" />
-                      Virar Projeto
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        ++copilotSession.current
-                        setCopilotCapture(item)
-                        setCopilotOpen(true)
-                      }}
-                      className="text-xs gap-1.5"
-                      title="Ver pedidos e comandos explícitos do copiloto"
-                    >
-                      <Bot className="w-3.5 h-3.5 text-primary" />
-                      Copiloto
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDiscard(item.id)}
-                      className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
-                      title="Descartar logicamente"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </div>
+              </ListRow>
             ))}
           </div>
         )}

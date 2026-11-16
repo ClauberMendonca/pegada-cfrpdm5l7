@@ -33,6 +33,7 @@ import {
 import { todayInZone, ownerTimezone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
+import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'projeto pausado'
@@ -76,6 +77,13 @@ export const TodayPage: React.FC = () => {
 
   // FATIA 3 — gravação em andamento (impede submissão duplicada por controle)
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
+
+  // Hoje — apresentação Cards/Lista (preferência por dono nesta área).
+  const [view, setView] = useViewPreference('hoje', user?.id)
+  const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
+  const toggleRow = useCallback((id: string) => {
+    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
 
   // Modals state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -372,7 +380,8 @@ export const TodayPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ViewToggle view={view} onChange={setView} />
           <Button
             onClick={() => {
               setEditingAction(null)
@@ -440,20 +449,28 @@ export const TodayPage: React.FC = () => {
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Gravando escolha…
               </p>
             )}
-            <ActionRow
-              action={nextAdvanceAction}
-              isNextAdvance={true}
-              saving={savingActionId === nextAdvanceAction.id}
-              onToggleNextStep={handleToggleNextStep}
-              onToggleTodaySelected={handleToggleTodaySelected}
-              onStatusChange={handleStatusChange}
-              onOpenLogModal={setLogModalAction}
-              timeControl={renderActionTimeControl(nextAdvanceAction)}
-              onEdit={(a) => {
-                setEditingAction(a)
-                setIsActionModalOpen(true)
-              }}
-            />
+            {/* Em Lista: o título do item expande a apresentação completa (comandos,
+               tempo, descrição); a seção continua identificando o foco. */}
+            <ListRow
+              title={nextAdvanceAction.title}
+              open={view === 'cards' || Boolean(openRows[nextAdvanceAction.id])}
+              onToggle={() => view === 'list' && toggleRow(nextAdvanceAction.id)}
+            >
+              <ActionRow
+                action={nextAdvanceAction}
+                isNextAdvance={true}
+                saving={savingActionId === nextAdvanceAction.id}
+                onToggleNextStep={handleToggleNextStep}
+                onToggleTodaySelected={handleToggleTodaySelected}
+                onStatusChange={handleStatusChange}
+                onOpenLogModal={setLogModalAction}
+                timeControl={renderActionTimeControl(nextAdvanceAction)}
+                onEdit={(a) => {
+                  setEditingAction(a)
+                  setIsActionModalOpen(true)
+                }}
+              />
+            </ListRow>
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-center">
@@ -482,20 +499,26 @@ export const TodayPage: React.FC = () => {
         {todaySelectedActions.length > 0 ? (
           <div className="grid gap-2.5">
             {todaySelectedActions.map((action) => (
-              <ActionRow
+              <ListRow
                 key={action.id}
-                action={action}
-                saving={savingActionId === action.id}
-                onToggleNextStep={handleToggleNextStep}
-                onToggleTodaySelected={handleToggleTodaySelected}
-                onStatusChange={handleStatusChange}
-                onOpenLogModal={setLogModalAction}
-                timeControl={renderActionTimeControl(action)}
-                onEdit={(a) => {
-                  setEditingAction(a)
-                  setIsActionModalOpen(true)
-                }}
-              />
+                title={action.title}
+                open={view === 'cards' || Boolean(openRows[action.id])}
+                onToggle={() => view === 'list' && toggleRow(action.id)}
+              >
+                <ActionRow
+                  action={action}
+                  saving={savingActionId === action.id}
+                  onToggleNextStep={handleToggleNextStep}
+                  onToggleTodaySelected={handleToggleTodaySelected}
+                  onStatusChange={handleStatusChange}
+                  onOpenLogModal={setLogModalAction}
+                  timeControl={renderActionTimeControl(action)}
+                  onEdit={(a) => {
+                    setEditingAction(a)
+                    setIsActionModalOpen(true)
+                  }}
+                />
+              </ListRow>
             ))}
           </div>
         ) : (
@@ -528,20 +551,26 @@ export const TodayPage: React.FC = () => {
 
           <div className="grid gap-2.5">
             {todayDeadlineActions.map((action) => (
-              <ActionRow
+              <ListRow
                 key={action.id}
-                action={action}
-                saving={savingActionId === action.id}
-                onToggleNextStep={handleToggleNextStep}
-                onToggleTodaySelected={handleToggleTodaySelected}
-                onStatusChange={handleStatusChange}
-                onOpenLogModal={setLogModalAction}
-                timeControl={renderActionTimeControl(action)}
-                onEdit={(a) => {
-                  setEditingAction(a)
-                  setIsActionModalOpen(true)
-                }}
-              />
+                title={action.title}
+                open={view === 'cards' || Boolean(openRows[action.id])}
+                onToggle={() => view === 'list' && toggleRow(action.id)}
+              >
+                <ActionRow
+                  action={action}
+                  saving={savingActionId === action.id}
+                  onToggleNextStep={handleToggleNextStep}
+                  onToggleTodaySelected={handleToggleTodaySelected}
+                  onStatusChange={handleStatusChange}
+                  onOpenLogModal={setLogModalAction}
+                  timeControl={renderActionTimeControl(action)}
+                  onEdit={(a) => {
+                    setEditingAction(a)
+                    setIsActionModalOpen(true)
+                  }}
+                />
+              </ListRow>
             ))}
           </div>
         </section>
@@ -590,20 +619,26 @@ export const TodayPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   {overdueActions.map((action) => (
-                    <ActionRow
+                    <ListRow
                       key={action.id}
-                      action={action}
-                      saving={savingActionId === action.id}
-                      onToggleNextStep={handleToggleNextStep}
-                      onToggleTodaySelected={handleToggleTodaySelected}
-                      onStatusChange={handleStatusChange}
-                      onOpenLogModal={setLogModalAction}
-                      timeControl={renderActionTimeControl(action)}
-                      onEdit={(a) => {
-                        setEditingAction(a)
-                        setIsActionModalOpen(true)
-                      }}
-                    />
+                      title={action.title}
+                      open={view === 'cards' || Boolean(openRows[action.id])}
+                      onToggle={() => view === 'list' && toggleRow(action.id)}
+                    >
+                      <ActionRow
+                        action={action}
+                        saving={savingActionId === action.id}
+                        onToggleNextStep={handleToggleNextStep}
+                        onToggleTodaySelected={handleToggleTodaySelected}
+                        onStatusChange={handleStatusChange}
+                        onOpenLogModal={setLogModalAction}
+                        timeControl={renderActionTimeControl(action)}
+                        onEdit={(a) => {
+                          setEditingAction(a)
+                          setIsActionModalOpen(true)
+                        }}
+                      />
+                    </ListRow>
                   ))}
                 </div>
               </div>
@@ -623,19 +658,25 @@ export const TodayPage: React.FC = () => {
                         Motivo: {ineligibilityLabel(action, resolveProject) || '—'}
                         {action.waiting_for ? ` — ${action.waiting_for}` : ''}
                       </p>
-                      <ActionRow
-                        action={action}
-                        saving={savingActionId === action.id}
-                        onToggleNextStep={handleToggleNextStep}
-                        onToggleTodaySelected={handleToggleTodaySelected}
-                        onStatusChange={handleStatusChange}
-                        onOpenLogModal={setLogModalAction}
-                        timeControl={renderActionTimeControl(action)}
-                        onEdit={(a) => {
-                          setEditingAction(a)
-                          setIsActionModalOpen(true)
-                        }}
-                      />
+                      <ListRow
+                        title={action.title}
+                        open={view === 'cards' || Boolean(openRows[action.id])}
+                        onToggle={() => view === 'list' && toggleRow(action.id)}
+                      >
+                        <ActionRow
+                          action={action}
+                          saving={savingActionId === action.id}
+                          onToggleNextStep={handleToggleNextStep}
+                          onToggleTodaySelected={handleToggleTodaySelected}
+                          onStatusChange={handleStatusChange}
+                          onOpenLogModal={setLogModalAction}
+                          timeControl={renderActionTimeControl(action)}
+                          onEdit={(a) => {
+                            setEditingAction(a)
+                            setIsActionModalOpen(true)
+                          }}
+                        />
+                      </ListRow>
                     </div>
                   ))}
                 </div>

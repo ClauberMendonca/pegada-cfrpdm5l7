@@ -23,6 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
+import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
 
 interface ActionModalProps {
   isOpen: boolean
@@ -56,14 +57,19 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [description, setDescription] = useState('')
   const [projects, setProjects] = useState<Project[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  // B1 — aviso inline quando a nova seleção de foco é inelegível (não grava flags novas).
+  const [focusNotice, setFocusNotice] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
+      setFocusNotice(null)
       projectService
         .list()
         .then((list) => {
-          // Only active/draft projects
-          setProjects(list.filter((p) => p.status === 'ativo' || p.status === 'rascunho'))
+          // B5 — lista completa: o vínculo atual permanece legível mesmo em
+          // projeto pausado/concluído/arquivado. Novos vínculos continuam
+          // restritos aos projetos permitidos (recorte feito no render).
+          setProjects(list)
         })
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : 'Falha ao carregar projetos.'
@@ -94,12 +100,68 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     }
   }, [isOpen, actionToEdit, defaultContext, defaultProjectId])
 
+  // B1 — valida a escolha de foco com o estado ATUAL do formulário (status e
+  // vínculo), pela MESMA regra compartilhada de Hoje/Ações. Retorna false (com
+  // aviso legível) quando a ação, como está no formulário, é inelegível.
+  const validateFocusChoice = (): boolean => {
+    const draftProject: Project | null | undefined = projectId
+      ? (projects.find((p) => p.id === projectId) ?? undefined)
+      : null
+    const eligibility = checkEligibility({ status } as unknown as ActionItem, draftProject)
+    if (eligibility.ok && isSelectableForFocus({ status } as unknown as ActionItem, draftProject)) {
+      return true
+    }
+    setFocusNotice(
+      `Seleção não permitida: ${
+        eligibility.label ?? 'somente ações "pronta" recebem nova seleção de foco'
+      }. Ajuste o status ou o vínculo antes de selecionar.`,
+    )
+    return false
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
 
     setIsSaving(true)
     try {
+      // B1 — escolha inelegível NÃO grava flags novas e NÃO desmarca flags
+      // anteriores: edições de registros antigos seguem permitidas.
+      const draftProject: Project | null | undefined = projectId
+        ? (projects.find((p) => p.id === projectId) ?? undefined)
+        : null
+      const eligibility = checkEligibility({ status } as unknown as ActionItem, draftProject)
+      const selectable =
+        eligibility.ok && isSelectableForFocus({ status } as unknown as ActionItem, draftProject)
+      const prevToday = Boolean(actionToEdit?.is_today_selected)
+      const prevNext = Boolean(actionToEdit?.is_next_step)
+      let effToday = isTodaySelected || isNextStep
+      let effNext = isNextStep
+      // B1 — inelegibilidade bloqueia apenas ADIÇÃO de seleção nova. Retirada
+      // explícita (desmarcar) é permitida mesmo quando a ação ficou inelegível:
+      // não impedimos a edição de registros antigos por flags antigas.
+      if (!selectable) {
+        if (effNext && !prevNext) {
+          effNext = false
+          setFocusNotice(
+            `Próximo avanço não gravado: ${
+              eligibility.label ?? 'somente ações "pronta" recebem nova seleção'
+            }. As demais alterações serão salvas.`,
+          )
+        } else if (effToday && !prevToday && !prevNext) {
+          effToday = false
+          setFocusNotice(
+            `Seleção para Hoje não gravada: ${
+              eligibility.label ?? 'somente ações "pronta" recebem nova seleção'
+            }. As demais alterações serão salvas.`,
+          )
+        } else {
+          setFocusNotice(null)
+        }
+      } else {
+        setFocusNotice(null)
+      }
+
       const payload: CreateActionInput = {
         title: title.trim(),
         context,
@@ -108,8 +170,8 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         // FATIA P1C — dia-calendário puro: aceita só 'YYYY-MM-DD'; vazio/parcial
         // NÃO cria prazo (sem parse de fuso que desloque o dia).
         deadline: calendarDayOrNull(deadline),
-        is_next_step: isNextStep,
-        is_today_selected: isTodaySelected || isNextStep,
+        is_next_step: effNext,
+        is_today_selected: effToday,
         waiting_for: waitingFor.trim() || undefined,
         // DESCRIÇÃO OPCIONAL: preserva quebras de linha e acentos; vazio segue
         // explícito (string ''), nunca undefined — limpar o campo apaga no banco.
@@ -139,6 +201,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       setIsSaving(false)
     }
   }
+
+  // B5 — projetos permitidos para novos vínculos; vínculo atual sempre legível.
+  const selectableProjects = projects.filter((p) => p.status === 'ativo' || p.status === 'rascunho')
+  const linkedOutsideSelectable =
+    Boolean(projectId) && !selectableProjects.some((p) => p.id === projectId)
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -190,9 +257,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-foreground">Contexto</Label>
+              <Label htmlFor="actionContext" className="text-sm font-medium text-foreground">
+                Contexto
+              </Label>
               <Select value={context} onValueChange={(val) => setContext(val as EntityContext)}>
-                <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
+                <SelectTrigger
+                  id="actionContext"
+                  className="border-input bg-card text-base text-foreground sm:text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-popover text-popover-foreground">
@@ -203,9 +275,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-foreground">Status</Label>
+              <Label htmlFor="actionStatus" className="text-sm font-medium text-foreground">
+                Status
+              </Label>
               <Select value={status} onValueChange={(val) => setStatus(val as ActionStatus)}>
-                <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
+                <SelectTrigger
+                  id="actionStatus"
+                  className="border-input bg-card text-base text-foreground sm:text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-popover text-popover-foreground">
@@ -222,8 +299,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           {(status === 'aguardando' || status === 'bloqueada') && (
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-foreground">Motivo / bloqueio</Label>
+              <Label htmlFor="actionWaitingFor" className="text-sm font-medium text-foreground">
+                Motivo / bloqueio
+              </Label>
               <Input
+                id="actionWaitingFor"
                 value={waitingFor}
                 onChange={(e) => setWaitingFor(e.target.value)}
                 placeholder="Pelo que está aguardando?"
@@ -234,29 +314,45 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-foreground">
+              <Label htmlFor="actionProject" className="text-sm font-medium text-foreground">
                 Projeto vinculado (opcional)
               </Label>
               <Select value={projectId} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
-                <SelectTrigger className="truncate border-input bg-card text-base text-foreground sm:text-sm">
+                <SelectTrigger
+                  id="actionProject"
+                  className="truncate border-input bg-card text-base text-foreground sm:text-sm"
+                >
                   <SelectValue placeholder="Ação solta (sem projeto)" />
                 </SelectTrigger>
                 <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
                   <SelectItem value="none">Ação solta (sem projeto)</SelectItem>
-                  {projects.map((p) => (
+                  {/* Novos vínculos: apenas projetos permitidos pela regra atual. */}
+                  {selectableProjects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
                       [{p.context}] {p.title}
                     </SelectItem>
                   ))}
+                  {/* B5 — vínculo atual fora da lista continua legível, com status. */}
+                  {linkedOutsideSelectable && (
+                    <SelectItem value={projectId} disabled>
+                      {(() => {
+                        const linked = projects.find((p) => p.id === projectId)
+                        return linked
+                          ? `[${linked.context}] ${linked.title} (${linked.status})`
+                          : 'Projeto vinculado (indisponível)'
+                      })()}
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-foreground">
+              <Label htmlFor="actionDeadline" className="text-sm font-medium text-foreground">
                 Prazo factual (opcional)
               </Label>
               <Input
+                id="actionDeadline"
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
@@ -268,7 +364,10 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="block text-base font-medium text-foreground">
+                <Label
+                  htmlFor="actionTodaySelected"
+                  className="block text-base font-medium text-foreground"
+                >
                   Selecionar para Hoje
                 </Label>
                 <span className="text-sm text-muted-foreground">
@@ -276,15 +375,25 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 </span>
               </div>
               <Switch
+                id="actionTodaySelected"
                 checked={isTodaySelected || isNextStep}
                 disabled={isNextStep}
-                onCheckedChange={setIsTodaySelected}
+                onCheckedChange={(checked) => {
+                  // Retirada explícita (desmarcar) continua permitida; nova
+                  // seleção passa pela validação de elegibilidade.
+                  if (checked && !validateFocusChoice()) return
+                  setFocusNotice(null)
+                  setIsTodaySelected(checked)
+                }}
               />
             </div>
 
             <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="block text-base font-medium text-foreground">
+                <Label
+                  htmlFor="actionNextStep"
+                  className="block text-base font-medium text-foreground"
+                >
                   Próximo avanço único
                 </Label>
                 <span className="text-sm text-muted-foreground">
@@ -292,13 +401,22 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 </span>
               </div>
               <Switch
+                id="actionNextStep"
                 checked={isNextStep}
                 onCheckedChange={(checked) => {
+                  if (checked && !validateFocusChoice()) return
+                  setFocusNotice(null)
                   setIsNextStep(checked)
                   if (checked) setIsTodaySelected(true)
                 }}
               />
             </div>
+
+            {focusNotice && (
+              <p role="alert" className="text-xs font-medium text-ginga-warning">
+                {focusNotice}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">

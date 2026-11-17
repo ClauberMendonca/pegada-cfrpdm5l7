@@ -39,7 +39,14 @@ import { ownerTimezone, todayInZone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
 import { cn } from '@/lib/utils'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import {
+  ListRow,
+  SummaryToggle,
+  actionSummaryLine,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
@@ -109,6 +116,7 @@ export const ActionsPage: React.FC = () => {
 
   // Catálogo de Ações — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('acoes', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('acoes', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
 
   // BLOCO 2B — destino retomável por URL: /acoes?id=<ID> abre/destaca a ação
@@ -531,6 +539,7 @@ export const ActionsPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
+          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <Button
             onClick={() => {
               setEditingAction(null)
@@ -784,6 +793,14 @@ export const ActionsPage: React.FC = () => {
                     ) : undefined
                   }
                   onToggle={() => handleRowToggle(action.id)}
+                  summary={
+                    showSummary
+                      ? actionSummaryLine(action, {
+                          projectTitle: resolveProject(action)?.title ?? null,
+                          today: todayStr,
+                        })
+                      : undefined
+                  }
                 >
                   {renderActionRow(action, isDest)}
                 </ListRow>

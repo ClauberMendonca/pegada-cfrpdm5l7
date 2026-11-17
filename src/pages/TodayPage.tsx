@@ -35,7 +35,14 @@ import {
 import { todayInZone, ownerTimezone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import {
+  ListRow,
+  SummaryToggle,
+  actionSummaryLine,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'projeto pausado'
@@ -82,6 +89,7 @@ export const TodayPage: React.FC = () => {
 
   // Hoje — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('hoje', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('hoje', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
   const toggleRow = useCallback((id: string) => {
     setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -384,6 +392,7 @@ export const TodayPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
+          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <Button
             onClick={() => {
               setEditingAction(null)
@@ -457,6 +466,14 @@ export const TodayPage: React.FC = () => {
               title={nextAdvanceAction.title}
               open={view === 'cards' || Boolean(openRows[nextAdvanceAction.id])}
               onToggle={() => view === 'list' && toggleRow(nextAdvanceAction.id)}
+              summary={
+                showSummary && view === 'list'
+                  ? actionSummaryLine(nextAdvanceAction, {
+                      projectTitle: resolveProject(nextAdvanceAction)?.title ?? null,
+                      today: todayStr,
+                    })
+                  : undefined
+              }
             >
               <ActionRow
                 action={nextAdvanceAction}
@@ -506,6 +523,14 @@ export const TodayPage: React.FC = () => {
                 title={action.title}
                 open={view === 'cards' || Boolean(openRows[action.id])}
                 onToggle={() => view === 'list' && toggleRow(action.id)}
+                summary={
+                  showSummary && view === 'list'
+                    ? actionSummaryLine(action, {
+                        projectTitle: resolveProject(action)?.title ?? null,
+                        today: todayStr,
+                      })
+                    : undefined
+                }
               >
                 <ActionRow
                   action={action}
@@ -558,6 +583,14 @@ export const TodayPage: React.FC = () => {
                 title={action.title}
                 open={view === 'cards' || Boolean(openRows[action.id])}
                 onToggle={() => view === 'list' && toggleRow(action.id)}
+                summary={
+                  showSummary && view === 'list'
+                    ? actionSummaryLine(action, {
+                        projectTitle: resolveProject(action)?.title ?? null,
+                        today: todayStr,
+                      })
+                    : undefined
+                }
               >
                 <ActionRow
                   action={action}
@@ -626,6 +659,14 @@ export const TodayPage: React.FC = () => {
                       title={action.title}
                       open={view === 'cards' || Boolean(openRows[action.id])}
                       onToggle={() => view === 'list' && toggleRow(action.id)}
+                      summary={
+                        showSummary && view === 'list'
+                          ? actionSummaryLine(action, {
+                              projectTitle: resolveProject(action)?.title ?? null,
+                              today: todayStr,
+                            })
+                          : undefined
+                      }
                     >
                       <ActionRow
                         action={action}
@@ -664,6 +705,14 @@ export const TodayPage: React.FC = () => {
                         title={action.title}
                         open={view === 'cards' || Boolean(openRows[action.id])}
                         onToggle={() => view === 'list' && toggleRow(action.id)}
+                        summary={
+                          showSummary && view === 'list'
+                            ? actionSummaryLine(action, {
+                                projectTitle: resolveProject(action)?.title ?? null,
+                                today: todayStr,
+                              })
+                            : undefined
+                        }
                       >
                         <ActionRow
                           action={action}

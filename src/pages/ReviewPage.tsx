@@ -18,8 +18,15 @@ import {
   Loader2,
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
-import { todayInZone, ownerTimezone } from '@/lib/datetime'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import { ownerTimezone, todayInZone } from '@/lib/datetime'
+import {
+  ListRow,
+  projectSummaryLine,
+  SummaryToggle,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -45,6 +52,7 @@ export const ReviewPage: React.FC = () => {
 
   // BLOCO 3(e) — Cards/Lista só na coleção real de projetos sinalizados.
   const [view, setView] = useViewPreference('revisao', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('revisao', user?.id)
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -254,6 +262,9 @@ export const ReviewPage: React.FC = () => {
                   Projetos sinalizados ({flaggedProjects.length})
                 </h4>
                 <ViewToggle view={view} onChange={setView} className="shrink-0" />
+                {view === 'list' && (
+                  <SummaryToggle checked={showSummary} onChange={setShowSummary} />
+                )}
               </div>
 
               {flaggedProjects.length === 0 ? (
@@ -295,6 +306,7 @@ export const ReviewPage: React.FC = () => {
                       open={false}
                       onToggle={() => openProjectSheet(p.id)}
                       hint="Abrir ficha ›"
+                      summary={showSummary ? projectSummaryLine(p) || undefined : undefined}
                     />
                   ))}
                 </div>

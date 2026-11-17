@@ -31,7 +31,13 @@ import { CopilotPanel } from '@/components/CopilotPanel'
 import { prepareProposalConversion } from '@/lib/skipAi/proposalService'
 import type { AiRequestRecord } from '@/lib/skipAi/types'
 import { useAuth } from '@/contexts/AuthContext'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import {
+  ListRow,
+  SummaryToggle,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -50,6 +56,7 @@ export const CapturesPage: React.FC = () => {
 
   // CAPTURA RÁPIDA — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('captures', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('captures', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
   const toggleRow = useCallback((id: string) => {
     setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -430,6 +437,21 @@ export const CapturesPage: React.FC = () => {
     </div>
   )
 
+  // BLOCO 4C — rótulo textual do estado, mesma semântica do badge (dados já
+  // carregados; formatação de data é a existente — correção de fuso é bloco 6).
+  const captureStatusLabel = (st: CaptureStatus): string => {
+    switch (st) {
+      case 'pendente':
+        return 'Pendente'
+      case 'convertida_projeto':
+        return 'Convertida em projeto'
+      case 'convertida_acao':
+        return 'Convertida em ação'
+      case 'descartada':
+        return 'Descartada'
+    }
+  }
+
   const getStatusBadge = (st: CaptureStatus) => {
     switch (st) {
       case 'pendente':
@@ -475,6 +497,7 @@ export const CapturesPage: React.FC = () => {
         {/* Filter by status + modo de apresentação Cards/Lista */}
         <div className="flex flex-wrap items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
+          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
             {(
               ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
@@ -607,6 +630,11 @@ export const CapturesPage: React.FC = () => {
                 open={Boolean(openRows[item.id])}
                 onToggle={() => toggleRow(item.id)}
                 hint={new Date(item.created).toLocaleDateString('pt-BR')}
+                summary={
+                  showSummary
+                    ? `${captureStatusLabel(item.status)} · ${new Date(item.created).toLocaleDateString('pt-BR')}`
+                    : undefined
+                }
               >
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">{getStatusBadge(item.status)}</div>

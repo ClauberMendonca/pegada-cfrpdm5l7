@@ -21,7 +21,14 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
 import { useAuth } from '@/contexts/AuthContext'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import {
+  ListRow,
+  projectSummaryLine,
+  SummaryToggle,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 
 const STATUS_TABS = ['todos', 'ativo', 'rascunho', 'pausado', 'concluido', 'arquivado'] as const
 
@@ -78,6 +85,7 @@ export const ProjectsPage: React.FC = () => {
 
   // Projetos — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('projetos', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('projetos', user?.id)
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true)
@@ -296,6 +304,7 @@ export const ProjectsPage: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-3">
           <ViewToggle view={view} onChange={setView} />
+          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <Button onClick={() => setIsProjectModalOpen(true)} className="gap-1.5 shadow-sm">
             <Plus className="w-4 h-4" />
             Novo Projeto
@@ -341,6 +350,7 @@ export const ProjectsPage: React.FC = () => {
               open={false}
               onToggle={() => openSheet(project.id)}
               hint={getStatusBadge(project.status)}
+              summary={showSummary ? projectSummaryLine(project) || undefined : undefined}
             />
           ))}
         </div>

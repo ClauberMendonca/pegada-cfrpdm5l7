@@ -30,13 +30,20 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
-import { formatCalendarDay } from '@/lib/datetime'
+import { formatCalendarDay, ownerTimezone, todayInZone } from '@/lib/datetime'
 import { ProjectTimeHistory } from '@/components/TimeControl'
 import { TimeControl } from '@/components/TimeControlCompact'
 import { useProjectTimeTotals } from '@/components/TimeControlCompact'
 import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
-import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import {
+  ListRow,
+  SummaryToggle,
+  actionSummaryLine,
+  useSummaryPreference,
+  useViewPreference,
+  ViewToggle,
+} from '@/components/ViewToggle'
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
 
 interface ProjectDetailProps {
@@ -64,6 +71,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   // Ações do projeto — apresentação Cards/Lista (chave comum aos detalhes de projeto).
   const [view, setView] = useViewPreference('detalhe-projeto', user?.id)
+  const [showSummary, setShowSummary] = useSummaryPreference('detalhe-projeto', user?.id)
+  // BLOCO 4C — "hoje" no fuso do dono, apenas para marcar prazos no resumo.
+  const todayStr = todayInZone(ownerTimezone(user?.timezone))
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
   const toggleRow = useCallback((id: string) => {
     setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -579,6 +589,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             <ViewToggle view={view} onChange={setView} />
+            {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
             {/* BLOCO 5.1 — projeto encerrado não recebe novas ações pela
                 interface: comando desabilitado com motivo legível. Reabrir é
                 decisão consciente pelo comando Ativar/Editar Ficha existente. */}
@@ -631,6 +642,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     title={action.title}
                     open={view === 'cards' || Boolean(openRows[action.id])}
                     onToggle={() => view === 'list' && toggleRow(action.id)}
+                    summary={
+                      showSummary && view === 'list'
+                        ? actionSummaryLine(action, { today: todayStr })
+                        : undefined
+                    }
                   >
                     <ActionRow
                       action={action}
@@ -667,6 +683,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       title={action.title}
                       open={view === 'cards' || Boolean(openRows[action.id])}
                       onToggle={() => view === 'list' && toggleRow(action.id)}
+                      summary={
+                        showSummary && view === 'list'
+                          ? actionSummaryLine(action, { today: todayStr })
+                          : undefined
+                      }
                     >
                       <ActionRow
                         action={action}

@@ -219,7 +219,7 @@ export const TimeEntryDialog: React.FC<TimeEntryDialogProps> = ({
               {entityNumberedText(targetType, targetNumberCode, targetTitle)}
             </div>
             <div className="text-muted-foreground">
-              {targetType === 'action' ? 'Ação' : 'Projeto'}
+              {targetType === 'action' ? 'Avanço' : 'Resultado'}
               {contextLabel ? ` · ${contextLabel}` : ''}
             </div>
           </div>
@@ -552,7 +552,7 @@ export const TimeHistoryDialog: React.FC<TimeHistoryDialogProps> = ({
 }
 
 // ---------------------------------------------------------------------------
-// Histórico recolhível no detalhe do projeto (subtotal Das ações / Direto)
+// Histórico recolhível no detalhe do resultado (subtotal Dos avanços / Direto)
 // ---------------------------------------------------------------------------
 
 export interface ProjectTimeHistoryProps {
@@ -588,11 +588,11 @@ export const ProjectTimeHistory: React.FC<ProjectTimeHistoryProps> = ({
         <AccordionContent>
           <div className="space-y-2 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Das ações</span>
+              <span className="text-muted-foreground">Dos avanços</span>
               <span className="font-medium">{totalLabel(actionsTotal)}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Direto no projeto</span>
+              <span className="text-muted-foreground">Direto no resultado</span>
               <span className="font-medium">{totalLabel(directTotal)}</span>
             </div>
             {runningEntry && (
@@ -646,8 +646,8 @@ export const ProjectTimeHistory: React.FC<ProjectTimeHistoryProps> = ({
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {e.target_title || (e.target_type === 'action' ? 'Ação' : 'Projeto')} ·{' '}
-                          {formatCalendarDay(e.entry_date)}
+                          {e.target_title || (e.target_type === 'action' ? 'Avanço' : 'Resultado')}{' '}
+                          · {formatCalendarDay(e.entry_date)}
                           {e.note ? ` · ${e.note}` : ''}
                         </div>
                       </div>
@@ -783,13 +783,13 @@ export const GlobalTimerIndicator: React.FC = () => {
               title={entityNumberedText(
                 running.target_type,
                 targetNumberCode,
-                running.target_title || (running.target_type === 'action' ? 'Ação' : 'Projeto'),
+                running.target_title || (running.target_type === 'action' ? 'Avanço' : 'Resultado'),
               )}
             >
               {entityNumberedText(
                 running.target_type,
                 targetNumberCode,
-                running.target_title || (running.target_type === 'action' ? 'Ação' : 'Projeto'),
+                running.target_title || (running.target_type === 'action' ? 'Avanço' : 'Resultado'),
               )}
             </span>
             <span className="text-sm tabular-nums" aria-live="off">

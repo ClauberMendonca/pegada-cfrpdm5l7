@@ -197,7 +197,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     if (!project) return
     try {
       await projectService.update(project.id, { status: newStatus })
-      toast({ title: `Projeto alterado para ${newStatus}` })
+      toast({ title: `Resultado alterado para ${newStatus}` })
       loadData()
       onProjectUpdated?.()
     } catch (err: unknown) {
@@ -224,7 +224,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   if (isLoading || !project) {
     return (
-      <div className="p-8 text-center text-muted-foreground">Carregando ficha do projeto...</div>
+      <div className="p-8 text-center text-muted-foreground">Carregando ficha do resultado...</div>
     )
   }
 
@@ -291,7 +291,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           className="text-muted-foreground hover:text-foreground -ml-2 text-xs gap-1.5"
         >
           <ArrowLeft className="w-4 h-4" />
-          Voltar para Lista de Projetos
+          Voltar para Lista de Resultados
         </Button>
 
         <div className="flex items-center gap-2">
@@ -327,7 +327,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               className="text-xs"
             >
               <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-ginga-success" />
-              Concluir Projeto
+              Concluir resultado
             </Button>
           )}
 
@@ -511,9 +511,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-lg font-bold tracking-tight text-foreground">Tempo do projeto</h3>
+            <h3 className="text-lg font-bold tracking-tight text-foreground">Tempo do resultado</h3>
             <p className="text-xs text-muted-foreground">
-              Total encerrado, separado entre ações vinculadas e tempo direto no projeto.
+              Total encerrado, separado entre avanços vinculados e tempo direto no resultado.
             </p>
           </div>
           {timeTotals.error && (
@@ -543,7 +543,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </p>
           </div>
           <div className="rounded-xl border border-border bg-muted/40 p-3">
-            <span className="text-xs text-muted-foreground">Direto no projeto</span>
+            <span className="text-xs text-muted-foreground">Direto no resultado</span>
             <p className="mt-1 text-lg font-semibold tabular-nums">
               {timeTotalLabel(timeTotals.directSeconds)}
             </p>
@@ -552,7 +552,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
         <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium">Cronometrar diretamente neste projeto</p>
+            <p className="text-sm font-medium">Cronometrar diretamente neste resultado</p>
             <p className="text-xs text-muted-foreground">
               O registro direto fica separado do tempo das ações.
             </p>
@@ -561,7 +561,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             targetType="project"
             targetId={project.id}
             targetTitle={project.title}
-            contextLabel="Direto no projeto"
+            contextLabel="Direto no resultado"
             targetStatus={project.status}
             projectStatus={project.status}
             targetNumberCode={entityNumberCode('project', project.sequence_number)}
@@ -587,23 +587,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold text-foreground tracking-tight">
-              Ações do Projeto ({actions.length})
+              Avanços do Resultado ({actions.length})
             </h3>
-            <p className="text-xs text-muted-foreground">
-              Avanços executáveis deste projeto. Escolha o próximo avanço ou selecione para Hoje.
+            <p className="text-sm text-muted-foreground">
+              Avanços executáveis deste resultado. Escolha o próximo avanço ou selecione para Hoje.
             </p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
             <ViewToggle view={view} onChange={setView} />
             {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
-            {/* BLOCO 5.1 — projeto encerrado não recebe novas ações pela
+            {/* BLOCO 5.1 — resultado encerrado não recebe novos avanços pela
                 interface: comando desabilitado com motivo legível. Reabrir é
                 decisão consciente pelo comando Ativar/Editar Ficha existente. */}
             {isProjectClosed ? (
-              <Button size="sm" disabled className="text-xs gap-1.5" title="Projeto encerrado">
+              <Button size="sm" disabled className="text-xs gap-1.5" title="Resultado encerrado">
                 <Plus className="w-4 h-4" />
-                Adicionar Ação
+                Adicionar Avanço
               </Button>
             ) : (
               <Button
@@ -615,19 +614,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 className="text-xs gap-1.5"
               >
                 <Plus className="w-4 h-4" />
-                Adicionar Ação
+                Adicionar Avanço
               </Button>
             )}
           </div>
           {/* Aviso legível sobre o estado que impede (ou condiciona) o planejamento. */}
           {isProjectClosed ? (
             <p role="note" className="text-xs text-ginga-warning">
-              Projeto encerrado — não recebe novas ações. Para planejar novamente, reabra o projeto
-              pelo comando existente (Ativar / Editar Ficha) antes de criar ações vinculadas.
+              Resultado encerrado — não recebe novos avanços. Para planejar novamente, reabra o
+              resultado pelo comando existente (Ativar / Editar Ficha) antes de criar avanços
+              vinculados.
             </p>
           ) : isProjectPaused ? (
             <p role="note" className="text-xs text-ginga-warning">
-              Projeto pausado — você pode planejar ações; execução e seleção de foco continuam
+              Resultado pausado — você pode planejar avanços; execução e seleção de foco continuam
               sujeitas às regras existentes.
             </p>
           ) : null}
@@ -636,7 +636,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         {actions.length === 0 ? (
           <div className="p-6 rounded-xl border border-dashed border-border text-center bg-muted/50">
             <p className="text-xs text-muted-foreground">
-              Nenhuma ação criada para este projeto ainda.
+              Nenhum avanço criado para este resultado ainda.
             </p>
           </div>
         ) : (
@@ -684,7 +684,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {completedActions.length > 0 && (
               <div className="pt-2">
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
-                  Ações Concluídas / Canceladas ({completedActions.length})
+                  Avanços Feitos / Cancelados ({completedActions.length})
                 </span>
                 <div className="grid gap-2">
                   {completedActions.map((action) => (
@@ -751,7 +751,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         {logs.length === 0 ? (
           <div className="p-6 rounded-xl border border-dashed border-border text-center bg-muted/50">
             <p className="text-xs text-muted-foreground">
-              Nenhum registro de progresso feito neste projeto.
+              Nenhum registro de progresso feito neste resultado.
             </p>
           </div>
         ) : (
@@ -819,7 +819,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         }}
       />
 
-      {/* Edição da ficha do projeto — mesmo projeto, sem voltar à lista */}
+      {/* Edição da ficha do resultado — mesmo resultado, sem voltar à lista */}
       <ProjectModal
         isOpen={isProjectModalOpen}
         onClose={() => setIsProjectModalOpen(false)}

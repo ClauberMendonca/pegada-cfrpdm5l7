@@ -74,14 +74,14 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
         }
         if (session !== sessionRef.current) return
         if (fresh.status === 'em_andamento') {
-          setFeedback('A ação já está em andamento — nada foi alterado.')
+          setFeedback('O avanço já está em andamento — nada foi alterado.')
           setChecking(false)
           return
         }
         const check = checkEligibility(fresh, project)
         if (!check.ok) {
           setFeedback(
-            `A ação não pode mudar de status agora: ${check.label ?? 'impedimento'}. Nada foi alterado.`,
+            `O avanço não pode mudar de status agora: ${check.label ?? 'impedimento'}. Nada foi alterado.`,
           )
           setChecking(false)
           return
@@ -92,7 +92,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
       .catch(() => {
         if (session !== sessionRef.current) return
         setFeedback(
-          'Não foi possível confirmar o estado atual da ação. A sugestão foi mantida fora desta rodada; o progresso continua registrado.',
+          'Não foi possível confirmar o estado atual do avanço. A sugestão foi mantida fora desta rodada; o progresso continua registrado.',
         )
         setFeedbackTone('error')
         setChecking(false)
@@ -120,7 +120,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
         }
       }
       if (fresh.status === 'em_andamento') {
-        setFeedback('A ação já está em andamento — nada foi alterado.')
+        setFeedback('O avanço já está em andamento — nada foi alterado.')
         setFeedbackTone('neutral')
         onDone('already_in_progress')
         return
@@ -128,7 +128,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
       const check = checkEligibility(fresh, project)
       if (!check.ok || fresh.status !== 'pronta') {
         setFeedback(
-          `A ação não pode mudar de status agora: ${check.label ?? 'impedimento'}. Nada foi alterado.`,
+          `O avanço não pode mudar de status agora: ${check.label ?? 'impedimento'}. Nada foi alterado.`,
         )
         setFeedbackTone('error')
         onDone('blocked')
@@ -151,7 +151,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        Verificando o estado atual da ação…
+        Verificando o estado atual do avanço…
       </p>
     )
   }
@@ -196,12 +196,12 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
   return (
     <div className="space-y-3">
       <p className="text-sm text-foreground">
-        A ação{' '}
+        O avanço{' '}
         <span className="inline-flex flex-wrap items-baseline gap-1.5 font-semibold">
           <EntityNumberBadge kind="action" n={actionNumber} />
           {actionTitle}
         </span>{' '}
-        segue com status <span className="font-semibold">Pronta</span>. Quer marcá-la como{' '}
+        segue com status <span className="font-semibold">Pronto</span>. Quer marcá-lo como{' '}
         <span className="font-semibold">Em andamento</span> agora?
       </p>
       <p className="text-xs text-muted-foreground">

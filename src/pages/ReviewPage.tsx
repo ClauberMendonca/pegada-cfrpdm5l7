@@ -123,7 +123,7 @@ export const ReviewPage: React.FC = () => {
             Revisão
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Área de revisão periódica de projetos e calibração de foco.
+            Área de revisão periódica de resultados e calibração de foco.
           </p>
         </div>
 
@@ -146,7 +146,7 @@ export const ReviewPage: React.FC = () => {
         <div className="rounded-xl border border-border bg-muted p-6 flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
           <p className="text-sm text-muted-foreground font-medium">
-            Carregando o estado atual dos projetos…
+            Carregando o estado atual dos resultados…
           </p>
         </div>
       )}
@@ -174,17 +174,17 @@ export const ReviewPage: React.FC = () => {
               <Inbox className="w-6 h-6" />
             </div>
             <CardTitle className="text-xl font-bold text-foreground">
-              Nenhum projeto cadastrado ainda
+              Nenhum resultado cadastrado ainda
             </CardTitle>
             <CardDescription className="text-muted-foreground max-w-xl mx-auto text-sm">
-              O diagnóstico desta área aparece quando existem projetos. Comece criando sua primeira
-              ficha em Projetos.
+              O diagnóstico desta área aparece quando existem resultados. Comece criando sua
+              primeira ficha em Resultados.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pt-2">
             <Button asChild className="gap-2">
               <Link to="/projetos">
-                <span>Ir para Projetos</span>
+                <span>Ir para Resultados</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
@@ -220,7 +220,7 @@ export const ReviewPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-4 rounded-xl bg-muted border border-border">
                 <span className="text-xs text-muted-foreground block font-medium">
-                  Projetos Ativos
+                  Resultados Ativos
                 </span>
                 <span className="text-2xl font-bold text-foreground mt-1 block">
                   {activeProjects.length}
@@ -232,20 +232,20 @@ export const ReviewPage: React.FC = () => {
 
               <div className="p-4 rounded-xl bg-ginga-warning-bg border border-ginga-warning/30">
                 <span className="text-xs text-ginga-warning block font-medium">
-                  Ativos sem Ação Pronta ou em Andamento
+                  Ativos sem Avanço Pronto ou em Andamento
                 </span>
                 <span className="text-2xl font-bold text-ginga-warning mt-1 block">
                   {flaggedProjects.length}
                 </span>
                 <span className="text-[11px] text-ginga-warning/80">
-                  Projetos sem nenhuma ação “pronta” nem “em andamento” — necessitam de
+                  Resultados sem nenhum avanço “pronto” nem “em andamento” — necessitam de
                   desdobramento
                 </span>
               </div>
 
               <div className="p-4 rounded-xl bg-muted border border-border">
                 <span className="text-xs text-muted-foreground block font-medium">
-                  Projetos Pausados
+                  Resultados Pausados
                 </span>
                 <span className="text-2xl font-bold text-foreground mt-1 block">
                   {pausedProjects.length}
@@ -261,7 +261,7 @@ export const ReviewPage: React.FC = () => {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h4 className="text-sm font-bold uppercase tracking-wider text-ginga-warning flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" aria-hidden="true" />
-                  Projetos sinalizados ({flaggedProjects.length})
+                  Resultados sinalizados ({flaggedProjects.length})
                 </h4>
                 <ViewToggle view={view} onChange={setView} className="shrink-0" />
                 {view === 'list' && (
@@ -271,7 +271,8 @@ export const ReviewPage: React.FC = () => {
 
               {flaggedProjects.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-border bg-muted p-4 text-center text-xs text-muted-foreground">
-                  Nenhum projeto ativo sinalizado agora: todos têm ação “pronta” ou “em andamento”.
+                  Nenhum resultado ativo sinalizado agora: todos têm avanço “pronto” ou “em
+                  andamento”.
                 </p>
               ) : view === 'cards' ? (
                 <div className="grid gap-2.5 sm:grid-cols-2">
@@ -281,7 +282,7 @@ export const ReviewPage: React.FC = () => {
                       className="rounded-xl border border-border bg-card p-3 flex items-start justify-between gap-3"
                     >
                       <div className="min-w-0">
-                        {/* NUMERAÇÃO PERMANENTE — selo P-N do banco antes do título */}
+                        {/* NUMERAÇÃO PERMANENTE — selo R-N do banco antes do título */}
                         <span className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
                           <EntityNumberBadge kind="project" n={p.sequence_number} entityId={p.id} />
                           <span className="min-w-0 text-sm font-medium text-foreground break-words">
@@ -289,7 +290,7 @@ export const ReviewPage: React.FC = () => {
                           </span>
                         </span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {p.context === 'trabalho' ? 'Trabalho' : 'Vida'} · sem ação pronta ou em
+                          {p.context === 'trabalho' ? 'Trabalho' : 'Vida'} · sem avanço pronto ou em
                           andamento
                         </p>
                       </div>
@@ -317,7 +318,7 @@ export const ReviewPage: React.FC = () => {
                       summary={
                         showSummary
                           ? [
-                              // NUMERAÇÃO PERMANENTE — código P-N real primeiro
+                              // NUMERAÇÃO PERMANENTE — código R-N real primeiro
                               formatEntityTitle('project', p.sequence_number, p.title),
                               projectSummaryLine(p) || undefined,
                             ]
@@ -360,10 +361,10 @@ export const ReviewPage: React.FC = () => {
                     2
                   </span>
                   <div>
-                    <strong>Existe algum projeto estagnado sem próximo passo?</strong>
+                    <strong>Existe algum resultado estagnado sem próximo passo?</strong>
                     <p className="text-muted-foreground text-xs mt-0.5">
-                      Se um projeto ativo não possui nenhuma ação “pronta” nem “em andamento”,
-                      defina a próxima ação imediatamente ou pause-o formalmente.
+                      Se um resultado ativo não possui nenhum avanço “pronto” nem “em andamento”,
+                      defina o próximo avanço imediatamente ou pause-o formalmente.
                     </p>
                   </div>
                 </div>
@@ -386,7 +387,7 @@ export const ReviewPage: React.FC = () => {
             <div className="flex justify-center pt-2">
               <Button asChild className="gap-2">
                 <Link to="/projetos">
-                  <span>Ir para Projetos e Calibrar Fichas</span>
+                  <span>Ir para Resultados e Calibrar Fichas</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </Button>

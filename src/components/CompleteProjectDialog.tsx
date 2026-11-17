@@ -49,11 +49,14 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
     setErrorMessage(null)
     try {
       await projectService.update(project.id, { status: 'concluido' })
-      toast({ title: 'Projeto concluído', description: 'Planejamento de novas ações encerrado.' })
+      toast({
+        title: 'Resultado concluído',
+        description: 'Planejamento de novos avanços encerrado.',
+      })
       onCompleted()
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Não foi possível concluir o projeto.'
+      const msg = err instanceof Error ? err.message : 'Não foi possível concluir o resultado.'
       setErrorMessage(msg)
     } finally {
       setIsSaving(false)
@@ -76,7 +79,7 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <CheckCircle2 className="w-5 h-5 text-ginga-success" />
-            Concluir projeto
+            Concluir resultado
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             Decisão explícita — confirme a condição de término antes de encerrar.
@@ -102,7 +105,7 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
               Efeito desta decisão
             </span>
             <p className="text-sm text-foreground">
-              Concluir encerra o planejamento de novas ações em{' '}
+              Concluir encerra o planejamento de novos avanços em{' '}
               <span className="inline-flex flex-wrap items-baseline gap-1.5 font-medium">
                 <EntityNumberBadge
                   kind="project"
@@ -111,8 +114,8 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
                 />
                 {project.title}
               </span>
-              . Ações, registros de progresso e históricos de tempo existentes continuam legíveis e
-              preservados.
+              . Avanços, registros de progresso e históricos de tempo existentes continuam legíveis
+              e preservados.
             </p>
           </div>
 

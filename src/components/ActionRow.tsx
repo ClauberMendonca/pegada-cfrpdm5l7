@@ -73,7 +73,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             variant="outline"
             className="rounded-full border-primary/30 bg-accent px-2.5 text-[13px] font-medium text-accent-foreground"
           >
-            Pronta
+            Pronto
           </Badge>
         )
       case 'em_andamento':
@@ -100,7 +100,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             variant="outline"
             className="rounded-full border-destructive/30 bg-ginga-danger-bg px-2.5 text-[13px] font-medium text-destructive"
           >
-            Bloqueada
+            Bloqueado
           </Badge>
         )
       case 'feita':
@@ -109,7 +109,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             variant="outline"
             className="rounded-full border-border bg-muted px-2.5 text-[13px] font-medium text-muted-foreground"
           >
-            Feita
+            Feito
           </Badge>
         )
       case 'cancelada':
@@ -118,7 +118,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             variant="outline"
             className="rounded-full border-border px-2.5 text-[13px] font-medium text-muted-foreground line-through"
           >
-            Cancelada
+            Cancelado
           </Badge>
         )
     }
@@ -167,8 +167,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           type="button"
           onClick={() => onStatusChange?.(action.id, isDone ? 'pronta' : 'feita')}
           disabled={saving}
-          aria-label={isDone ? 'Reabrir como pronta' : 'Marcar como concluída'}
-          title={isDone ? 'Reabrir como pronta' : 'Marcar como concluída'}
+          aria-label={isDone ? 'Reabrir como pronto' : 'Marcar como concluído'}
+          title={isDone ? 'Reabrir como pronto' : 'Marcar como concluído'}
           className={cn(
             'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
             saving && 'cursor-wait opacity-60',
@@ -280,8 +280,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             <Button
               variant="ghost"
               onClick={() => onOpenLogModal(action)}
-              aria-label="Registrar progresso nesta ação"
-              title="Registrar progresso nesta ação"
+              aria-label="Registrar progresso neste avanço"
+              title="Registrar progresso neste avanço"
               className="hidden min-h-11 gap-1.5 rounded-xl px-3 text-sm text-primary hover:bg-accent hover:text-primary sm:inline-flex"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -324,8 +324,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
                 variant="ghost"
                 size="icon"
                 disabled={saving}
-                aria-label="Mais ações da ação"
-                title="Mais ações"
+                aria-label="Mais comandos do avanço"
+                title="Mais comandos"
                 className={cn(touchButton, 'h-11 w-11 p-0')}
               >
                 <MoreVertical className="h-5 w-5" aria-hidden="true" />
@@ -384,7 +384,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
                 disabled={saving}
                 className="min-h-11 cursor-pointer"
               >
-                Marcar como Pronta
+                Marcar como Pronto
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('em_andamento')}
@@ -405,21 +405,21 @@ export const ActionRow: React.FC<ActionRowProps> = ({
                 disabled={saving}
                 className="min-h-11 cursor-pointer"
               >
-                Marcar como Bloqueada...
+                Marcar como Bloqueado...
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('feita')}
                 disabled={saving}
                 className="min-h-11 cursor-pointer"
               >
-                Concluir ação (Feita)
+                Concluir avanço (Feito)
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => handleSelectStatus('cancelada')}
                 disabled={saving}
                 className="min-h-11 cursor-pointer text-muted-foreground"
               >
-                Cancelar ação
+                Cancelar avanço
               </DropdownMenuItem>
 
               {onEdit && (

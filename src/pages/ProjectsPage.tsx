@@ -105,7 +105,7 @@ export const ProjectsPage: React.FC = () => {
       const list = await projectService.list(filterContext, filterSt)
       setProjects(list)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao listar projetos'
+      const msg = err instanceof Error ? err.message : 'Erro ao listar resultados'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
     } finally {
       setIsLoading(false)
@@ -172,12 +172,12 @@ export const ProjectsPage: React.FC = () => {
 
   const fromReview = location.state?.from === 'review'
 
-  // Catálogo filtrado: busca textual (título) + número/código do banco. O
-  // filtro global de contexto e o recorte de status já vieram da consulta;
-  // aqui só recorta a exibição local, sem nova consulta e sem gravar nada.
-  // "P-3"/"p-3" localiza o projeto 3; número puro é comparação exata. Campos
-  // ausentes não geram erro nem texto inventado. (Hook antes de qualquer
-  // retorno antecipado da ficha por URL.)
+  // Catálogo filtrado: busca textual (título, aspiração, entrega controlável)
+  // + número/código do banco. O filtro global de contexto e o recorte de status
+  // já vieram da consulta; aqui só recorta a exibição local, sem nova consulta
+  // e sem gravar nada. "R-3" (novo) ou "P-3" (legado) localizam o resultado 3;
+  // número puro é comparação exata. Campos ausentes não geram erro nem texto
+  // inventado. (Hook antes de qualquer retorno antecipado da ficha por URL.)
   const filteredProjects = useMemo(() => {
     const query = search.trim().toLowerCase()
     if (!query) return projects
@@ -185,11 +185,12 @@ export const ProjectsPage: React.FC = () => {
       const inTitle = p.title.toLowerCase().includes(query)
       const inAspiration = (p.aspiration ?? '').toLowerCase().includes(query)
       const inDelivery = (p.controllable_delivery ?? '').toLowerCase().includes(query)
-      // Número/código é comparação EXATA: "3" acha o projeto 3, nunca o 13.
+      // Número/código é comparação EXATA: "3" acha o resultado 3, nunca o 13.
       const inNumber = /^\d+$/.test(query) && p.sequence_number === Number(query)
       const inCode =
         typeof p.sequence_number === 'number' &&
-        (query === `p-${p.sequence_number}` ||
+        (query === `r-${p.sequence_number}` ||
+          query === `p-${p.sequence_number}` ||
           query === entityNumberCode('project', p.sequence_number).toLowerCase())
       return inTitle || inAspiration || inDelivery || inCode || inNumber
     })
@@ -241,7 +242,7 @@ export const ProjectsPage: React.FC = () => {
               Ficha não encontrada
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5">
-              O projeto desta ficha não existe, foi removido ou não está acessível nesta sessão.
+              O resultado desta ficha não existe, foi removido ou não está acessível nesta sessão.
             </p>
           </div>
         </div>
@@ -257,7 +258,7 @@ export const ProjectsPage: React.FC = () => {
             <Button asChild variant="outline" size="sm" className="mt-3 gap-1.5">
               <Link to="/projetos">
                 <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
-                Voltar ao catálogo de projetos
+                Voltar ao catálogo de resultados
               </Link>
             </Button>
           </div>
@@ -275,11 +276,11 @@ export const ProjectsPage: React.FC = () => {
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
               <FolderKanban className="w-6 h-6 text-primary" />
-              Projetos
+              Resultados
             </h2>
             <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              Abrindo a ficha do projeto…
+              Abrindo a ficha do resultado…
             </p>
           </div>
         </div>
@@ -328,10 +329,10 @@ export const ProjectsPage: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <FolderKanban className="w-6 h-6 text-primary" />
-            Projetos
+            Resultados
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Fichas completas de projetos separando aspiração e entrega controlável.
+            Fichas completas de resultados separando aspiração e entrega controlável.
           </p>
         </div>
 
@@ -340,7 +341,7 @@ export const ProjectsPage: React.FC = () => {
           {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <Button onClick={() => setIsProjectModalOpen(true)} className="gap-1.5 shadow-sm">
             <Plus className="w-4 h-4" />
-            Novo Projeto
+            Novo resultado
           </Button>
         </div>
       </div>
@@ -362,8 +363,8 @@ export const ProjectsPage: React.FC = () => {
         ))}
       </div>
 
-      {/* Busca local — número (P-3 / 3) ou título; nada é gravado nem filtrado
-          no servidor, e a ficha por /projetos?id continua válida fora dela. */}
+      {/* Busca local — número (R-3 / P-3 / 3) ou título; nada é gravado nem
+          filtrado no servidor, e a ficha por /projetos?id continua válida fora dela. */}
       <div className="relative">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -373,30 +374,32 @@ export const ProjectsPage: React.FC = () => {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por número (P-3) ou título…"
-          aria-label="Buscar projetos por número ou título"
+          placeholder="Buscar por número (R-3 ou P-3) ou título…"
+          aria-label="Buscar resultados por número ou título"
           className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
         />
       </div>
 
       {/* Projects Grid / List */}
       {isLoading ? (
-        <div className="p-8 text-center text-muted-foreground">Carregando projetos...</div>
+        <div className="p-8 text-center text-muted-foreground">Carregando resultados...</div>
       ) : projects.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
           <FolderKanban className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-foreground font-medium">Nenhum projeto encontrado.</p>
+          <p className="text-sm text-foreground font-medium">Nenhum resultado encontrado.</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Crie um novo projeto para gerenciar aspiração e entregas controláveis.
+            Crie um novo resultado para gerenciar aspiração e entregas controláveis.
           </p>
         </div>
       ) : filteredProjects.length === 0 ? (
         /* Vazio por busca: distingue de "nenhuma cadastrada" sem trocar filtros. */
         <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
           <SearchX className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-foreground font-medium">Nenhum projeto corresponde à busca.</p>
+          <p className="text-sm text-foreground font-medium">
+            Nenhum resultado corresponde à busca.
+          </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Tente o número (P-3 ou 3) ou parte do título. Os filtros foram preservados.
+            Tente o número (R-3, P-3 ou 3) ou parte do título. Os filtros foram preservados.
           </p>
         </div>
       ) : view === 'list' ? (
@@ -482,7 +485,7 @@ export const ProjectsPage: React.FC = () => {
 
               <div className="pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
                 <span className="flex items-center gap-1 text-primary font-medium">
-                  Ver Ficha e Ações
+                  Ver ficha e avanços
                   <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
                 </span>
                 <span className="font-mono text-[11px] text-muted-foreground">

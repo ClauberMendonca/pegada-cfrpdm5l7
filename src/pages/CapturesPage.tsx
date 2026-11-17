@@ -404,8 +404,8 @@ export const CapturesPage: React.FC = () => {
         toast({
           title:
             target === 'project'
-              ? 'Captura convertida em Projeto com sucesso!'
-              : 'Captura convertida em Ação pronta!',
+              ? 'Captura convertida em Resultado com sucesso!'
+              : 'Captura convertida em Avanço pronto!',
           description: targetId
             ? undefined
             : 'O destino não foi retornado pela conversão; confira nas capturas convertidas.',
@@ -461,7 +461,7 @@ export const CapturesPage: React.FC = () => {
             ) : (
               <CheckSquare className="w-3.5 h-3.5 text-primary" />
             )}
-            {isProject ? 'Abrir projeto' : 'Abrir ação'}
+            {isProject ? 'Abrir resultado' : 'Abrir avanço'}
           </Link>
         </Button>
       </div>
@@ -500,7 +500,7 @@ export const CapturesPage: React.FC = () => {
             className="text-xs gap-1.5"
           >
             <CheckSquare className="w-3.5 h-3.5 text-primary" />
-            Virar Ação
+            Virar Avanço
           </Button>
 
           <Button
@@ -510,11 +510,11 @@ export const CapturesPage: React.FC = () => {
             className="text-xs gap-1.5"
           >
             <FolderKanban className="w-3.5 h-3.5 text-primary" />
-            Virar Projeto
+            Virar Resultado
           </Button>
 
           {/* BLOCO 9 — Copiloto é opcional: ênfase secundária/neutra; a conversão
-              manual (Virar Ação/Projeto) continua o caminho principal. Abrir o
+              manual (Virar Avanço/Resultado) continua o caminho principal. Abrir o
               painel não envia nada ao Manus. Rótulo pode quebrar no celular
               sem reduzir a área de toque (whitespace-normal + min-h). */}
           <Button
@@ -553,9 +553,9 @@ export const CapturesPage: React.FC = () => {
       case 'pendente':
         return 'Pendente'
       case 'convertida_projeto':
-        return 'Convertida em projeto'
+        return 'Convertida em resultado'
       case 'convertida_acao':
-        return 'Convertida em ação'
+        return 'Convertida em avanço'
       case 'descartada':
         return 'Descartada'
     }
@@ -585,12 +585,12 @@ export const CapturesPage: React.FC = () => {
         )
       case 'convertida_projeto':
         return (
-          <Badge className="bg-ginga-info-bg text-ginga-info border-ginga-info/30">Projeto</Badge>
+          <Badge className="bg-ginga-info-bg text-ginga-info border-ginga-info/30">Resultado</Badge>
         )
       case 'convertida_acao':
         return (
           <Badge className="bg-ginga-success-bg text-ginga-success border-ginga-success/30">
-            Ação
+            Avanço
           </Badge>
         )
       case 'descartada':
@@ -612,8 +612,8 @@ export const CapturesPage: React.FC = () => {
             Capturas
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Caixa de entrada rápida para descarregar a mente sem fricção. Converta em Projeto ou
-            Ação, ou descarte.
+            Caixa de entrada rápida para descarregar a mente sem fricção. Converta em Resultado ou
+            Avanço, ou descarte.
           </p>
         </div>
 
@@ -639,9 +639,9 @@ export const CapturesPage: React.FC = () => {
                   : st === 'pendente'
                     ? 'Pendentes'
                     : st === 'convertida_projeto'
-                      ? 'Projetos'
+                      ? 'Resultados'
                       : st === 'convertida_acao'
-                        ? 'Ações'
+                        ? 'Avanços'
                         : 'Descartadas'}
               </button>
             ))}
@@ -660,8 +660,8 @@ export const CapturesPage: React.FC = () => {
               {conversionFeedback.duplicate
                 ? 'Captura já convertida'
                 : conversionFeedback.targetType === 'project'
-                  ? 'Captura convertida em Projeto'
-                  : 'Captura convertida em Ação'}
+                  ? 'Captura convertida em Resultado'
+                  : 'Captura convertida em Avanço'}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {conversionFeedback.duplicate
@@ -675,13 +675,13 @@ export const CapturesPage: React.FC = () => {
           {conversionFeedback.targetType === 'project' ? (
             <Button asChild size="sm" className="gap-1.5 shrink-0">
               <Link to={`/projetos?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
-                Abrir projeto
+                Abrir resultado
               </Link>
             </Button>
           ) : (
             <Button asChild size="sm" className="gap-1.5 shrink-0">
               <Link to={`/acoes?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
-                Abrir ação
+                Abrir avanço
               </Link>
             </Button>
           )}
@@ -823,7 +823,7 @@ export const CapturesPage: React.FC = () => {
                         className="text-xs gap-1.5"
                       >
                         <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                        Virar Ação
+                        Virar Avanço
                       </Button>
 
                       <Button
@@ -833,7 +833,7 @@ export const CapturesPage: React.FC = () => {
                         className="text-xs gap-1.5"
                       >
                         <FolderKanban className="w-3.5 h-3.5 text-primary" />
-                        Virar Projeto
+                        Virar Resultado
                       </Button>
 
                       {/* BLOCO 9 — rótulo opcional com ênfase neutra (ver Cards) */}
@@ -880,10 +880,10 @@ export const CapturesPage: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
               <FolderKanban className="w-5 h-5 text-primary" />
-              Converter Captura em Projeto
+              Converter Captura em Resultado
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Crie o projeto como rascunho com título e contexto. Você pode preencher o resto
+              Crie o resultado como rascunho com título e contexto. Você pode preencher o resto
               depois.
             </DialogDescription>
           </DialogHeader>
@@ -902,7 +902,7 @@ export const CapturesPage: React.FC = () => {
             )}
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Título do Projeto
+                Título do Resultado
               </Label>
               <Input
                 value={projectTitle}
@@ -976,7 +976,7 @@ export const CapturesPage: React.FC = () => {
               onClick={() => handleConfirmConvert('project')}
               disabled={isConverting || !projectTitle.trim()}
             >
-              {isConverting ? 'Gravando…' : 'Criar Projeto Rascunho'}
+              {isConverting ? 'Gravando…' : 'Criar Resultado Rascunho'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -991,10 +991,10 @@ export const CapturesPage: React.FC = () => {
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
               <CheckSquare className="w-5 h-5 text-primary" />
-              Converter Captura em Ação
+              Converter Captura em Avanço
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Crie uma ação executável vinculada ou solta, pronta para a execução.
+              Crie um avanço executável vinculado ou solto, pronto para a execução.
             </DialogDescription>
           </DialogHeader>
 
@@ -1012,7 +1012,7 @@ export const CapturesPage: React.FC = () => {
             )}
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Título da Ação
+                Título do Avanço
               </Label>
               <Input
                 value={actionTitle}
@@ -1042,17 +1042,17 @@ export const CapturesPage: React.FC = () => {
 
               <div className="space-y-1.5">
                 <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Projeto (Opcional)
+                  Resultado (Opcional)
                 </Label>
                 <Select
                   value={actionProjectId}
                   onValueChange={(v) => setActionProjectId(v === 'none' ? '' : v)}
                 >
                   <SelectTrigger className="truncate text-xs">
-                    <SelectValue placeholder="Ação solta" />
+                    <SelectValue placeholder="Avanço solto" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Ação solta</SelectItem>
+                    <SelectItem value="none">Avanço solto</SelectItem>
                     {availableProjects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
                         {`${formatEntityTitle('project', p.sequence_number, p.title)} [${p.context}]`}
@@ -1072,7 +1072,7 @@ export const CapturesPage: React.FC = () => {
               onClick={() => handleConfirmConvert('action')}
               disabled={isConverting || !actionTitle.trim()}
             >
-              {isConverting ? 'Gravando…' : 'Criar Ação Pronta'}
+              {isConverting ? 'Gravando…' : 'Criar Avanço Pronto'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -69,20 +69,22 @@ function groupTimeEntriesByAction(entries: TimeEntry[]): Record<string, TimeEntr
   }, {})
 }
 
+// Valores persistidos (pronta/bloqueada/feita/cancelada) NÃO mudam; só o
+// rótulo concorda com o novo substantivo Avanço (masculino).
 const STATUS_OPTIONS: { value: ActionStatus | 'todos'; label: string }[] = [
   { value: 'todos', label: 'Todos' },
-  { value: 'pronta', label: 'Pronta' },
+  { value: 'pronta', label: 'Pronto' },
   { value: 'em_andamento', label: 'Em andamento' },
   { value: 'aguardando', label: 'Aguardando' },
-  { value: 'bloqueada', label: 'Bloqueada' },
-  { value: 'feita', label: 'Feita' },
-  { value: 'cancelada', label: 'Cancelada' },
+  { value: 'bloqueada', label: 'Bloqueado' },
+  { value: 'feita', label: 'Feito' },
+  { value: 'cancelada', label: 'Cancelado' },
 ]
 
 const LINK_OPTIONS: { value: 'todas' | 'sem_projeto' | 'com_projeto'; label: string }[] = [
   { value: 'todas', label: 'Todas' },
-  { value: 'sem_projeto', label: 'Sem projeto' },
-  { value: 'com_projeto', label: 'Com projeto' },
+  { value: 'sem_projeto', label: 'Sem resultado' },
+  { value: 'com_projeto', label: 'Com resultado' },
 ]
 
 // BLOCO 2B — resolução do destino de /acoes?id=<ID> (mesmo contrato já usado
@@ -185,7 +187,7 @@ export const ActionsPage: React.FC = () => {
       const list = await timeService.listByActions(actionIds)
       setTimeEntries(list)
     } catch (err: unknown) {
-      setTimeError(errorMessage(err, 'Não foi possível carregar o tempo das ações.'))
+      setTimeError(errorMessage(err, 'Não foi possível carregar o tempo dos avanços.'))
     } finally {
       setTimeLoading(false)
     }
@@ -241,7 +243,7 @@ export const ActionsPage: React.FC = () => {
                 id: urlActionId,
                 action: null,
                 state: status === 404 ? 'notfound' : 'error',
-                error: errorMessage(err, 'Não foi possível abrir a ação deste link.'),
+                error: errorMessage(err, 'Não foi possível abrir o avanço deste link.'),
               },
         )
       })
@@ -286,8 +288,11 @@ export const ActionsPage: React.FC = () => {
 
   // Catálogo filtrado: busca + status + vínculo. O filtro global de contexto já
   // veio da consulta; aqui só recorta a exibição local. A busca cobre título,
-  // descrição/notas e o título do projeto já resolvido (mesma resolução da linha),
-  // sem nova consulta. Campos ausentes não geram erro nem texto inventado.
+  // descrição/notas e o título do resultado já resolvido (mesma resolução da
+  // linha), sem nova consulta. Campos ausentes não geram erro nem texto
+  // inventado. Código/número é match INTEGRAL (exato): "3" acha o avanço 3 e
+  // nunca o 13; "AV-1" não localiza o AV-12 por substring. Aceita o código novo
+  // (AV-12) e o legado (A-12) para o próprio avanço, e R-N/P-N para o vínculo.
   const filteredActions = useMemo(() => {
     const query = search.trim().toLowerCase()
     return actions.filter((a) => {
@@ -296,12 +301,18 @@ export const ActionsPage: React.FC = () => {
         const inDescription = (a.description ?? '').toLowerCase().includes(query)
         const project = resolveProject(a)
         const inProject = (project?.title ?? '').toLowerCase().includes(query)
-        // NUMERAÇÃO PERMANENTE: busca local também pelo código (ex.: "a-3") ou
-        // pelo número puro (ex.: "3") — dados já carregados, sem nova consulta.
-        const inCode = entityNumberCode('action', a.sequence_number)?.toLowerCase().includes(query)
-        const inProjectCode = entityNumberCode('project', project?.sequence_number)
-          ?.toLowerCase()
-          .includes(query)
+        // NUMERAÇÃO PERMANENTE: busca local também pelo código/número — dados
+        // já carregados, sem nova consulta. Campos de código: igualdade exata.
+        const inCode =
+          typeof a.sequence_number === 'number' &&
+          (query === entityNumberCode('action', a.sequence_number)?.toLowerCase() ||
+            query === `av-${a.sequence_number}` ||
+            query === `a-${a.sequence_number}`)
+        const inProjectCode =
+          typeof project?.sequence_number === 'number' &&
+          (query === entityNumberCode('project', project.sequence_number)?.toLowerCase() ||
+            query === `r-${project.sequence_number}` ||
+            query === `p-${project.sequence_number}`)
         const inNumber = /^\d+$/.test(query) && a.sequence_number === Number(query)
         if (!inTitle && !inDescription && !inProject && !inCode && !inProjectCode && !inNumber)
           return false
@@ -387,7 +398,7 @@ export const ActionsPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente ações "pronta" podem ser o próximo avanço único. Tente outra ação ou reavalie esta.',
+            'Somente avanços "prontos" podem ser o próximo avanço único. Tente outro avanço ou reavalie este.',
         })
         return
       }
@@ -424,7 +435,7 @@ export const ActionsPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente ações "pronta" podem ir para as Poucas Ações de Hoje. Tente outra ação ou reavalie esta.',
+            'Somente avanços "prontos" podem ir para as Poucas Ações de Hoje. Tente outro avanço ou reavalie este.',
         })
         return
       }
@@ -483,13 +494,13 @@ export const ActionsPage: React.FC = () => {
               className={cn('inline-flex items-center gap-1', !project && 'text-ginga-warning')}
             >
               {project ? (
-                <span className="truncate">Projeto: {project.title}</span>
+                <span className="truncate">Resultado: {project.title}</span>
               ) : (
-                <span>Vínculo de projeto indisponível</span>
+                <span>Vínculo de resultado indisponível</span>
               )}
             </span>
           )}
-          {!linkLabel && <span>Sem projeto</span>}
+          {!linkLabel && <span>Sem resultado</span>}
           {project && ['pausado', 'arquivado', 'concluido'].includes(project.status) && (
             <Badge variant="outline" className="text-[10px] uppercase">
               {project.status}
@@ -544,7 +555,7 @@ export const ActionsPage: React.FC = () => {
             <div className="p-1.5 rounded-lg bg-ginga-info-bg text-ginga-info border border-ginga-info/30">
               <ListChecks className="w-4 h-4" />
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Ações</h2>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground">Avanços</h2>
             {contextFilter !== 'todos' && (
               <Badge
                 variant="outline"
@@ -555,7 +566,7 @@ export const ActionsPage: React.FC = () => {
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Catálogo completo de todas as suas ações, com ou sem projeto, independentemente da
+            Catálogo completo de todos os seus avanços, com ou sem resultado, independentemente da
             seleção para Hoje. Hoje continua sendo um recorte deliberado, não o catálogo.
           </p>
         </div>
@@ -572,7 +583,7 @@ export const ActionsPage: React.FC = () => {
             className="gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Nova Ação
+            Novo avanço
           </Button>
         </div>
       </div>
@@ -595,7 +606,7 @@ export const ActionsPage: React.FC = () => {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
             <p className="text-sm font-medium text-destructive">
-              Falha ao carregar tempos das ações.
+              Falha ao carregar tempos dos avanços.
             </p>
             <p className="mt-0.5 text-xs text-destructive">{timeError}</p>
             <Button size="sm" variant="outline" onClick={loadTimeEntries} className="mt-2 text-xs">
@@ -610,7 +621,7 @@ export const ActionsPage: React.FC = () => {
       {urlActionId && destResolving && (
         <div className="rounded-xl border border-border bg-muted p-3 flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
-          Abrindo a ação deste link…
+          Abrindo o avanço deste link…
         </div>
       )}
 
@@ -618,9 +629,9 @@ export const ActionsPage: React.FC = () => {
         <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
           <SearchX className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm text-destructive font-medium">Ação não encontrada.</p>
+            <p className="text-sm text-destructive font-medium">Avanço não encontrado.</p>
             <p className="text-xs text-destructive mt-0.5">
-              O link aponta para uma ação que não existe, foi removida ou não está acessível nesta
+              O link aponta para um avanço que não existe, foi removido ou não está acessível nesta
               sessão.
             </p>
             <Button
@@ -641,7 +652,7 @@ export const ActionsPage: React.FC = () => {
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">
-              Não foi possível abrir a ação deste link.
+              Não foi possível abrir o avanço deste link.
             </p>
             <p className="text-xs text-destructive mt-0.5">{dest.error}</p>
             <Button
@@ -667,8 +678,8 @@ export const ActionsPage: React.FC = () => {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por título, descrição ou projeto…"
-            aria-label="Buscar ações por título, descrição ou projeto"
+            placeholder="Buscar por título, descrição, código (AV-12/A-12) ou resultado…"
+            aria-label="Buscar avanços por título, descrição, código (novo AV-N ou legado A-N) ou resultado vinculado"
             className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
           />
         </div>
@@ -692,7 +703,7 @@ export const ActionsPage: React.FC = () => {
         </Select>
         <Select value={linkFilter} onValueChange={(val) => setLinkFilter(val as typeof linkFilter)}>
           <SelectTrigger
-            aria-label="Filtrar por vínculo de projeto"
+            aria-label="Filtrar por vínculo de resultado"
             className="min-h-11 w-full border-input bg-card text-base text-foreground sm:w-40 sm:text-sm"
           >
             <SelectValue />
@@ -716,19 +727,19 @@ export const ActionsPage: React.FC = () => {
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {destContextMismatch ? (
                 <span className="text-ginga-warning">
-                  Esta ação é de {destDisplayAction.context === 'trabalho' ? 'Trabalho' : 'Vida'} e
-                  está fora do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}).
-                  O filtro foi preservado.
+                  Este avanço é de {destDisplayAction.context === 'trabalho' ? 'Trabalho' : 'Vida'}{' '}
+                  e está fora do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}
+                  ). O filtro foi preservado.
                 </span>
               ) : catalogDestAction ? (
                 <span>
-                  Esta ação está fora dos filtros atuais do catálogo (busca, status ou vínculo). Os
-                  filtros foram preservados.
+                  Este avanço está fora dos filtros atuais do catálogo (busca, status ou vínculo).
+                  Os filtros foram preservados.
                 </span>
               ) : (
                 <span>
-                  Esta ação não está nos dados carregados do catálogo; foi aberta por leitura direta
-                  do link.
+                  Este avanço não está nos dados carregados do catálogo; foi aberto por leitura
+                  direta do link.
                 </span>
               )}
             </div>
@@ -746,7 +757,7 @@ export const ActionsPage: React.FC = () => {
         <div className="flex items-center justify-center py-12">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-muted-foreground">Carregando ações…</span>
+            <span className="text-sm text-muted-foreground">Carregando avanços…</span>
           </div>
         </div>
       ) : filteredActions.length === 0 ? (
@@ -755,16 +766,17 @@ export const ActionsPage: React.FC = () => {
           {actions.length === 0 ? (
             <>
               <p className="text-sm font-medium text-muted-foreground">
-                Nenhuma ação cadastrada ainda.
+                Nenhum avanço cadastrado ainda.
               </p>
               <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-                Crie sua primeira ação com "Nova Ação" — não precisa estar vinculada a um projeto.
+                Crie seu primeiro avanço com "Novo avanço" — não precisa estar vinculado a um
+                resultado.
               </p>
             </>
           ) : (
             <>
               <p className="text-sm font-medium text-muted-foreground">
-                Nenhuma ação corresponde aos filtros atuais.
+                Nenhum avanço corresponde aos filtros atuais.
               </p>
               {hasActiveLocalFilters && (
                 <Button

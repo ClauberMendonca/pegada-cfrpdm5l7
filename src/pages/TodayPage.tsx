@@ -47,10 +47,10 @@ import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 
 function projectBlockLabel(p: Project): string {
-  if (p.status === 'pausado') return 'projeto pausado'
-  if (p.status === 'arquivado') return 'projeto arquivado'
-  if (p.status === 'concluido') return 'projeto encerrado'
-  return 'sem próxima ação definida'
+  if (p.status === 'pausado') return 'resultado pausado'
+  if (p.status === 'arquivado') return 'resultado arquivado'
+  if (p.status === 'concluido') return 'resultado encerrado'
+  return 'sem próximo avanço definido'
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -287,7 +287,7 @@ export const TodayPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente ações "pronta" podem ser o próximo avanço único. Tente outra ação ou reavalie esta.',
+            'Somente avanços "prontos" podem ser o próximo avanço único. Tente outro avanço ou reavalie este.',
         })
         return
       }
@@ -326,7 +326,7 @@ export const TodayPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente ações "pronta" podem ir para as Poucas Ações de Hoje. Tente outra ação ou reavalie esta.',
+            'Somente avanços "prontos" podem ir para os Poucos Avanços de Hoje. Tente outro avanço ou reavalie este.',
         })
         return
       }
@@ -405,7 +405,7 @@ export const TodayPage: React.FC = () => {
             className="gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            Nova Ação
+            Novo Avanço
           </Button>
         </div>
       </div>
@@ -428,7 +428,7 @@ export const TodayPage: React.FC = () => {
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
             <p className="text-sm font-medium text-destructive">
-              Falha ao carregar tempos das ações.
+              Falha ao carregar tempos dos avanços.
             </p>
             <p className="mt-0.5 text-xs text-destructive">{timeError}</p>
             <Button size="sm" variant="outline" onClick={loadTimeEntries} className="mt-2 text-xs">
@@ -450,7 +450,7 @@ export const TodayPage: React.FC = () => {
                 Próximo Avanço Único
               </h3>
               <p className="text-xs text-muted-foreground">
-                A única ação que, se feita hoje, garante tração real no dia.
+                O único avanço que, se feito hoje, garante tração real no dia.
               </p>
             </div>
           </div>
@@ -508,9 +508,9 @@ export const TodayPage: React.FC = () => {
               Qual avanço você quer fazer agora?
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-              Escolha deliberadamente uma ação "pronta" da sua lista (estrela) para torná-la o foco
+              Escolha deliberadamente um avanço "pronto" da sua lista (estrela) para torná-lo o foco
               do dia. Nada é promovido automaticamente. O catálogo completo está em{' '}
-              <span className="font-medium text-foreground">Ações</span>.
+              <span className="font-medium text-foreground">Avanços</span>.
             </p>
           </div>
         )}
@@ -521,7 +521,7 @@ export const TodayPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-              Poucas Ações de Hoje ({todaySelectedActions.length})
+              Poucos Avanços de Hoje ({todaySelectedActions.length})
             </h3>
           </div>
         </div>
@@ -570,8 +570,8 @@ export const TodayPage: React.FC = () => {
         ) : (
           <div className="rounded-xl border border-border bg-muted p-4 text-center">
             <p className="text-xs text-muted-foreground">
-              Nenhuma outra ação secundária selecionada para hoje. Você pode puxar mais do catálogo
-              em <span className="font-medium text-foreground">Ações</span> — o recorte de Hoje
+              Nenhum outro avanço secundário selecionado para hoje. Você pode puxar mais do catálogo
+              em <span className="font-medium text-foreground">Avanços</span> — o recorte de Hoje
               continua sendo escolha deliberada, não o catálogo completo.
             </p>
           </div>
@@ -651,7 +651,7 @@ export const TodayPage: React.FC = () => {
                   Reavaliar ({reevaluateCount})
                 </span>
                 <p className="text-xs text-muted-foreground">
-                  Atrasadas, aguardando, bloqueadas, fora do foco por impedimento e projetos
+                  Atrasadas, aguardando, bloqueadas, fora do foco por impedimento e resultados
                   pausados ou sem avanço
                 </p>
               </div>
@@ -677,7 +677,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-destructive uppercase tracking-wider">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Ações com Prazo Passado ({overdueActions.length})</span>
+                  <span>Avanços com Prazo Passado ({overdueActions.length})</span>
                 </div>
                 <div className="grid gap-2">
                   {overdueActions.map((action) => (
@@ -727,7 +727,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-ginga-warning uppercase tracking-wider">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Aguardando ou Bloqueadas ({blockedOrWaitingActions.length})</span>
+                  <span>Aguardando ou Bloqueados ({blockedOrWaitingActions.length})</span>
                 </div>
                 <div className="grid gap-2">
                   {blockedOrWaitingActions.map((action) => (
@@ -808,7 +808,7 @@ export const TodayPage: React.FC = () => {
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
                           <Link to={`/acoes?id=${encodeURIComponent(action.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
-                            Abrir ação
+                            Abrir avanço
                           </Link>
                         </Button>
                       </span>
@@ -822,7 +822,9 @@ export const TodayPage: React.FC = () => {
             {reevaluateProjects.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <span>Projetos Pausados ou Sem Próxima Ação ({reevaluateProjects.length})</span>
+                  <span>
+                    Resultados Pausados ou Sem Próximo Avanço ({reevaluateProjects.length})
+                  </span>
                 </div>
                 <div className="grid gap-2">
                   {reevaluateProjects.map((p) => (
@@ -844,7 +846,7 @@ export const TodayPage: React.FC = () => {
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
                           <Link to={`/projetos?id=${encodeURIComponent(p.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
-                            Abrir projeto
+                            Abrir resultado
                           </Link>
                         </Button>
                       </span>

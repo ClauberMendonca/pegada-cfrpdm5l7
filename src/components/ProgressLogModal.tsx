@@ -26,8 +26,8 @@ interface ProgressLogModalProps {
   onClose: () => void
   action?: ActionItem | null
   projectId?: string
-  /** NUMERAÇÃO PERMANENTE — projeto já carregado pelo chamador, para exibir
-     P-N quando o registro é direto no projeto (sem nova consulta). */
+  /** NUMERAÇÃO PERMANENTE — resultado já carregado pelo chamador, para exibir
+     R-N quando o registro é direto no resultado (sem nova consulta). */
   project?: Project | null
   onSaved?: () => void
 }
@@ -224,7 +224,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
           {action ? (
             <div className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground">
               <span className="mb-0.5 block font-medium text-muted-foreground">
-                Vinculado à ação:
+                Vinculado ao avanço:
               </span>
               <span className="flex flex-wrap items-baseline gap-1.5">
                 <EntityNumberBadge kind="action" n={action.sequence_number} entityId={action.id} />
@@ -234,7 +234,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
           ) : projectId || project ? (
             <div className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground">
               <span className="mb-0.5 block font-medium text-muted-foreground">
-                Vinculado ao projeto:
+                Vinculado ao resultado:
               </span>
               <span className="flex flex-wrap items-baseline gap-1.5">
                 <EntityNumberBadge

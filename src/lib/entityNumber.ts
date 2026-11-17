@@ -1,20 +1,24 @@
 /**
- * NUMERAÇÃO PERMANENTE — Entrega 2 (apresentação).
- * Prefixos P-/A- vêm SEMPRE do campo sequence_number gravado no banco
+ * NUMERAÇÃO PERMANENTE — apresentação (Resultados e Avanços).
+ * Prefixos R-/AV- vêm SEMPRE do campo sequence_number gravado no banco
  * (migration 0009 + hooks). Nunca derivar de índice, COUNT, id ou created.
  * O prefixo é só apresentação: title, ids e URLs permanecem intactos.
+ * Entidades persistem kind 'project'|'action'; a tela chama R = Resultado
+ * (project) e AV = Avanço (action).
  */
 export type EntityNumberKind = 'project' | 'action'
 
-const PREFIX: Record<EntityNumberKind, string> = { project: 'P', action: 'A' }
-const KIND_LABEL: Record<EntityNumberKind, string> = { project: 'Projeto', action: 'Ação' }
+const PREFIX: Record<EntityNumberKind, string> = { project: 'R', action: 'AV' }
+const KIND_LABEL: Record<EntityNumberKind, string> = { project: 'Resultado', action: 'Avanço' }
+/** Prefixos legados aceitos na busca de cada catálogo (mesmo número). */
+export const LEGACY_PREFIX: Record<EntityNumberKind, string> = { project: 'P', action: 'A' }
 
 /** Número válido = inteiro positivo vindo do banco (sem zeros artificiais). */
 export function hasEntityNumber(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n) && n > 0
 }
 
-/** Código curto "P-3"/"A-12"; null quando o número ainda não está disponível. */
+/** Código curto "R-3"/"AV-12"; null quando o número ainda não está disponível. */
 export function entityNumberCode(
   kind: EntityNumberKind,
   n: number | null | undefined,
@@ -22,7 +26,7 @@ export function entityNumberCode(
   return hasEntityNumber(n) ? `${PREFIX[kind]}-${n}` : null
 }
 
-/** Formatter textual para locais sem JSX: "P-1 · Título" (ou só o título). */
+/** Formatter textual para locais sem JSX: "R-1 · Título" (ou só o título). */
 export function formatEntityTitle(
   kind: EntityNumberKind,
   n: number | null | undefined,
@@ -32,7 +36,7 @@ export function formatEntityTitle(
   return code ? `${code} · ${title}` : title
 }
 
-/** Nome acessível: "Projeto número 3" / "Ação número 12". */
+/** Nome acessível: "Resultado número 3" / "Avanço número 12". */
 export function entityNumberAriaLabel(kind: EntityNumberKind, n: number): string {
   return `${KIND_LABEL[kind]} número ${n}`
 }

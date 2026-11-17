@@ -136,12 +136,12 @@ export const SummaryToggle: React.FC<{
 
 /** Rótulos de status de ação já usados nas áreas (sem nova fonte de verdade). */
 const ACTION_STATUS_LABELS: Record<string, string> = {
-  pronta: 'Pronta',
+  pronta: 'Pronto',
   em_andamento: 'Em andamento',
   aguardando: 'Aguardando',
-  bloqueada: 'Bloqueada',
-  feita: 'Feita',
-  cancelada: 'Cancelada',
+  bloqueada: 'Bloqueado',
+  feita: 'Feito',
+  cancelada: 'Cancelado',
 }
 
 /**
@@ -155,8 +155,8 @@ export function actionSummaryLine(
   options: { projectTitle?: string | null; today?: string } = {},
 ): string {
   const parts: string[] = [ACTION_STATUS_LABELS[action.status] ?? action.status]
-  if (options.projectTitle === null) parts.push('Sem projeto')
-  else if (options.projectTitle) parts.push(`Projeto: ${options.projectTitle}`)
+  if (options.projectTitle === null) parts.push('Sem resultado')
+  else if (options.projectTitle) parts.push(`Resultado: ${options.projectTitle}`)
   if (action.deadline) {
     parts.push(
       options.today && action.deadline === options.today

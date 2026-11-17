@@ -37,12 +37,14 @@ export default function Layout() {
   const { contextFilter, setContextFilter } = useGlobalFilter()
   const { running, error } = useTimer()
 
-  // Ordem aprovada pelo dono: Hoje → Ações → Projetos → Capturas → Revisão.
+  // Ordem aprovada pelo dono: Hoje → Avanços → Resultados → Capturas → Revisão.
+  // Rotas /acoes e /projetos permanecem (aliases /avancos e /resultados virão
+  // depois); só o texto visível muda.
   // Fonte única usada pela navegação desktop (sidebar) e móvel (bottom nav).
   const navItems = [
     { to: '/', label: 'Hoje', icon: SunMedium },
-    { to: '/acoes', label: 'Ações', icon: ListChecks },
-    { to: '/projetos', label: 'Projetos', icon: FolderKanban },
+    { to: '/acoes', label: 'Avanços', icon: ListChecks },
+    { to: '/projetos', label: 'Resultados', icon: FolderKanban },
     { to: '/capturas', label: 'Capturas', icon: Inbox },
     { to: '/revisao', label: 'Revisão', icon: Compass },
   ]

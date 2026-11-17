@@ -96,7 +96,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           setProjects(list)
         })
         .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : 'Falha ao carregar projetos.'
+          const msg = err instanceof Error ? err.message : 'Falha ao carregar resultados.'
           toast({ variant: 'destructive', title: 'Erro', description: msg })
         })
 
@@ -141,7 +141,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     }
     setFocusNotice(
       `Seleção não permitida: ${
-        eligibility.label ?? 'somente ações "pronta" recebem nova seleção de foco'
+        eligibility.label ?? 'somente avanços "prontos" recebem nova seleção de foco'
       }. Ajuste o status ou o vínculo antes de selecionar.`,
     )
     return false
@@ -169,17 +169,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           if (freshProject.status === 'concluido' || freshProject.status === 'arquivado') {
             toast({
               variant: 'destructive',
-              title: 'Ação não criada',
-              description: `O projeto “${freshProject.title}” está ${freshProject.status === 'concluido' ? 'concluído' : 'arquivado'}. Reabra o projeto pelo comando existente antes de planejar novas ações vinculadas.`,
+              title: 'Avanço não criado',
+              description: `O resultado “${freshProject.title}” está ${freshProject.status === 'concluido' ? 'concluído' : 'arquivado'}. Reabra o resultado pelo comando existente antes de planejar novos avanços vinculados.`,
             })
             return
           }
         } catch (readErr: unknown) {
           const readMsg =
-            readErr instanceof Error ? readErr.message : 'Falha ao revalidar o projeto vinculado.'
+            readErr instanceof Error ? readErr.message : 'Falha ao revalidar o resultado vinculado.'
           toast({
             variant: 'destructive',
-            title: 'Ação não criada',
+            title: 'Avanço não criado',
             description: readMsg,
           })
           return
@@ -206,14 +206,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           effNext = false
           setFocusNotice(
             `Próximo avanço não gravado: ${
-              eligibility.label ?? 'somente ações "pronta" recebem nova seleção'
+              eligibility.label ?? 'somente avanços "prontos" recebem nova seleção'
             }. As demais alterações serão salvas.`,
           )
         } else if (effToday && !prevToday && !prevNext) {
           effToday = false
           setFocusNotice(
             `Seleção para Hoje não gravada: ${
-              eligibility.label ?? 'somente ações "pronta" recebem nova seleção'
+              eligibility.label ?? 'somente avanços "prontos" recebem nova seleção'
             }. As demais alterações serão salvas.`,
           )
         } else {
@@ -243,16 +243,16 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
       if (actionToEdit) {
         await actionService.update(actionToEdit.id, payload)
-        toast({ title: 'Ação atualizada' })
+        toast({ title: 'Avanço atualizado' })
       } else {
         await actionService.create(payload)
-        toast({ title: 'Ação criada com sucesso' })
+        toast({ title: 'Avanço criado com sucesso' })
       }
 
       onSaved?.()
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao salvar ação'
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar avanço'
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -291,7 +291,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       projectId === defaultProjectId
     ) {
       setFocusNotice(
-        'Projeto pausado — você pode planejar ações; execução e seleção de foco continuam sujeitas às regras existentes.',
+        'Resultado pausado — você pode planejar avanços; execução e seleção de foco continuam sujeitas às regras existentes.',
       )
     }
   }, [isOpen, actionToEdit, selectedPaused, defaultProjectId, projectId])
@@ -301,19 +301,19 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-foreground">
-            {actionToEdit ? 'Editar ação' : 'Nova ação'}
+            {actionToEdit ? 'Editar avanço' : 'Novo avanço'}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             {actionToEdit
-              ? 'Ajuste os dados desta ação. As alterações são gravadas somente ao confirmar.'
-              : 'Preencha os dados da ação. Ela é gravada somente ao confirmar.'}
+              ? 'Ajuste os dados deste avanço. As alterações são gravadas somente ao confirmar.'
+              : 'Preencha os dados do avanço. Ele é gravado somente ao confirmar.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
             <Label htmlFor={ids.title} className="text-sm font-medium text-foreground">
-              Título da ação
+              Título do avanço
             </Label>
             <Input
               id={ids.title}
@@ -348,7 +348,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               id={ids.description}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Detalhes, orientações e informações úteis para executar esta ação."
+              placeholder="Detalhes, orientações e informações úteis para executar este avanço."
               aria-describedby={ids.descriptionHelp}
               maxLength={20000}
               rows={4}
@@ -395,12 +395,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-popover text-popover-foreground">
-                  <SelectItem value="pronta">Pronta</SelectItem>
+                  <SelectItem value="pronta">Pronto</SelectItem>
                   <SelectItem value="em_andamento">Em andamento</SelectItem>
                   <SelectItem value="aguardando">Aguardando</SelectItem>
-                  <SelectItem value="bloqueada">Bloqueada</SelectItem>
-                  <SelectItem value="feita">Feita</SelectItem>
-                  <SelectItem value="cancelada">Cancelada</SelectItem>
+                  <SelectItem value="bloqueada">Bloqueado</SelectItem>
+                  <SelectItem value="feita">Feito</SelectItem>
+                  <SelectItem value="cancelada">Cancelado</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -424,17 +424,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor={ids.project} className="text-sm font-medium text-foreground">
-                Projeto vinculado (opcional)
+                Resultado vinculado (opcional)
               </Label>
               <Select value={projectId} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
                 <SelectTrigger
                   id={ids.project}
                   className="truncate border-input bg-card text-base text-foreground sm:text-sm"
                 >
-                  <SelectValue placeholder="Ação solta (sem projeto)" />
+                  <SelectValue placeholder="Avanço solto (sem resultado)" />
                 </SelectTrigger>
                 <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
-                  <SelectItem value="none">Ação solta (sem projeto)</SelectItem>
+                  <SelectItem value="none">Avanço solto (sem resultado)</SelectItem>
                   {/* Novos vínculos: apenas projetos permitidos pela regra atual.
                      NUMERAÇÃO PERMANENTE: P-N real vem do sequence_number do
                      banco; o value segue sendo o ID do projeto. */}
@@ -450,7 +450,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                         const linked = projects.find((p) => p.id === projectId)
                         return linked
                           ? `[${linked.context}] ${formatEntityTitle('project', linked.sequence_number, linked.title)} (${linked.status})`
-                          : 'Projeto vinculado (indisponível)'
+                          : 'Resultado vinculado (indisponível)'
                       })()}
                     </SelectItem>
                   )}
@@ -475,16 +475,16 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           {/* BLOCO 5.1 — motivo legível de bloqueio ao criar com vínculo encerrado. */}
           {blockedByClosedProject && (
             <p role="alert" className="text-xs font-medium text-ginga-warning">
-              Projeto {selectedProject!.status === 'concluido' ? 'concluído' : 'arquivado'} — não
-              recebe novas ações. Reabra o projeto pelo comando existente antes de planejar ações
-              vinculadas a ele.
+              Resultado {selectedProject!.status === 'concluido' ? 'concluído' : 'arquivado'} — não
+              recebe novos avanços. Reabra o resultado pelo comando existente antes de planejar
+              avanços vinculados a ele.
             </p>
           )}
 
           {/* BLOCO 5.2 — planejamento em projeto pausado: permitido com aviso. */}
           {contextualPausedNotice && (
             <p role="note" className="text-xs font-medium text-ginga-warning">
-              Projeto pausado — você pode planejar ações; execução e seleção de foco continuam
+              Resultado pausado — você pode planejar avanços; execução e seleção de foco continuam
               sujeitas às regras existentes.
             </p>
           )}
@@ -499,7 +499,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                   Selecionar para Hoje
                 </Label>
                 <span id={ids.todayHelp} className="text-sm text-muted-foreground">
-                  Coloca esta ação entre as poucas de Hoje
+                  Coloca este avanço entre os poucos de Hoje
                 </span>
               </div>
               <Switch
@@ -565,7 +565,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               disabled={isSaving || !title.trim() || blockedByClosedProject}
               className="min-h-11 rounded-xl"
             >
-              {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar ação'}
+              {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar avanço'}
             </Button>
           </DialogFooter>
         </form>

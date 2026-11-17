@@ -176,16 +176,16 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
       if (projectToEdit) {
         await projectService.update(projectToEdit.id, payload)
-        toast({ title: 'Ficha do projeto atualizada' })
+        toast({ title: 'Ficha do resultado atualizada' })
       } else {
         await projectService.create(payload)
-        toast({ title: 'Projeto criado com sucesso' })
+        toast({ title: 'Resultado criado com sucesso' })
       }
 
       onSaved?.()
       onClose()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao salvar projeto'
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar resultado'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
     } finally {
       setIsSaving(false)
@@ -197,7 +197,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       <DialogContent className="bg-card border-border text-card-foreground max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-foreground">
-            {projectToEdit ? 'Editar Ficha do Projeto' : 'Novo Projeto'}
+            {projectToEdit ? 'Editar Ficha do Resultado' : 'Novo Resultado'}
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
             Conceito da Inteligência Pragmática: separe o que você quer alcançar (aspiração externa)
@@ -212,7 +212,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               htmlFor={ids.title}
               className="text-xs uppercase tracking-wider text-muted-foreground"
             >
-              Título do Projeto
+              Título do Resultado
             </Label>
             <Input
               id={ids.title}
@@ -421,7 +421,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor={ids.rRazao} className="text-[11px] text-muted-foreground">
-                      2. Razão (Por que este projeto importa agora?)
+                      2. Razão (Por que este resultado importa agora?)
                     </Label>
                     <Input
                       id={ids.rRazao}
@@ -506,7 +506,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               Cancelar
             </Button>
             <Button type="submit" disabled={isSaving || !title.trim()}>
-              {isSaving ? 'Salvando...' : projectToEdit ? 'Atualizar Projeto' : 'Criar Projeto'}
+              {isSaving ? 'Salvando...' : projectToEdit ? 'Atualizar Resultado' : 'Criar Resultado'}
             </Button>
           </DialogFooter>
         </form>

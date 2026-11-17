@@ -564,6 +564,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             contextLabel="Direto no projeto"
             targetStatus={project.status}
             projectStatus={project.status}
+            targetNumberCode={entityNumberCode('project', project.sequence_number)}
             entries={directTimeEntries}
             entriesLoading={timeTotals.loading}
             entriesError={timeTotals.error}

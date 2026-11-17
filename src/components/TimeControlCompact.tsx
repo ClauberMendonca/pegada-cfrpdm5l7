@@ -167,6 +167,8 @@ interface TimeControlProps {
   projectStatus?: string | null
   /** Diferencia ação independente de ação com projeto ainda não resolvido. */
   actionHasProject?: boolean
+  /** Código persistido do alvo ("P-3"/"A-12"); só apresentação, nunca gravado. */
+  targetNumberCode?: string | null
   /** Entradas já carregadas pelo pai; evita uma chamada por ActionRow. */
   entries?: TimeEntry[]
   entriesLoading?: boolean
@@ -185,6 +187,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({
   targetStatus,
   projectStatus = null,
   actionHasProject,
+  targetNumberCode = null,
   entries: providedEntries,
   entriesLoading = false,
   entriesError = null,
@@ -400,6 +403,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({
         targetId={targetId}
         targetTitle={targetTitle}
         contextLabel={contextLabel}
+        targetNumberCode={targetNumberCode}
         runningEntry={isThisTargetRunning ? running : null}
         entries={historyEntries}
         entriesLoading={entriesLoadingNow}
@@ -418,6 +422,7 @@ export const TimeControl: React.FC<TimeControlProps> = ({
         targetId={targetId}
         targetTitle={targetTitle}
         contextLabel={contextLabel}
+        targetNumberCode={targetNumberCode}
         editing={editing}
         onSaved={() => {
           setEditing(null)

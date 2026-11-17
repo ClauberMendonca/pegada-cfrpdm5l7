@@ -44,7 +44,7 @@ import {
   ViewToggle,
 } from '@/components/ViewToggle'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
-import { formatEntityTitle } from '@/lib/entityNumber'
+import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'projeto pausado'
@@ -176,6 +176,7 @@ export const TodayPage: React.FC = () => {
         targetStatus={action.status}
         projectStatus={actionProject?.status ?? null}
         actionHasProject={Boolean(action.project_id)}
+        targetNumberCode={entityNumberCode('action', action.sequence_number)}
         entries={timeEntriesByAction[action.id] ?? []}
         entriesLoading={timeLoading}
         entriesError={timeError}

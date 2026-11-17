@@ -37,6 +37,28 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { ownerTimezone, todayInZone, formatCalendarDay } from '@/lib/datetime'
 import { useRunningSeconds, useTimer } from '@/contexts/TimeContext'
+import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
+import { actionService } from '@/services/actionService'
+import { projectService } from '@/services/projectService'
+import { ActionItem, Project } from '@/types/execution'
+
+/**
+ * "P-3 · Título" (ou só o título) — formatter EXISTENTE formatEntityTitle,
+ * sem duplicar prefixo. O código prop ("P-3"/"A-12") vem do sequence_number
+ * do objeto persistido do alvo; sem código, título continua legível.
+ * Aqui é só apresentação: nunca grava código em title/snapshots/payloads.
+ */
+function entityNumberedText(
+  targetType: TimeTargetType,
+  code: string | null | undefined,
+  title: string,
+): string {
+  if (!code) return title
+  const prefix = targetType === 'action' ? 'A-' : 'P-'
+  if (!code.startsWith(prefix)) return title
+  const n = Number(code.slice(prefix.length))
+  return Number.isFinite(n) ? formatEntityTitle(targetType, n, title) : title
+}
 
 const dateInOwnerTz = (tz: string): string => {
   try {
@@ -70,6 +92,8 @@ export interface TimeEntryDialogProps {
   targetId: string
   targetTitle: string
   contextLabel: string
+  /** Código persistido do alvo ("P-3"/"A-12"); só apresentação, nunca gravado. */
+  targetNumberCode?: string | null
   /** Registro existente a corrigir (encerrado); null = registro manual novo. */
   editing?: TimeEntry | null
   onSaved: (entry: TimeEntry, wasEdit: boolean) => void
@@ -82,6 +106,7 @@ export const TimeEntryDialog: React.FC<TimeEntryDialogProps> = ({
   targetId,
   targetTitle,
   contextLabel,
+  targetNumberCode = null,
   editing = null,
   onSaved,
 }) => {
@@ -190,7 +215,9 @@ export const TimeEntryDialog: React.FC<TimeEntryDialogProps> = ({
 
         <div className="space-y-4">
           <div className="rounded-md border bg-muted/40 p-3 text-sm">
-            <div className="font-medium">{targetTitle}</div>
+            <div className="font-medium">
+              {entityNumberedText(targetType, targetNumberCode, targetTitle)}
+            </div>
             <div className="text-muted-foreground">
               {targetType === 'action' ? 'Ação' : 'Projeto'}
               {contextLabel ? ` · ${contextLabel}` : ''}
@@ -276,6 +303,8 @@ export interface TimeHistoryDialogProps {
   targetId: string
   targetTitle: string
   contextLabel: string
+  /** Código persistido do alvo ("P-3"/"A-12"); só apresentação, nunca gravado. */
+  targetNumberCode?: string | null
   runningEntry: TimeEntry | null
   /** Entradas carregadas pelo pai; evita uma consulta por ActionRow. */
   entries?: TimeEntry[]
@@ -293,6 +322,7 @@ export const TimeHistoryDialog: React.FC<TimeHistoryDialogProps> = ({
   targetId,
   targetTitle,
   contextLabel,
+  targetNumberCode = null,
   runningEntry,
   entries: providedEntries,
   entriesLoading = false,
@@ -381,7 +411,9 @@ export const TimeHistoryDialog: React.FC<TimeHistoryDialogProps> = ({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tempo registrado · {targetTitle}</DialogTitle>
+          <DialogTitle>
+            Tempo registrado · {entityNumberedText(targetType, targetNumberCode, targetTitle)}
+          </DialogTitle>
           <DialogDescription>
             {contextLabel ? `${contextLabel} · ` : ''}
             Sem registro significa “Não registrado”, não ausência de trabalho.
@@ -635,10 +667,74 @@ export const ProjectTimeHistory: React.FC<ProjectTimeHistoryProps> = ({
 // Indicador global compacto (no Layout): nome do alvo, duração, Pausar/Encerrar
 // ---------------------------------------------------------------------------
 
+/**
+ * NUMERAÇÃO — código do alvo corrente ("P-3"/"A-12") para o indicador global.
+ * Resolve com UMA leitura autenticada por (dono, tipo, id) — cache de módulo
+ * compartilhado entre montagens, válido enquanto sessão/alvo não mudam.
+ * Falha de leitura não bloqueia Pausar/Encerrar nem altera reconciliação;
+ * sem número, título segue legível (nunca "P-0"). Respostas tardias são
+ * ignoradas quando o alvo já mudou ou desmontou.
+ */
+const targetNumberCache = new Map<string, string | null>()
+
+function useTargetNumberCode(
+  targetType: TimeTargetType | null,
+  targetId: string | null | undefined,
+): string | null {
+  const [code, setCode] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!targetType || !targetId) {
+      setCode(null)
+      return
+    }
+    const cacheKey = `${targetType}:${targetId}`
+    const cached = targetNumberCache.get(cacheKey)
+    if (cached !== undefined) {
+      setCode(cached)
+      return
+    }
+    let cancelled = false
+    setCode(null)
+    const fetchNumber = async () => {
+      try {
+        const record =
+          targetType === 'action'
+            ? await actionService.getById(targetId)
+            : await projectService.getById(targetId)
+        const n =
+          targetType === 'action'
+            ? (record as ActionItem).sequence_number
+            : (record as Project).sequence_number
+        const resolved = entityNumberCode(targetType, n)
+        targetNumberCache.set(cacheKey, resolved)
+        if (!cancelled) setCode(resolved)
+      } catch {
+        if (!cancelled) setCode(null) // sem número; título segue legível
+      }
+    }
+    void fetchNumber()
+    return () => {
+      cancelled = true
+    }
+  }, [targetType, targetId])
+
+  return code
+}
+
 export const GlobalTimerIndicator: React.FC = () => {
   const { running, pending, error, pauseTimer, endTimer, resumeTimer, reconcile, isReconciling } =
     useTimer()
   const liveSeconds = useRunningSeconds()
+
+  // NUMERAÇÃO — código do alvo corrente (só apresentação). Fonte única: o
+  // número persistido da entidade; sem ele, o título segue legível e a
+  // leitura autenticada única é tentada pelo hook abaixo (nunca por segundo
+  // de cronômetro, nunca por time_entry e sem iniciar/retomar nada).
+  const targetNumberCode = useTargetNumberCode(
+    running ? running.target_type : null,
+    running ? (running.target_type === 'action' ? running.action_id : running.project_id) : null,
+  )
 
   if (!running && !error) return null // conciliação nunca inicia nada automaticamente
 
@@ -682,8 +778,19 @@ export const GlobalTimerIndicator: React.FC = () => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Timer className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="truncate text-sm font-medium" title={running.target_title}>
-              {running.target_title || (running.target_type === 'action' ? 'Ação' : 'Projeto')}
+            <span
+              className="truncate text-sm font-medium"
+              title={entityNumberedText(
+                running.target_type,
+                targetNumberCode,
+                running.target_title || (running.target_type === 'action' ? 'Ação' : 'Projeto'),
+              )}
+            >
+              {entityNumberedText(
+                running.target_type,
+                targetNumberCode,
+                running.target_title || (running.target_type === 'action' ? 'Ação' : 'Projeto'),
+              )}
             </span>
             <span className="text-sm tabular-nums" aria-live="off">
               {formatDuration(seconds)}

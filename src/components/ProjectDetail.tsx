@@ -853,6 +853,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         }}
         action={logAction}
         projectId={project.id}
+        project={project}
         onSaved={loadData}
       />
     </div>

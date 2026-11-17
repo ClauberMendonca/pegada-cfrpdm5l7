@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { CheckCircle2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 
 interface CompleteProjectDialogProps {
   isOpen: boolean
@@ -102,8 +103,16 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
             </span>
             <p className="text-sm text-foreground">
               Concluir encerra o planejamento de novas ações em{' '}
-              <span className="font-medium">{project.title}</span>. Ações, registros de progresso e
-              históricos de tempo existentes continuam legíveis e preservados.
+              <span className="inline-flex flex-wrap items-baseline gap-1.5 font-medium">
+                <EntityNumberBadge
+                  kind="project"
+                  n={project.sequence_number}
+                  entityId={project.id}
+                />
+                {project.title}
+              </span>
+              . Ações, registros de progresso e históricos de tempo existentes continuam legíveis e
+              preservados.
             </p>
           </div>
 

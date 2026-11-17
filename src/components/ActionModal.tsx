@@ -25,6 +25,8 @@ import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { formatEntityTitle } from '@/lib/entityNumber'
 
 interface ActionModalProps {
   isOpen: boolean
@@ -321,6 +323,21 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
+            {/* NUMERAÇÃO PERMANENTE — número da ação FORA do input: selo de
+               leitura na edição; na criação, nota discreta (nunca P-0/A-0 ou
+               número previsto). O título digitado continua puro. */}
+            {actionToEdit ? (
+              <span className="flex items-center gap-1.5">
+                <EntityNumberBadge
+                  kind="action"
+                  n={actionToEdit.sequence_number}
+                  entityId={actionToEdit.id}
+                />
+                <span className="text-sm text-foreground">{actionToEdit.title}</span>
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">Número atribuído ao salvar</span>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -418,10 +435,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 </SelectTrigger>
                 <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
                   <SelectItem value="none">Ação solta (sem projeto)</SelectItem>
-                  {/* Novos vínculos: apenas projetos permitidos pela regra atual. */}
+                  {/* Novos vínculos: apenas projetos permitidos pela regra atual.
+                     NUMERAÇÃO PERMANENTE: P-N real vem do sequence_number do
+                     banco; o value segue sendo o ID do projeto. */}
                   {selectableProjects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      [{p.context}] {p.title}
+                      [{p.context}] {formatEntityTitle('project', p.sequence_number, p.title)}
                     </SelectItem>
                   ))}
                   {/* B5 — vínculo atual fora da lista continua legível, com status. */}
@@ -430,7 +449,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                       {(() => {
                         const linked = projects.find((p) => p.id === projectId)
                         return linked
-                          ? `[${linked.context}] ${linked.title} (${linked.status})`
+                          ? `[${linked.context}] ${formatEntityTitle('project', linked.sequence_number, linked.title)} (${linked.status})`
                           : 'Projeto vinculado (indisponível)'
                       })()}
                     </SelectItem>

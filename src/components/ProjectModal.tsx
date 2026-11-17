@@ -24,6 +24,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { ChevronDown, Sparkles, Target, Compass, BookOpen } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 
 interface ProjectModalProps {
   isOpen: boolean
@@ -221,6 +222,21 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               className="font-medium"
               required
             />
+            {/* NUMERAÇÃO PERMANENTE — número do projeto FORA do input: selo de
+               leitura na edição; na criação, nota discreta (nunca P-0 ou
+               número previsto). O título digitado continua puro. */}
+            {projectToEdit ? (
+              <span className="flex items-center gap-1.5">
+                <EntityNumberBadge
+                  kind="project"
+                  n={projectToEdit.sequence_number}
+                  entityId={projectToEdit.id}
+                />
+                <span className="text-sm text-foreground">{projectToEdit.title}</span>
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">Número atribuído ao salvar</span>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">

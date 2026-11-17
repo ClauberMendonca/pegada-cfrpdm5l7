@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react'
 import { ActionItem, Project } from '@/types/execution'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { actionService } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
 import { checkEligibility } from '@/lib/eligibility'
@@ -18,6 +19,9 @@ interface StatusSuggestionStepProps {
   /** Ação do registro EFETIVAMENTE ENVIADO (snapshot no momento do create). */
   actionId: string
   actionTitle: string
+  /** NUMERAÇÃO PERMANENTE — número da ação enviada (leitura persistida, só
+     apresentação). Opcional: sem número, o título segue legível. */
+  actionNumber?: number | null
   onDone: (outcome: StatusSuggestionOutcome) => void
 }
 
@@ -39,6 +43,7 @@ interface StatusSuggestionStepProps {
 export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
   actionId,
   actionTitle,
+  actionNumber,
   onDone,
 }) => {
   const [checking, setChecking] = useState(true)
@@ -191,8 +196,12 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
   return (
     <div className="space-y-3">
       <p className="text-sm text-foreground">
-        A ação <span className="font-semibold">{actionTitle}</span> segue com status{' '}
-        <span className="font-semibold">Pronta</span>. Quer marcá-la como{' '}
+        A ação{' '}
+        <span className="inline-flex flex-wrap items-baseline gap-1.5 font-semibold">
+          <EntityNumberBadge kind="action" n={actionNumber} />
+          {actionTitle}
+        </span>{' '}
+        segue com status <span className="font-semibold">Pronta</span>. Quer marcá-la como{' '}
         <span className="font-semibold">Em andamento</span> agora?
       </p>
       <p className="text-xs text-muted-foreground">

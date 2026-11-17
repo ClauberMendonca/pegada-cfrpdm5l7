@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from 'react'
-import { ActionItem, ProgressLogType } from '@/types/execution'
+import { ActionItem, ProgressLogType, Project } from '@/types/execution'
 import { progressService, CreateProgressLogInput } from '@/services/progressService'
 import {
   Dialog,
@@ -19,12 +19,16 @@ import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import { todayInZone, ownerTimezone, formatCalendarDay } from '@/lib/datetime'
 import { StatusSuggestionStep, StatusSuggestionOutcome } from '@/components/StatusSuggestionStep'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 
 interface ProgressLogModalProps {
   isOpen: boolean
   onClose: () => void
   action?: ActionItem | null
   projectId?: string
+  /** NUMERAÇÃO PERMANENTE — projeto já carregado pelo chamador, para exibir
+     P-N quando o registro é direto no projeto (sem nova consulta). */
+  project?: Project | null
   onSaved?: () => void
 }
 
@@ -47,6 +51,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
   onClose,
   action,
   projectId,
+  project = null,
   onSaved,
 }) => {
   const { toast } = useToast()
@@ -69,6 +74,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
   const [savedStep, setSavedStep] = useState<{
     actionId: string
     actionTitle: string
+    actionNumber: number | null | undefined
   } | null>(null)
 
   // Cada abertura do modal começa sem data retroativa herdada de outra sessão.
@@ -133,6 +139,9 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
     const sentType = logType
     const sentActionId = action?.id
     const sentActionTitle = action?.title ?? ''
+    // NUMERAÇÃO PERMANENTE — número da ação ENVIADA no snapshot de UI (só
+    // apresentação; payload e log continuam intactos).
+    const sentActionNumber = action?.sequence_number
 
     setIsSaving(true)
     try {
@@ -146,7 +155,11 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
       // Sugestão OPCIONAL, somente para Executei com ação vinculada; a mudança
       // de status NÃO faz parte do fluxo de gravação (separada e explícita).
       if (sentType === 'executei' && sentActionId) {
-        setSavedStep({ actionId: sentActionId, actionTitle: sentActionTitle })
+        setSavedStep({
+          actionId: sentActionId,
+          actionTitle: sentActionTitle,
+          actionNumber: sentActionNumber,
+        })
       } else {
         toast({
           title: 'Progresso registrado',
@@ -186,6 +199,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
             <StatusSuggestionStep
               actionId={savedStep.actionId}
               actionTitle={savedStep.actionTitle}
+              actionNumber={savedStep.actionNumber}
               onDone={handleSuggestionDone}
             />
           </div>
@@ -207,14 +221,31 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-          {action && (
+          {action ? (
             <div className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground">
               <span className="mb-0.5 block font-medium text-muted-foreground">
                 Vinculado à ação:
               </span>
-              <span className="font-semibold text-foreground">{action.title}</span>
+              <span className="flex flex-wrap items-baseline gap-1.5">
+                <EntityNumberBadge kind="action" n={action.sequence_number} entityId={action.id} />
+                <span className="font-semibold text-foreground">{action.title}</span>
+              </span>
             </div>
-          )}
+          ) : projectId || project ? (
+            <div className="rounded-xl border border-border bg-muted p-3 text-sm text-foreground">
+              <span className="mb-0.5 block font-medium text-muted-foreground">
+                Vinculado ao projeto:
+              </span>
+              <span className="flex flex-wrap items-baseline gap-1.5">
+                <EntityNumberBadge
+                  kind="project"
+                  n={project?.sequence_number}
+                  entityId={project?.id}
+                />
+                <span className="font-semibold text-foreground">{project?.title}</span>
+              </span>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label className="text-sm font-medium text-foreground">Tipo de registro</Label>

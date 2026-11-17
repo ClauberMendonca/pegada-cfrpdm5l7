@@ -265,7 +265,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       targetType="action"
       targetId={action.id}
       targetTitle={action.title}
-      contextLabel={project.title}
+      targetNumberCode={entityNumberCode('action', action.sequence_number)}
+      contextLabel={formatEntityTitle('project', project.sequence_number, project.title)}
       targetStatus={action.status}
       projectStatus={action.project_id ? project.status : null}
       actionHasProject={Boolean(action.project_id)}
@@ -366,7 +367,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </span>
             )}
           </div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight">{project.title}</h1>
+          <h1 className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-2xl font-bold text-foreground tracking-tight">
+            <EntityNumberBadge kind="project" n={project.sequence_number} entityId={project.id} />
+            <span className="min-w-0">{project.title}</span>
+          </h1>
         </div>
 
         {/* Separação Pragmática: Aspiração vs Entrega Controlável */}
@@ -640,6 +644,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   <ListRow
                     key={action.id}
                     title={action.title}
+                    numberKind="action"
+                    numberValue={action.sequence_number}
+                    numberEntityId={action.id}
                     open={view === 'cards' || Boolean(openRows[action.id])}
                     onToggle={() => view === 'list' && toggleRow(action.id)}
                     summary={
@@ -681,6 +688,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     <ListRow
                       key={action.id}
                       title={action.title}
+                      numberKind="action"
+                      numberValue={action.sequence_number}
+                      numberEntityId={action.id}
                       open={view === 'cards' || Boolean(openRows[action.id])}
                       onToggle={() => view === 'list' && toggleRow(action.id)}
                       summary={

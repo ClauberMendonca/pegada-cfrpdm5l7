@@ -26,6 +26,8 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ActionDescriptionBlock } from '@/components/ActionDescriptionBlock'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { formatEntityTitle } from '@/lib/entityNumber'
 
 interface ActionRowProps {
   action: ActionItem
@@ -193,11 +195,13 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           {/* Título primeiro, metadados depois */}
           <h4
             className={cn(
+              'flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1',
               'break-words text-base font-medium leading-snug text-foreground sm:text-lg',
               isDone && 'text-muted-foreground line-through',
               isNextAdvance && 'font-semibold',
             )}
           >
+            <EntityNumberBadge kind="action" n={action.sequence_number} entityId={action.id} />
             {action.title}
           </h4>
 
@@ -217,7 +221,13 @@ export const ActionRow: React.FC<ActionRowProps> = ({
                 title={action.expand.project_id.title}
               >
                 <FolderKanban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{action.expand.project_id.title}</span>
+                <span className="truncate">
+                  {formatEntityTitle(
+                    'project',
+                    action.expand.project_id.sequence_number,
+                    action.expand.project_id.title,
+                  )}
+                </span>
               </span>
             )}
 

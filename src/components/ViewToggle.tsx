@@ -3,6 +3,8 @@ import { AlignLeft, LayoutGrid, List } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ActionItem, Project } from '@/types/execution'
 import { formatCalendarDay } from '@/lib/datetime'
+import { EntityNumberKind, entityNumberCode } from '@/lib/entityNumber'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 
 export type CollectionView = 'cards' | 'list'
 
@@ -246,7 +248,22 @@ export const ListRow: React.FC<{
   summary?: string
   children?: React.ReactNode
   titleClassName?: string
-}> = ({ title, open, onToggle, hint, summary, children, titleClassName }) => (
+  /** NUMERAÇÃO PERMANENTE — código "P-3"/"A-12" do banco, antes do título. */
+  numberKind?: EntityNumberKind
+  numberValue?: number | null
+  numberEntityId?: string
+}> = ({
+  title,
+  open,
+  onToggle,
+  hint,
+  summary,
+  children,
+  titleClassName,
+  numberKind,
+  numberValue,
+  numberEntityId,
+}) => (
   <div className="rounded-lg border border-border bg-card">
     <div className="flex items-center gap-2 px-3 py-1.5">
       <div className="min-w-0 flex-1">
@@ -259,6 +276,9 @@ export const ListRow: React.FC<{
             titleClassName,
           )}
         >
+          {numberKind && (
+            <EntityNumberBadge kind={numberKind} n={numberValue} entityId={numberEntityId} />
+          )}
           <span className="min-w-0 flex-1 break-words line-clamp-2">{title}</span>
           <span
             aria-hidden="true"

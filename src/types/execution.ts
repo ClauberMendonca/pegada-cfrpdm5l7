@@ -44,6 +44,8 @@ export interface Project {
   r_restricoes?: string
   r_riscos?: string
   r_responsavel?: string
+  // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
+  sequence_number?: number
   created: string
   updated: string
 }
@@ -60,6 +62,8 @@ export interface ActionItem {
   is_today_selected: boolean // Selecionada explicitamente para Hoje
   waiting_for?: string // motivo de aguardando / bloqueada
   description?: string // notas/orientações de execução (opcional; ausente = vazio)
+  // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
+  sequence_number?: number
   created: string
   updated: string
   // expand relation optional

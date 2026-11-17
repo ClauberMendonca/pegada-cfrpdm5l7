@@ -36,6 +36,8 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { ownerTimezone, todayInZone } from '@/lib/datetime'
+import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
 import { cn } from '@/lib/utils'
@@ -264,7 +266,12 @@ export const ActionsPage: React.FC = () => {
         targetType="action"
         targetId={action.id}
         targetTitle={action.title}
-        contextLabel={actionProject?.title ?? ''}
+        targetNumberCode={entityNumberCode('action', action.sequence_number)}
+        contextLabel={formatEntityTitle(
+          'project',
+          actionProject?.sequence_number,
+          actionProject?.title ?? '',
+        )}
         targetStatus={action.status}
         projectStatus={actionProject?.status ?? null}
         actionHasProject={Boolean(action.project_id)}
@@ -287,9 +294,17 @@ export const ActionsPage: React.FC = () => {
       if (query) {
         const inTitle = a.title.toLowerCase().includes(query)
         const inDescription = (a.description ?? '').toLowerCase().includes(query)
-        const projectTitle = resolveProject(a)?.title ?? ''
-        const inProject = projectTitle.toLowerCase().includes(query)
-        if (!inTitle && !inDescription && !inProject) return false
+        const project = resolveProject(a)
+        const inProject = (project?.title ?? '').toLowerCase().includes(query)
+        // NUMERAÇÃO PERMANENTE: busca local também pelo código (ex.: "a-3") ou
+        // pelo número puro (ex.: "3") — dados já carregados, sem nova consulta.
+        const inCode = entityNumberCode('action', a.sequence_number)?.toLowerCase().includes(query)
+        const inProjectCode = entityNumberCode('project', project?.sequence_number)
+          ?.toLowerCase()
+          .includes(query)
+        const inNumber = /^\d+$/.test(query) && a.sequence_number === Number(query)
+        if (!inTitle && !inDescription && !inProject && !inCode && !inProjectCode && !inNumber)
+          return false
       }
       if (statusFilter !== 'todos' && a.status !== statusFilter) return false
       if (linkFilter === 'sem_projeto' && a.project_id) return false
@@ -788,6 +803,9 @@ export const ActionsPage: React.FC = () => {
               <div key={action.id} ref={isDest ? destElRef : undefined}>
                 <ListRow
                   title={action.title}
+                  numberKind="action"
+                  numberValue={action.sequence_number}
+                  numberEntityId={action.id}
                   open={Boolean(openRows[action.id]) || isDest}
                   hint={
                     isDest ? (
@@ -804,7 +822,12 @@ export const ActionsPage: React.FC = () => {
                   summary={
                     showSummary
                       ? actionSummaryLine(action, {
-                          projectTitle: resolveProject(action)?.title ?? null,
+                          projectTitle:
+                            formatEntityTitle(
+                              'project',
+                              resolveProject(action)?.sequence_number,
+                              resolveProject(action)?.title ?? '',
+                            ) || null,
                           today: todayStr,
                         })
                       : undefined

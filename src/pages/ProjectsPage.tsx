@@ -29,6 +29,7 @@ import {
   useViewPreference,
   ViewToggle,
 } from '@/components/ViewToggle'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 
 const STATUS_TABS = ['todos', 'ativo', 'rascunho', 'pausado', 'concluido', 'arquivado'] as const
 
@@ -347,6 +348,9 @@ export const ProjectsPage: React.FC = () => {
             <ListRow
               key={project.id}
               title={project.title}
+              numberKind="project"
+              numberValue={project.sequence_number}
+              numberEntityId={project.id}
               open={false}
               onToggle={() => openSheet(project.id)}
               hint={getStatusBadge(project.status)}
@@ -388,9 +392,16 @@ export const ProjectsPage: React.FC = () => {
                   )}
                 </div>
 
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-base font-bold text-foreground transition-colors">
-                    {project.title}
+                    <span className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                      <EntityNumberBadge
+                        kind="project"
+                        n={project.sequence_number}
+                        entityId={project.id}
+                      />
+                      <span className="min-w-0 break-words">{project.title}</span>
+                    </span>
                   </h3>
                 </div>
 

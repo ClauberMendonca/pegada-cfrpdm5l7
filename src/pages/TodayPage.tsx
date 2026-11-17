@@ -43,6 +43,8 @@ import {
   useViewPreference,
   ViewToggle,
 } from '@/components/ViewToggle'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { formatEntityTitle } from '@/lib/entityNumber'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'projeto pausado'
@@ -464,12 +466,20 @@ export const TodayPage: React.FC = () => {
                tempo, descrição); a seção continua identificando o foco. */}
             <ListRow
               title={nextAdvanceAction.title}
+              numberKind="action"
+              numberValue={nextAdvanceAction.sequence_number}
+              numberEntityId={nextAdvanceAction.id}
               open={view === 'cards' || Boolean(openRows[nextAdvanceAction.id])}
               onToggle={() => view === 'list' && toggleRow(nextAdvanceAction.id)}
               summary={
                 showSummary && view === 'list'
                   ? actionSummaryLine(nextAdvanceAction, {
-                      projectTitle: resolveProject(nextAdvanceAction)?.title ?? null,
+                      projectTitle:
+                        formatEntityTitle(
+                          'project',
+                          resolveProject(nextAdvanceAction)?.sequence_number,
+                          resolveProject(nextAdvanceAction)?.title ?? '',
+                        ) || null,
                       today: todayStr,
                     })
                   : undefined
@@ -526,7 +536,12 @@ export const TodayPage: React.FC = () => {
                 summary={
                   showSummary && view === 'list'
                     ? actionSummaryLine(action, {
-                        projectTitle: resolveProject(action)?.title ?? null,
+                        projectTitle:
+                          formatEntityTitle(
+                            'project',
+                            resolveProject(action)?.sequence_number,
+                            resolveProject(action)?.title ?? '',
+                          ) || null,
                         today: todayStr,
                       })
                     : undefined
@@ -657,12 +672,20 @@ export const TodayPage: React.FC = () => {
                     <ListRow
                       key={action.id}
                       title={action.title}
+                      numberKind="action"
+                      numberValue={action.sequence_number}
+                      numberEntityId={action.id}
                       open={view === 'cards' || Boolean(openRows[action.id])}
                       onToggle={() => view === 'list' && toggleRow(action.id)}
                       summary={
                         showSummary && view === 'list'
                           ? actionSummaryLine(action, {
-                              projectTitle: resolveProject(action)?.title ?? null,
+                              projectTitle:
+                                formatEntityTitle(
+                                  'project',
+                                  resolveProject(action)?.sequence_number,
+                                  resolveProject(action)?.title ?? '',
+                                ) || null,
                               today: todayStr,
                             })
                           : undefined
@@ -703,12 +726,20 @@ export const TodayPage: React.FC = () => {
                       </p>
                       <ListRow
                         title={action.title}
+                        numberKind="action"
+                        numberValue={action.sequence_number}
+                        numberEntityId={action.id}
                         open={view === 'cards' || Boolean(openRows[action.id])}
                         onToggle={() => view === 'list' && toggleRow(action.id)}
                         summary={
                           showSummary && view === 'list'
                             ? actionSummaryLine(action, {
-                                projectTitle: resolveProject(action)?.title ?? null,
+                                projectTitle:
+                                  formatEntityTitle(
+                                    'project',
+                                    resolveProject(action)?.sequence_number,
+                                    resolveProject(action)?.title ?? '',
+                                  ) || null,
                                 today: todayStr,
                               })
                             : undefined
@@ -747,7 +778,14 @@ export const TodayPage: React.FC = () => {
                       key={action.id}
                       className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3 text-xs"
                     >
-                      <span className="font-medium text-foreground truncate">{action.title}</span>
+                      <span className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
+                        <EntityNumberBadge
+                          kind="action"
+                          n={action.sequence_number}
+                          entityId={action.id}
+                        />
+                        <span className="truncate">{action.title}</span>
+                      </span>
                       <span className="flex items-center gap-2 shrink-0 min-w-0">
                         <span className="text-ginga-warning truncate">
                           Motivo: {ineligibilityLabel(action, resolveProject)}
@@ -784,6 +822,7 @@ export const TodayPage: React.FC = () => {
                         <Badge variant="outline" className="text-[10px] uppercase">
                           {p.status}
                         </Badge>
+                        <EntityNumberBadge kind="project" n={p.sequence_number} entityId={p.id} />
                         <span className="font-medium text-foreground truncate">{p.title}</span>
                       </div>
                       <span className="flex items-center gap-2 shrink-0">

@@ -278,17 +278,25 @@ export const ActionsPage: React.FC = () => {
   }
 
   // Catálogo filtrado: busca + status + vínculo. O filtro global de contexto já
-  // veio da consulta; aqui só recorta a exibição local.
+  // veio da consulta; aqui só recorta a exibição local. A busca cobre título,
+  // descrição/notas e o título do projeto já resolvido (mesma resolução da linha),
+  // sem nova consulta. Campos ausentes não geram erro nem texto inventado.
   const filteredActions = useMemo(() => {
     const query = search.trim().toLowerCase()
     return actions.filter((a) => {
-      if (query && !a.title.toLowerCase().includes(query)) return false
+      if (query) {
+        const inTitle = a.title.toLowerCase().includes(query)
+        const inDescription = (a.description ?? '').toLowerCase().includes(query)
+        const projectTitle = resolveProject(a)?.title ?? ''
+        const inProject = projectTitle.toLowerCase().includes(query)
+        if (!inTitle && !inDescription && !inProject) return false
+      }
       if (statusFilter !== 'todos' && a.status !== statusFilter) return false
       if (linkFilter === 'sem_projeto' && a.project_id) return false
       if (linkFilter === 'com_projeto' && !a.project_id) return false
       return true
     })
-  }, [actions, search, statusFilter, linkFilter])
+  }, [actions, resolveProject, search, statusFilter, linkFilter])
 
   const hasActiveLocalFilters =
     search.trim() !== '' || statusFilter !== 'todos' || linkFilter !== 'todas'
@@ -644,8 +652,8 @@ export const ActionsPage: React.FC = () => {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por título…"
-            aria-label="Buscar ações por título"
+            placeholder="Buscar por título, descrição ou projeto…"
+            aria-label="Buscar ações por título, descrição ou projeto"
             className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
           />
         </div>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-17T19:41:58.783Z",
+  "generatedAt": "2026-11-17T19:52:31.015Z",
   "collections": [
     {
       "name": "users",
@@ -179,12 +179,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "sequence_number",
+          "type": "number",
+          "required": true,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_projects_user ON projects (user_id)",
         "CREATE INDEX idx_projects_status ON projects (user_id, status)",
-        "CREATE INDEX idx_projects_context ON projects (user_id, context)"
+        "CREATE INDEX idx_projects_context ON projects (user_id, context)",
+        "CREATE UNIQUE INDEX `idx_projects_seqnum_unique` ON `projects` (sequence_number)"
       ]
     },
     {
@@ -282,13 +289,20 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "sequence_number",
+          "type": "number",
+          "required": true,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_actions_user ON actions (user_id)",
         "CREATE INDEX idx_actions_project ON actions (project_id)",
         "CREATE INDEX idx_actions_status ON actions (user_id, status)",
-        "CREATE INDEX idx_actions_today ON actions (user_id, is_today_selected)"
+        "CREATE INDEX idx_actions_today ON actions (user_id, is_today_selected)",
+        "CREATE UNIQUE INDEX `idx_actions_seqnum_unique` ON `actions` (sequence_number)"
       ]
     },
     {

@@ -27,6 +27,8 @@ import {
   useViewPreference,
   ViewToggle,
 } from '@/components/ViewToggle'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { formatEntityTitle } from '@/lib/entityNumber'
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -279,7 +281,13 @@ export const ReviewPage: React.FC = () => {
                       className="rounded-xl border border-border bg-card p-3 flex items-start justify-between gap-3"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground break-words">{p.title}</p>
+                        {/* NUMERAÇÃO PERMANENTE — selo P-N do banco antes do título */}
+                        <span className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                          <EntityNumberBadge kind="project" n={p.sequence_number} entityId={p.id} />
+                          <span className="min-w-0 text-sm font-medium text-foreground break-words">
+                            {p.title}
+                          </span>
+                        </span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           {p.context === 'trabalho' ? 'Trabalho' : 'Vida'} · sem ação pronta ou em
                           andamento
@@ -306,7 +314,20 @@ export const ReviewPage: React.FC = () => {
                       open={false}
                       onToggle={() => openProjectSheet(p.id)}
                       hint="Abrir ficha ›"
-                      summary={showSummary ? projectSummaryLine(p) || undefined : undefined}
+                      summary={
+                        showSummary
+                          ? [
+                              // NUMERAÇÃO PERMANENTE — código P-N real primeiro
+                              formatEntityTitle('project', p.sequence_number, p.title),
+                              projectSummaryLine(p) || undefined,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')
+                          : undefined
+                      }
+                      numberKind="project"
+                      numberValue={p.sequence_number}
+                      numberEntityId={p.id}
                     />
                   ))}
                 </div>

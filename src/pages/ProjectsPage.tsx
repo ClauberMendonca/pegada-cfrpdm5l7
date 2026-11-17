@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { Project, ProjectStatus } from '@/types/execution'
 import { projectService } from '@/services/projectService'
@@ -16,8 +16,11 @@ import {
   ArrowRight,
   AlertCircle,
   SearchX,
+  Search,
   Loader2,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { entityNumberCode } from '@/lib/entityNumber'
 import { useToast } from '@/hooks/use-toast'
 import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
 import { useAuth } from '@/contexts/AuthContext'
@@ -78,6 +81,12 @@ export const ProjectsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'todos'>(readStatusFilter)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  // NUMERAÇÃO PERMANENTE 2C — busca local por número/código além do texto.
+  // Usa somente os projetos JÁ CARREGADOS (sem consulta nova, sem ranking, sem
+  // ordenação própria); consulta integral de número/código é EXATA ("3" acha o
+  // projeto 3, não o 13). Comportamento textual (trim/caixa) preservado.
+  const [search, setSearch] = useState('')
 
   const changeStatusFilter = useCallback((value: ProjectStatus | 'todos') => {
     setStatusFilter(value)
@@ -162,6 +171,29 @@ export const ProjectsPage: React.FC = () => {
   )
 
   const fromReview = location.state?.from === 'review'
+
+  // Catálogo filtrado: busca textual (título) + número/código do banco. O
+  // filtro global de contexto e o recorte de status já vieram da consulta;
+  // aqui só recorta a exibição local, sem nova consulta e sem gravar nada.
+  // "P-3"/"p-3" localiza o projeto 3; número puro é comparação exata. Campos
+  // ausentes não geram erro nem texto inventado. (Hook antes de qualquer
+  // retorno antecipado da ficha por URL.)
+  const filteredProjects = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return projects
+    return projects.filter((p) => {
+      const inTitle = p.title.toLowerCase().includes(query)
+      const inAspiration = (p.aspiration ?? '').toLowerCase().includes(query)
+      const inDelivery = (p.controllable_delivery ?? '').toLowerCase().includes(query)
+      // Número/código é comparação EXATA: "3" acha o projeto 3, nunca o 13.
+      const inNumber = /^\d+$/.test(query) && p.sequence_number === Number(query)
+      const inCode =
+        typeof p.sequence_number === 'number' &&
+        (query === `p-${p.sequence_number}` ||
+          query === entityNumberCode('project', p.sequence_number).toLowerCase())
+      return inTitle || inAspiration || inDelivery || inCode || inNumber
+    })
+  }, [projects, search])
 
   const closeSheet = useCallback(() => {
     if (fromReview && window.history.length > 1) {
@@ -330,6 +362,23 @@ export const ProjectsPage: React.FC = () => {
         ))}
       </div>
 
+      {/* Busca local — número (P-3 / 3) ou título; nada é gravado nem filtrado
+          no servidor, e a ficha por /projetos?id continua válida fora dela. */}
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por número (P-3) ou título…"
+          aria-label="Buscar projetos por número ou título"
+          className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
+        />
+      </div>
+
       {/* Projects Grid / List */}
       {isLoading ? (
         <div className="p-8 text-center text-muted-foreground">Carregando projetos...</div>
@@ -341,10 +390,19 @@ export const ProjectsPage: React.FC = () => {
             Crie um novo projeto para gerenciar aspiração e entregas controláveis.
           </p>
         </div>
+      ) : filteredProjects.length === 0 ? (
+        /* Vazio por busca: distingue de "nenhuma cadastrada" sem trocar filtros. */
+        <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
+          <SearchX className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-foreground font-medium">Nenhum projeto corresponde à busca.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Tente o número (P-3 ou 3) ou parte do título. Os filtros foram preservados.
+          </p>
+        </div>
       ) : view === 'list' ? (
         /* Lista: título abre a ficha do projeto pelo mesmo contrato de URL. */
         <div className="grid gap-2">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <ListRow
               key={project.id}
               title={project.title}
@@ -362,7 +420,7 @@ export const ProjectsPage: React.FC = () => {
         /* Cards: o card inteiro é um link semântico para /projetos?id=<ID> —
            sem onClick em div e sem botões interativos aninhados. */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {projects.map((project) => (
+          {filteredProjects.map((project) => (
             <Link
               key={project.id}
               to={`/projetos?id=${encodeURIComponent(project.id)}`}

@@ -40,6 +40,14 @@ import {
 } from '@/components/ViewToggle'
 import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
 import { useCaptureDraft } from '@/hooks/use-capture-draft'
+import { EntityNumberKind, entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
+import {
+  collectTargetIds,
+  emptyTargetMaps,
+  fetchTargetMaps,
+  TargetMaps,
+} from '@/lib/captureTargets'
+import { currentOwnerSnapshot, isSameOwner } from '@/lib/ownerScope'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -124,6 +132,11 @@ export const CapturesPage: React.FC = () => {
     targetType: 'project' | 'action'
     targetId: string
     duplicate: boolean
+    // NUMERAÇÃO PERMANENTE 2C — código real do destino retornado pela conversão
+    // (target.sequence_number do hook transacional). duplicate:true traz o
+    // MESMO destino/código já existentes, sem nova alocação.
+    targetSequenceNumber: number | null
+    targetTitle: string
   } | null>(null)
 
   useEffect(() => {
@@ -147,7 +160,7 @@ export const CapturesPage: React.FC = () => {
   const [actionContext, setActionContext] = useState<'vida' | 'trabalho'>('trabalho')
   const [actionProjectId, setActionProjectId] = useState<string>('')
   const [availableProjects, setAvailableProjects] = useState<
-    { id: string; title: string; context: string }[]
+    { id: string; title: string; context: string; sequence_number?: number }[]
   >([])
 
   const loadCaptures = useCallback(async () => {
@@ -166,6 +179,37 @@ export const CapturesPage: React.FC = () => {
   useEffect(() => {
     loadCaptures()
   }, [loadCaptures])
+
+  // NUMERAÇÃO PERMANENTE 2C — mapa dos destinos das capturas já convertidas,
+  // resolvido EM BATELADA (uma leitura por tipo, IDs únicos) para a lista já
+  // carregada — nunca getById por card, por modo de visão ou por item aberto.
+  // Falha/carregamento do lookup NÃO bloqueia captura, conversão, descarte,
+  // entrada rápida ou cronômetro: sem código resolvido o selo simplesmente não
+  // aparece e o acesso segue pelo link por ID. Resposta tardia após troca de
+  // sessão/desmontagem é ignorada (snapshot do dono + cancelled); o mapa nunca
+  // é associado a outra identidade.
+  const [targetMaps, setTargetMaps] = useState<TargetMaps>(emptyTargetMaps)
+  useEffect(() => {
+    const { projectIds, actionIds } = collectTargetIds(captures)
+    if (projectIds.length === 0 && actionIds.length === 0) {
+      setTargetMaps(emptyTargetMaps())
+      return
+    }
+    const snap = currentOwnerSnapshot()
+    let cancelled = false
+    fetchTargetMaps(projectIds, actionIds)
+      .then((maps) => {
+        if (!cancelled && isSameOwner(snap)) setTargetMaps(maps)
+      })
+      .catch(() => {
+        // Falha de leitura ≠ prova de exclusão: mapa vazio, sem código
+        // inventado (nunca P-0/A-0) e sem bloquear qualquer fluxo.
+        if (!cancelled && isSameOwner(snap)) setTargetMaps(emptyTargetMaps())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [captures, user?.id])
 
   useEffect(() => {
     projectService
@@ -332,12 +376,21 @@ export const CapturesPage: React.FC = () => {
       // target.id) mantém o texto atual, sem inventar destino.
       const targetType = result.target_type === 'action' ? 'action' : 'project'
       const targetId = typeof result.target?.id === 'string' ? result.target.id : ''
+      // Código real vem do destino persistido retornado pelo serviço atual —
+      // nunca calculado no frontend; resposta sem número mantém o texto atual.
+      const targetSequenceNumber =
+        result.target && typeof result.target.sequence_number === 'number'
+          ? result.target.sequence_number
+          : null
+      const targetTitle = typeof result.target?.title === 'string' ? result.target.title : ''
       if (targetId) {
         setConversionFeedback({
           captureId: selectedCapture.id,
           targetType,
           targetId,
           duplicate: result.duplicate,
+          targetSequenceNumber,
+          targetTitle,
         })
       }
       if (result.duplicate) {
@@ -377,26 +430,41 @@ export const CapturesPage: React.FC = () => {
   // habilitar reconversão por isso.
   const renderConvertedDest = (item: CaptureItem) => {
     if (item.status !== 'convertida_projeto' && item.status !== 'convertida_acao') return null
-    const targetId =
-      item.status === 'convertida_projeto' ? item.converted_project_id : item.converted_action_id
+    const isProject = item.status === 'convertida_projeto'
+    const targetId = isProject ? item.converted_project_id : item.converted_action_id
     if (!targetId) {
       return <span className="text-xs text-muted-foreground">Destino não disponível</span>
     }
-    const to =
-      item.status === 'convertida_projeto'
-        ? `/projetos?id=${encodeURIComponent(targetId)}`
-        : `/acoes?id=${encodeURIComponent(targetId)}`
+    // Destino REAL pelo ID gravado, resolvido pelo mapa em batelada (nunca
+    // getById por item). Título só aparece COM o código real antes; se o
+    // lookup não resolveu (falha ou vínculo fora do escopo da sessão), o
+    // comando genérico permanece — sem código inventado — e o acesso segue
+    // válido pelo link por ID. Destino arquivado/concluído/fora do recorte
+    // global é numerado normalmente: a leitura não usa o filtro visual.
+    const kind: EntityNumberKind = isProject ? 'project' : 'action'
+    const target = isProject ? targetMaps.projects.get(targetId) : targetMaps.actions.get(targetId)
+    const label = target ? formatEntityTitle(kind, target.sequence_number, target.title) : null
+    const to = isProject
+      ? `/projetos?id=${encodeURIComponent(targetId)}`
+      : `/acoes?id=${encodeURIComponent(targetId)}`
     return (
-      <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
-        <Link to={to}>
-          {item.status === 'convertida_projeto' ? (
-            <FolderKanban className="w-3.5 h-3.5 text-primary" />
-          ) : (
-            <CheckSquare className="w-3.5 h-3.5 text-primary" />
-          )}
-          {item.status === 'convertida_projeto' ? 'Abrir projeto' : 'Abrir ação'}
-        </Link>
-      </Button>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {label && (
+          <span className="min-w-0 text-xs text-muted-foreground break-words" title={label}>
+            {label}
+          </span>
+        )}
+        <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
+          <Link to={to}>
+            {isProject ? (
+              <FolderKanban className="w-3.5 h-3.5 text-primary" />
+            ) : (
+              <CheckSquare className="w-3.5 h-3.5 text-primary" />
+            )}
+            {isProject ? 'Abrir projeto' : 'Abrir ação'}
+          </Link>
+        </Button>
+      </div>
     )
   }
 
@@ -493,6 +561,20 @@ export const CapturesPage: React.FC = () => {
     }
   }
 
+  // NUMERAÇÃO PERMANENTE 2C — identificação do destino no feedback pós-conversão:
+  // código real antes do título (formatter textual; sem título conhecido, só o
+  // código). Sem número confirmado na resposta, nada é afirmado.
+  const feedbackTargetLabel =
+    conversionFeedback && conversionFeedback.targetSequenceNumber !== null
+      ? conversionFeedback.targetTitle !== ''
+        ? formatEntityTitle(
+            conversionFeedback.targetType,
+            conversionFeedback.targetSequenceNumber,
+            conversionFeedback.targetTitle,
+          )
+        : entityNumberCode(conversionFeedback.targetType, conversionFeedback.targetSequenceNumber)
+      : null
+
   const getStatusBadge = (st: CaptureStatus) => {
     switch (st) {
       case 'pendente':
@@ -586,6 +668,9 @@ export const CapturesPage: React.FC = () => {
                 ? 'Abrir leva ao destino que já existia — nenhum destino duplicado foi criado.'
                 : 'Abra o destino criado ou continue processando as demais capturas.'}
             </p>
+            {feedbackTargetLabel && (
+              <p className="mt-1 break-words text-xs text-foreground">{feedbackTargetLabel}</p>
+            )}
           </div>
           {conversionFeedback.targetType === 'project' ? (
             <Button asChild size="sm" className="gap-1.5 shrink-0">
@@ -970,7 +1055,7 @@ export const CapturesPage: React.FC = () => {
                     <SelectItem value="none">Ação solta</SelectItem>
                     {availableProjects.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        [{p.context}] {p.title}
+                        {`${formatEntityTitle('project', p.sequence_number, p.title)} [${p.context}]`}
                       </SelectItem>
                     ))}
                   </SelectContent>

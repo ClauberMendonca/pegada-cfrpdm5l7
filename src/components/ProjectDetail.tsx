@@ -8,6 +8,7 @@ import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { ProjectModal } from '@/components/ProjectModal'
+import { CompleteProjectDialog } from '@/components/CompleteProjectDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -68,6 +69,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
   }, [])
 
+  // BLOCO 5 — conclusão exige decisão explícita diante da condição de término.
+  const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false)
   // Modals
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
   const [editingAction, setEditingAction] = useState<ActionItem | null>(null)
@@ -233,6 +236,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         ? formatDuration(seconds)
         : 'Não registrado'
   const runningInProject = running?.project_id === project.id ? running : null
+  // BLOCO 5.1/5.2 — estado REAL do projeto (valores do enum, não inventados).
+  // Encerrado = concluido | arquivado: bloqueia NOVAS ações; pausado permite
+  // planejar pelo próprio detalhe, com aviso (foco/execução seguem regras v0.0.44).
+  const isProjectClosed = project.status === 'concluido' || project.status === 'arquivado'
+  const isProjectPaused = project.status === 'pausado'
   // B1 (detalhe) — disponibilidade dos comandos de foco por linha: null = pode
   // selecionar; motivo legível = nova seleção bloqueada (retirada explícita de
   // flags já gravadas continua disponível).
@@ -571,18 +579,40 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
           <div className="flex flex-wrap items-center gap-2">
             <ViewToggle view={view} onChange={setView} />
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingAction(null)
-                setIsActionModalOpen(true)
-              }}
-              className="text-xs gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              Adicionar Ação
-            </Button>
+            {/* BLOCO 5.1 — projeto encerrado não recebe novas ações pela
+                interface: comando desabilitado com motivo legível. Reabrir é
+                decisão consciente pelo comando Ativar/Editar Ficha existente. */}
+            {isProjectClosed ? (
+              <Button size="sm" disabled className="text-xs gap-1.5" title="Projeto encerrado">
+                <Plus className="w-4 h-4" />
+                Adicionar Ação
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingAction(null)
+                  setIsActionModalOpen(true)
+                }}
+                className="text-xs gap-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                Adicionar Ação
+              </Button>
+            )}
           </div>
+          {/* Aviso legível sobre o estado que impede (ou condiciona) o planejamento. */}
+          {isProjectClosed ? (
+            <p role="note" className="text-xs text-ginga-warning">
+              Projeto encerrado — não recebe novas ações. Para planejar novamente, reabra o projeto
+              pelo comando existente (Ativar / Editar Ficha) antes de criar ações vinculadas.
+            </p>
+          ) : isProjectPaused ? (
+            <p role="note" className="text-xs text-ginga-warning">
+              Projeto pausado — você pode planejar ações; execução e seleção de foco continuam
+              sujeitas às regras existentes.
+            </p>
+          ) : null}
         </div>
 
         {actions.length === 0 ? (
@@ -743,6 +773,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         )}
       </section>
+
+      {/* BLOCO 5.4 — conclusão exige confirmação com a condição de término visível. */}
+      <CompleteProjectDialog
+        isOpen={isCompleteDialogOpen}
+        onClose={() => setIsCompleteDialogOpen(false)}
+        project={project}
+        onCompleted={() => {
+          loadData()
+          onProjectUpdated?.()
+        }}
+      />
 
       {/* Edição da ficha do projeto — mesmo projeto, sem voltar à lista */}
       <ProjectModal

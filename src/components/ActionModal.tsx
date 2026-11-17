@@ -100,6 +100,10 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     }
   }, [isOpen, actionToEdit, defaultContext, defaultProjectId])
 
+  // BLOCO 5 — criação (vs edição): edições de ações existentes NÃO são
+  // bloqueadas por projeto encerrado (vínculo antigo permanece preservado).
+  const isCreate = !actionToEdit
+
   // B1 — valida a escolha de foco com o estado ATUAL do formulário (status e
   // vínculo), pela MESMA regra compartilhada de Hoje/Ações. Retorna false (com
   // aviso legível) quando a ação, como está no formulário, é inelegível.
@@ -125,6 +129,39 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
     setIsSaving(true)
     try {
+      // BLOCO 5.1 — guarda na CRIAÇÃO com vínculo encerrado: revalida o projeto
+      // selecionado pela leitura autenticada existente (projectService.getById)
+      // — o formulário pode ter ficado aberto enquanto o estado mudou. Falha de
+      // leitura mantém o formulário/texto e NÃO grava. Guarda de interface;
+      // sem garantia transacional de concorrência.
+      if (isCreate && projectId) {
+        try {
+          const freshProject = await projectService.getById(projectId)
+          setProjects((prev) =>
+            prev.some((p) => p.id === freshProject.id)
+              ? prev.map((p) => (p.id === freshProject.id ? freshProject : p))
+              : [...prev, freshProject],
+          )
+          if (freshProject.status === 'concluido' || freshProject.status === 'arquivado') {
+            toast({
+              variant: 'destructive',
+              title: 'Ação não criada',
+              description: `O projeto “${freshProject.title}” está ${freshProject.status === 'concluido' ? 'concluído' : 'arquivado'}. Reabra o projeto pelo comando existente antes de planejar novas ações vinculadas.`,
+            })
+            return
+          }
+        } catch (readErr: unknown) {
+          const readMsg =
+            readErr instanceof Error ? readErr.message : 'Falha ao revalidar o projeto vinculado.'
+          toast({
+            variant: 'destructive',
+            title: 'Ação não criada',
+            description: readMsg,
+          })
+          return
+        }
+      }
+
       // B1 — escolha inelegível NÃO grava flags novas e NÃO desmarca flags
       // anteriores: edições de registros antigos seguem permitidas.
       const draftProject: Project | null | undefined = projectId
@@ -206,6 +243,34 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const selectableProjects = projects.filter((p) => p.status === 'ativo' || p.status === 'rascunho')
   const linkedOutsideSelectable =
     Boolean(projectId) && !selectableProjects.some((p) => p.id === projectId)
+
+  // BLOCO 5 — estado REAL do projeto selecionado (enum existente, sem inventar).
+  const selectedProject = projectId ? (projects.find((p) => p.id === projectId) ?? null) : null
+  const selectedClosed =
+    Boolean(selectedProject) &&
+    (selectedProject!.status === 'concluido' || selectedProject!.status === 'arquivado')
+  const selectedPaused = selectedProject?.status === 'pausado'
+  const blockedByClosedProject = isCreate && selectedClosed
+  // BLOCO 5.2 — vínculo contextual em projeto pausado fica identificado como
+  // planejamento condicionado (nunca exibido como projeto ativo).
+  const contextualPausedNotice =
+    isCreate && selectedPaused && Boolean(defaultProjectId) && projectId === defaultProjectId
+
+  // BLOCO 5.2 — no vínculo contextual pelo próprio detalhe pausado, o planejamento
+  // continua disponível com aviso identificado (não disfarça o projeto de ativo).
+  useEffect(() => {
+    if (
+      isOpen &&
+      !actionToEdit &&
+      selectedPaused &&
+      defaultProjectId &&
+      projectId === defaultProjectId
+    ) {
+      setFocusNotice(
+        'Projeto pausado — você pode planejar ações; execução e seleção de foco continuam sujeitas às regras existentes.',
+      )
+    }
+  }, [isOpen, actionToEdit, selectedPaused, defaultProjectId, projectId])
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -361,6 +426,23 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
           </div>
 
+          {/* BLOCO 5.1 — motivo legível de bloqueio ao criar com vínculo encerrado. */}
+          {blockedByClosedProject && (
+            <p role="alert" className="text-xs font-medium text-ginga-warning">
+              Projeto {selectedProject!.status === 'concluido' ? 'concluído' : 'arquivado'} — não
+              recebe novas ações. Reabra o projeto pelo comando existente antes de planejar ações
+              vinculadas a ele.
+            </p>
+          )}
+
+          {/* BLOCO 5.2 — planejamento em projeto pausado: permitido com aviso. */}
+          {contextualPausedNotice && (
+            <p role="note" className="text-xs font-medium text-ginga-warning">
+              Projeto pausado — você pode planejar ações; execução e seleção de foco continuam
+              sujeitas às regras existentes.
+            </p>
+          )}
+
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -428,9 +510,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             >
               Cancelar
             </Button>
+            {/* BLOCO 5.1 — guarda na UI: nova ação com vínculo encerrado não sai
+               do formulário; edição preserva o vínculo antigo (não bloqueada). */}
             <Button
               type="submit"
-              disabled={isSaving || !title.trim()}
+              disabled={isSaving || !title.trim() || blockedByClosedProject}
               className="min-h-11 rounded-xl"
             >
               {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar ação'}

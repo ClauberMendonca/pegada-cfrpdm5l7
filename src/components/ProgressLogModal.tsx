@@ -18,6 +18,7 @@ import { Check, ChevronDown, ChevronUp, Flame, Trophy } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import { todayInZone, ownerTimezone, formatCalendarDay } from '@/lib/datetime'
+import { StatusSuggestionStep, StatusSuggestionOutcome } from '@/components/StatusSuggestionStep'
 
 interface ProgressLogModalProps {
   isOpen: boolean
@@ -62,6 +63,14 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
   const [dayInput, setDayInput] = useState('')
   const [dayError, setDayError] = useState('')
 
+  // BLOCO 9 — etapa de sucesso: o log JÁ foi gravado; nada aqui reenvia o
+  // mesmo fato. Sugestão opcional usa os dados do registro EFETIVAMENTE
+  // ENVIADO (snapshot), nunca a seleção atual do formulário.
+  const [savedStep, setSavedStep] = useState<{
+    actionId: string
+    actionTitle: string
+  } | null>(null)
+
   // Cada abertura do modal começa sem data retroativa herdada de outra sessão.
   // O texto digitado não é tocado aqui.
   useEffect(() => {
@@ -69,6 +78,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
       setDayInput('')
       setDayOpen(false)
       setDayError('')
+      setSavedStep(null)
     }
   }, [isOpen])
 
@@ -81,6 +91,20 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
     // Recolher/expandir preserva a escolha; sem escolha, o campo apresenta hoje
     // (fuso do dono) sem gravar nada até o dono alterar a data.
     setDayOpen(!dayOpen)
+  }
+
+  const closeAll = () => {
+    setSavedStep(null)
+    onClose()
+  }
+
+  const handleSuggestionDone = (outcome: StatusSuggestionOutcome) => {
+    // Sucesso do log NUNCA vira falha de registro: nenhum resultado aqui
+    // reenvia o log. 'confirmed' → recarrega a apresentação pelo callback
+    // existente (a linha não continua dizendo "Pronta" com status novo).
+    if (outcome === 'confirmed') onSaved?.()
+    setSavedStep(null)
+    onClose()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,22 +129,34 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
     }
     if (chosenDay !== '') payload.date = chosenDay
 
+    // Snapshot do registro efetivamente enviado, ANTES do await.
+    const sentType = logType
+    const sentActionId = action?.id
+    const sentActionTitle = action?.title ?? ''
+
     setIsSaving(true)
     try {
       await progressService.create(payload)
-      toast({
-        title: 'Progresso registrado',
-        description:
-          logType === 'executei'
-            ? 'Execução documentada com sucesso.'
-            : 'Resultado factual documentado.',
-      })
+      // Log salvo = sucesso, mesmo que o que vier depois falhe.
+      onSaved?.()
       setText('')
       setDayInput('')
       setDayError('')
       setDayOpen(false)
-      onSaved?.()
-      onClose()
+      // Sugestão OPCIONAL, somente para Executei com ação vinculada; a mudança
+      // de status NÃO faz parte do fluxo de gravação (separada e explícita).
+      if (sentType === 'executei' && sentActionId) {
+        setSavedStep({ actionId: sentActionId, actionTitle: sentActionTitle })
+      } else {
+        toast({
+          title: 'Progresso registrado',
+          description:
+            sentType === 'executei'
+              ? 'Execução documentada com sucesso.'
+              : 'Resultado factual documentado.',
+        })
+        onClose()
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar registro'
       toast({
@@ -133,8 +169,33 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
     }
   }
 
+  if (savedStep) {
+    return (
+      <Dialog open onOpenChange={(open) => !open && handleSuggestionDone('dismissed')}>
+        <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
+              <Check className="h-5 w-5 text-ginga-success" aria-hidden="true" />
+              Progresso registrado
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground">
+              O registro foi salvo. A etapa abaixo é opcional e separada do registro.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-2">
+            <StatusSuggestionStep
+              actionId={savedStep.actionId}
+              actionTitle={savedStep.actionTitle}
+              onDone={handleSuggestionDone}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && closeAll()}>
       <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-foreground">
@@ -275,7 +336,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
             <Button
               type="button"
               variant="outline"
-              onClick={onClose}
+              onClick={closeAll}
               className="min-h-11 rounded-xl"
             >
               Cancelar

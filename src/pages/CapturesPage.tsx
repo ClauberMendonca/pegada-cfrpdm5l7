@@ -445,6 +445,10 @@ export const CapturesPage: React.FC = () => {
             Virar Projeto
           </Button>
 
+          {/* BLOCO 9 — Copiloto é opcional: ênfase secundária/neutra; a conversão
+              manual (Virar Ação/Projeto) continua o caminho principal. Abrir o
+              painel não envia nada ao Manus. Rótulo pode quebrar no celular
+              sem reduzir a área de toque (whitespace-normal + min-h). */}
           <Button
             size="sm"
             variant="outline"
@@ -453,11 +457,11 @@ export const CapturesPage: React.FC = () => {
               setCopilotCapture(item)
               setCopilotOpen(true)
             }}
-            className="text-xs gap-1.5"
-            title="Ver pedidos e comandos explícitos do copiloto"
+            className="min-h-[36px] gap-1.5 whitespace-normal px-2.5 text-xs text-muted-foreground hover:text-foreground"
+            title="Ver pedidos e comandos explícitos do copiloto (opcional)"
           >
-            <Bot className="w-3.5 h-3.5 text-primary" />
-            Copiloto
+            <Bot className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span className="text-left leading-tight">Copiloto · Opcional</span>
           </Button>
 
           <Button
@@ -747,6 +751,7 @@ export const CapturesPage: React.FC = () => {
                         Virar Projeto
                       </Button>
 
+                      {/* BLOCO 9 — rótulo opcional com ênfase neutra (ver Cards) */}
                       <Button
                         size="sm"
                         variant="outline"
@@ -755,11 +760,11 @@ export const CapturesPage: React.FC = () => {
                           setCopilotCapture(item)
                           setCopilotOpen(true)
                         }}
-                        className="text-xs gap-1.5"
-                        title="Ver pedidos e comandos explícitos do copiloto"
+                        className="min-h-[36px] gap-1.5 whitespace-normal px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                        title="Ver pedidos e comandos explícitos do copiloto (opcional)"
                       >
-                        <Bot className="w-3.5 h-3.5 text-primary" />
-                        Copiloto
+                        <Bot className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span className="text-left leading-tight">Copiloto · Opcional</span>
                       </Button>
 
                       <Button

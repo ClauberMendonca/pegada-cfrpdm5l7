@@ -36,6 +36,7 @@ import { useProjectTimeTotals } from '@/components/TimeControlCompact'
 import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
 import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
+import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
 
 interface ProjectDetailProps {
   projectId: string
@@ -116,6 +117,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const handleToggleNextStep = async (id: string, current: boolean) => {
     if (savingActionId) return
+    // B1 (detalhe) — MESMA regra compartilhada de Hoje/Ações antes de gravar.
+    // Retirada explícita (current=true) sempre passa; nova escolha exige
+    // elegibilidade (pronta + projeto ativo/rascunho).
+    if (!current) {
+      const action = actions.find((a) => a.id === id)
+      if (!action) return
+      const projectState = checkEligibility(action, project)
+      if (!projectState.ok || !isSelectableForFocus(action, project)) {
+        toast({
+          variant: 'destructive',
+          title: 'Seleção não permitida',
+          description: `${projectState.label ?? 'somente ações "pronta" recebem nova seleção'}. O próximo avanço anterior não foi alterado.`,
+        })
+        return
+      }
+    }
     setSavingActionId(id)
     try {
       if (current) {
@@ -134,6 +151,21 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const handleToggleTodaySelected = async (id: string, current: boolean) => {
     if (savingActionId) return
+    // B1 (detalhe) — retirada explícita (current=true) sempre passa; nova
+    // seleção exige elegibilidade, sem gravar flags nem alterar o avanço.
+    if (!current) {
+      const action = actions.find((a) => a.id === id)
+      if (!action) return
+      const projectState = checkEligibility(action, project)
+      if (!projectState.ok || !isSelectableForFocus(action, project)) {
+        toast({
+          variant: 'destructive',
+          title: 'Seleção não permitida',
+          description: `${projectState.label ?? 'somente ações "pronta" recebem nova seleção'}. Nenhuma flag foi gravada.`,
+        })
+        return
+      }
+    }
     setSavingActionId(id)
     try {
       await actionService.setTodaySelected(id, !current)
@@ -201,6 +233,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         ? formatDuration(seconds)
         : 'Não registrado'
   const runningInProject = running?.project_id === project.id ? running : null
+  // B1 (detalhe) — disponibilidade dos comandos de foco por linha: null = pode
+  // selecionar; motivo legível = nova seleção bloqueada (retirada explícita de
+  // flags já gravadas continua disponível).
+  const focusBlockReason = (action: ActionItem): string | null => {
+    if (action.is_next_step || action.is_today_selected) return null
+    const state = checkEligibility(action, project)
+    return state.ok && isSelectableForFocus(action, project) ? null : (state.label ?? 'impedimento')
+  }
+
   const renderActionTimeControl = (action: ActionItem) => (
     <TimeControl
       targetType="action"
@@ -568,6 +609,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       onToggleNextStep={handleToggleNextStep}
                       onToggleTodaySelected={handleToggleTodaySelected}
                       onStatusChange={handleStatusChange}
+                      focusBlockedReason={focusBlockReason(action)}
                       onOpenLogModal={(a) => {
                         setLogAction(a)
                         setIsLogModalOpen(true)
@@ -599,6 +641,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       <ActionRow
                         action={action}
                         onStatusChange={handleStatusChange}
+                        focusBlockedReason={focusBlockReason(action)}
                         onOpenLogModal={(a) => {
                           setLogAction(a)
                           setIsLogModalOpen(true)

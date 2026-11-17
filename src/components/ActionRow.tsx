@@ -32,6 +32,8 @@ interface ActionRowProps {
   isNextAdvance?: boolean
   /** FATIA 3: gravação em andamento — desabilita controles e mostra pendência */
   saving?: boolean
+  /** B1 (detalhe): motivo legível quando NOVA seleção de foco é bloqueada (null = pode). */
+  focusBlockedReason?: string | null
   onToggleNextStep?: (id: string, current: boolean) => void
   onToggleTodaySelected?: (id: string, current: boolean) => void
   onStatusChange?: (id: string, status: ActionStatus, reason?: string) => void
@@ -49,6 +51,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
   action,
   isNextAdvance = false,
   saving = false,
+  focusBlockedReason = null,
   onToggleNextStep,
   onToggleTodaySelected,
   onStatusChange,
@@ -139,6 +142,12 @@ export const ActionRow: React.FC<ActionRowProps> = ({
 
   const isDone = action.status === 'feita'
   const isCanceled = action.status === 'cancelada'
+  // B1 — bloqueio só impede NOVA seleção de foco; retirada explícita de flag já
+  // gravada, leitura, edição, descrição, progresso, tempo e status continuam.
+  const canSelectFocus = !isDone && !focusBlockedReason && !saving
+  const focusBlockedLabel = focusBlockedReason
+    ? `Seleção indisponível: ${focusBlockedReason}. Retirada de seleção existente continua permitida.`
+    : null
 
   return (
     <div
@@ -275,12 +284,14 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             <button
               type="button"
               onClick={() => onToggleNextStep(action.id, action.is_next_step)}
-              disabled={saving}
+              disabled={saving || (!action.is_next_step && !canSelectFocus)}
               aria-label={
                 action.is_next_step ? 'Remover do próximo avanço' : 'Definir como próximo avanço'
               }
               title={
-                action.is_next_step ? 'Remover do próximo avanço' : 'Definir como próximo avanço'
+                action.is_next_step
+                  ? 'Remover do próximo avanço'
+                  : (focusBlockedLabel ?? 'Definir como próximo avanço')
               }
               aria-pressed={action.is_next_step}
               className={cn(
@@ -317,6 +328,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               {onToggleTodaySelected && !isDone && (
                 <DropdownMenuItem
                   onClick={() => onToggleTodaySelected(action.id, action.is_today_selected)}
+                  disabled={!action.is_today_selected && !canSelectFocus}
+                  title={action.is_today_selected ? undefined : (focusBlockedLabel ?? undefined)}
                   className="min-h-11 cursor-pointer gap-2"
                 >
                   {action.is_today_selected ? (
@@ -336,6 +349,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               {onToggleNextStep && !isDone && (
                 <DropdownMenuItem
                   onClick={() => onToggleNextStep(action.id, action.is_next_step)}
+                  disabled={!action.is_next_step && !canSelectFocus}
+                  title={action.is_next_step ? undefined : (focusBlockedLabel ?? undefined)}
                   className="min-h-11 cursor-pointer gap-2"
                 >
                   {action.is_next_step ? (

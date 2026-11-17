@@ -93,7 +93,9 @@ export const ReviewPage: React.FC = () => {
 
   const openProjectSheet = useCallback(
     (id: string) => {
-      navigate(`/projetos?id=${encodeURIComponent(id)}`)
+      // BLOCO 2A — mesmo contrato de URL do catálogo (/projetos?id=<ID>) com a
+      // origem declarada; a ficha usa esse estado para retornar a /revisao.
+      navigate(`/projetos?id=${encodeURIComponent(id)}`, { state: { from: 'review' } })
     },
     [navigate],
   )

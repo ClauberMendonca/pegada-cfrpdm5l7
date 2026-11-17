@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { Project, ProjectStatus } from '@/types/execution'
 import { projectService } from '@/services/projectService'
 import { useGlobalFilter } from '@/contexts/FilterContext'
@@ -13,14 +14,45 @@ import {
   Target,
   Sparkles,
   ArrowRight,
-  Archive,
-  Compass,
+  AlertCircle,
+  SearchX,
+  Loader2,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { formatCalendarDay, formatInstantInZone, ownerTimezone } from '@/lib/datetime'
 import { useAuth } from '@/contexts/AuthContext'
 import { ListRow, useViewPreference, ViewToggle } from '@/components/ViewToggle'
 
+const STATUS_TABS = ['todos', 'ativo', 'rascunho', 'pausado', 'concluido', 'arquivado'] as const
+
+// BLOCO 2A — recorte de status preservado entre abrir/fechar a ficha (ida e
+// volta pela URL, inclusive recarregar). Só UI: nunca persiste dados de
+// projeto — apenas a string do filtro, com fallback em memória.
+const STATUS_KEY = 'ginga.projects.statusFilter'
+
+function readStatusFilter(): ProjectStatus | 'todos' {
+  try {
+    const raw = window.sessionStorage.getItem(STATUS_KEY)
+    return (STATUS_TABS as readonly string[]).includes(raw ?? '')
+      ? (raw as ProjectStatus | 'todos')
+      : 'todos'
+  } catch {
+    return 'todos'
+  }
+}
+
+function writeStatusFilter(value: ProjectStatus | 'todos'): void {
+  try {
+    window.sessionStorage.setItem(STATUS_KEY, value)
+  } catch {
+    // Armazenamento indisponível: recorte vive só em memória.
+  }
+}
+
+// BLOCO 2A — Ficha retomável por URL: /projetos?id=<ID> abre a ficha do
+// projeto; /projetos sem id mantém o catálogo. O detalhe é derivado da URL
+// (não de estado em memória), a resolução usa o serviço existente dentro da
+// sessão do dono e o retorno ao catálogo preserva filtros/modo e histórico.
 export const ProjectsPage: React.FC = () => {
   const { toast } = useToast()
   const { contextFilter } = useGlobalFilter()
@@ -28,12 +60,21 @@ export const ProjectsPage: React.FC = () => {
   const { user } = useAuth()
   const ownerTz = ownerTimezone(user?.timezone)
 
-  const [projects, setProjects] = useState<Project[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'todos'>('todos')
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
 
+  const urlProjectId = searchParams.get('id') || null
+
+  const [projects, setProjects] = useState<Project[]>([])
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'todos'>(readStatusFilter)
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  const changeStatusFilter = useCallback((value: ProjectStatus | 'todos') => {
+    setStatusFilter(value)
+    writeStatusFilter(value)
+  }, [])
 
   // Projetos — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('projetos', user?.id)
@@ -57,14 +98,152 @@ export const ProjectsPage: React.FC = () => {
     loadProjects()
   }, [loadProjects])
 
-  // If a project is selected, render full ProjectDetail view
-  if (selectedProjectId) {
+  // BLOCO 2A — ficha derivada da URL. O ID vem de /projetos?id=<ID> e o
+  // projeto é buscado pelo serviço existente na sessão autenticada do dono —
+  // recarregar a página reabre a mesma ficha. Filtros/modo do catálogo ficam
+  // intactos: nada é alterado para tornar o projeto visível.
+  const [urlProject, setUrlProject] = useState<Project | null>(null)
+  const [urlProjectState, setUrlProjectState] = useState<'loading' | 'ready' | 'notfound'>(
+    'loading',
+  )
+
+  // BLOCO 2A(5) — resolve o projeto da URL com guarda de leituras tardias:
+  // se a navegação muda para outro ID/catálogo, a resposta antiga é descartada
+  // e nenhuma ficha anterior é aberta por engano.
+  useEffect(() => {
+    if (!urlProjectId) {
+      setUrlProject(null)
+      setUrlProjectState('loading')
+      return
+    }
+    let cancelled = false
+    setUrlProject(null)
+    setUrlProjectState('loading')
+    projectService
+      .getById(urlProjectId)
+      .then((p) => {
+        if (cancelled) return
+        setUrlProject(p)
+        setUrlProjectState('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setUrlProject(null)
+        // 404/erro: destino inexistente ou inacessível — mensagem clara com
+        // caminho de volta; nunca expõe dados de outro dono (a leitura já é
+        // escopada à sessão autenticada pelo PocketBase).
+        setUrlProjectState('notfound')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [urlProjectId])
+
+  // BLOCO 2A(3) — abertura empilha histórico (pushState): voltar do navegador
+  // retorna ao catálogo sem laço de voltar/reabrir. A origem é declarada por
+  // quem navega (Revisão usa state: { from: 'review' }); usado só para decidir
+  // o retorno. Sem sistema novo de navegação, sem persistência de dados.
+  const openSheet = useCallback(
+    (id: string) => {
+      navigate(`/projetos?id=${encodeURIComponent(id)}`, {
+        state: { from: 'catalog' },
+      })
+    },
+    [navigate],
+  )
+
+  const fromReview = location.state?.from === 'review'
+
+  const closeSheet = useCallback(() => {
+    if (fromReview && window.history.length > 1) {
+      // Origem Revisão: volta pelo histórico, retornando a /revisao.
+      navigate(-1)
+    } else {
+      // Catálogo/acesso direto: remove o id da URL sem empilhar histórico.
+      setSearchParams({}, { replace: true })
+    }
+  }, [fromReview, navigate, setSearchParams])
+
+  if (urlProjectId && urlProjectState === 'ready' && urlProject) {
+    // BLOCO 2A(2) — sinaliza ficha fora do recorte atual (filtro global Vida/
+    // Trabalho), sem trocar o filtro silenciosamente para torná-la visível.
+    const outOfScope = contextFilter !== 'todos' && urlProject.context !== contextFilter
     return (
-      <ProjectDetail
-        projectId={selectedProjectId}
-        onBack={() => setSelectedProjectId(null)}
-        onProjectUpdated={loadProjects}
-      />
+      <div className="space-y-4">
+        {outOfScope && (
+          <div className="rounded-xl border border-ginga-warning/30 bg-ginga-warning-bg p-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-ginga-warning mt-0.5 shrink-0" />
+            <p className="text-xs text-ginga-warning">
+              Esta ficha é de {urlProject.context === 'trabalho' ? 'Trabalho' : 'Vida'} e está fora
+              do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}).
+            </p>
+          </div>
+        )}
+        <ProjectDetail
+          projectId={urlProject.id}
+          onBack={closeSheet}
+          onProjectUpdated={loadProjects}
+        />
+      </div>
+    )
+  }
+
+  if (urlProjectId && urlProjectState === 'notfound') {
+    // BLOCO 2A(5) — destino inexistente/inacessível: estado distinto de
+    // carregamento, com caminho de volta seguro ao catálogo.
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <SearchX className="w-6 h-6 text-destructive" />
+              Ficha não encontrada
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              O projeto desta ficha não existe, foi removido ou não está acessível nesta sessão.
+            </p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-6 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-destructive font-medium">
+              Não foi possível abrir a ficha solicitada.
+            </p>
+            <p className="text-xs text-destructive mt-0.5">
+              Verifique o endereço ou volte ao catálogo para escolher outra ficha.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-3 gap-1.5">
+              <Link to="/projetos">
+                <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
+                Voltar ao catálogo de projetos
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (urlProjectId) {
+    // Carregamento da ficha (resolução do ID da URL) — estado dedicado, sem
+    // flash do catálogo e sem abrir ficha anterior por engano.
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <FolderKanban className="w-6 h-6 text-primary" />
+              Projetos
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              Abrindo a ficha do projeto…
+            </p>
+          </div>
+        </div>
+        <div className="p-8 text-center text-muted-foreground">Carregando ficha…</div>
+      </div>
     )
   }
 
@@ -126,21 +305,19 @@ export const ProjectsPage: React.FC = () => {
 
       {/* Filter Tabs by Status */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-        {(['todos', 'ativo', 'rascunho', 'pausado', 'concluido', 'arquivado'] as const).map(
-          (st) => (
-            <button
-              key={st}
-              onClick={() => setStatusFilter(st)}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                statusFilter === st
-                  ? 'bg-card text-foreground shadow-sm border border-border'
-                  : 'text-muted-foreground hover:text-foreground border border-transparent'
-              }`}
-            >
-              {st === 'todos' ? 'Todos os Status' : st.charAt(0).toUpperCase() + st.slice(1)}
-            </button>
-          ),
-        )}
+        {STATUS_TABS.map((st) => (
+          <button
+            key={st}
+            onClick={() => changeStatusFilter(st)}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors whitespace-nowrap ${
+              statusFilter === st
+                ? 'bg-card text-foreground shadow-sm border border-border'
+                : 'text-muted-foreground hover:text-foreground border border-transparent'
+            }`}
+          >
+            {st === 'todos' ? 'Todos os Status' : st.charAt(0).toUpperCase() + st.slice(1)}
+          </button>
+        ))}
       </div>
 
       {/* Projects Grid / List */}
@@ -155,25 +332,28 @@ export const ProjectsPage: React.FC = () => {
           </p>
         </div>
       ) : view === 'list' ? (
-        /* Lista: título abre o detalhe existente do projeto, sem ficha/modal paralelo. */
+        /* Lista: título abre a ficha do projeto pelo mesmo contrato de URL. */
         <div className="grid gap-2">
           {projects.map((project) => (
             <ListRow
               key={project.id}
               title={project.title}
               open={false}
-              onToggle={() => setSelectedProjectId(project.id)}
+              onToggle={() => openSheet(project.id)}
               hint={getStatusBadge(project.status)}
             />
           ))}
         </div>
       ) : (
+        /* Cards: o card inteiro é um link semântico para /projetos?id=<ID> —
+           sem onClick em div e sem botões interativos aninhados. */
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {projects.map((project) => (
-            <div
+            <Link
               key={project.id}
-              onClick={() => setSelectedProjectId(project.id)}
-              className="group p-5 rounded-2xl border border-border bg-card hover:bg-accent/50 hover:border-ring/40 transition-all cursor-pointer flex flex-col justify-between space-y-4"
+              to={`/projetos?id=${encodeURIComponent(project.id)}`}
+              state={{ from: 'catalog' }}
+              className="group p-5 rounded-2xl border border-border bg-card hover:bg-accent/50 hover:border-ring/40 transition-all cursor-pointer flex flex-col justify-between space-y-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
@@ -230,7 +410,7 @@ export const ProjectsPage: React.FC = () => {
                   {formatInstantInZone(project.created, ownerTz).split(' ')[0]}
                 </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       )}

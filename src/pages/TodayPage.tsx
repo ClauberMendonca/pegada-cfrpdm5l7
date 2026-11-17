@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { ActionItem, ActionStatus, Project } from '@/types/execution'
@@ -29,6 +30,7 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import { todayInZone, ownerTimezone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
@@ -697,8 +699,19 @@ export const TodayPage: React.FC = () => {
                       className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3 text-xs"
                     >
                       <span className="font-medium text-foreground truncate">{action.title}</span>
-                      <span className="text-ginga-warning shrink-0">
-                        Motivo: {ineligibilityLabel(action, resolveProject)}
+                      <span className="flex items-center gap-2 shrink-0 min-w-0">
+                        <span className="text-ginga-warning truncate">
+                          Motivo: {ineligibilityLabel(action, resolveProject)}
+                        </span>
+                        {/* BLOCO 2C — atalho que SOMENTE navega: /acoes?id=<ID>
+                           já entregue pela v0.0.45/v0.0.46. Não libera foco,
+                           status ou qualquer gravação. */}
+                        <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
+                          <Link to={`/acoes?id=${encodeURIComponent(action.id)}`}>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Abrir ação
+                          </Link>
+                        </Button>
                       </span>
                     </div>
                   ))}
@@ -716,15 +729,25 @@ export const TodayPage: React.FC = () => {
                   {reevaluateProjects.map((p) => (
                     <div
                       key={p.id}
-                      className="p-3 rounded-lg border border-border bg-card flex items-center justify-between text-xs"
+                      className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="flex items-center gap-2 truncate">
+                      <div className="flex items-center gap-2 truncate min-w-0">
                         <Badge variant="outline" className="text-[10px] uppercase">
                           {p.status}
                         </Badge>
                         <span className="font-medium text-foreground truncate">{p.title}</span>
                       </div>
-                      <span className="text-muted-foreground shrink-0">{projectBlockLabel(p)}</span>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-muted-foreground">{projectBlockLabel(p)}</span>
+                        {/* BLOCO 2C — atalho que SOMENTE navega: /projetos?id=<ID>.
+                          Não pausa/ativa projeto nem altera estado. */}
+                        <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
+                          <Link to={`/projetos?id=${encodeURIComponent(p.id)}`}>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Abrir projeto
+                          </Link>
+                        </Button>
+                      </span>
                     </div>
                   ))}
                 </div>

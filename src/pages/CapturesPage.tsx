@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { CaptureItem, CaptureStatus } from '@/types/execution'
 import { captureService } from '@/services/captureService'
 import { projectService } from '@/services/projectService'
@@ -76,11 +77,24 @@ export const CapturesPage: React.FC = () => {
   const copilotSession = useRef(0)
   const pageActive = useRef(true)
   const [conversionFromCopilot, setConversionFromCopilot] = useState(false)
+
+  // BLOCO 2C — feedback local pós-conversão: link para o destino REAL retornado
+  // pela conversão (ou já existente em duplicate:true). Estado só de UI —
+  // nenhum registro é gravado no banco; disponível mesmo depois de a captura
+  // sair da lista Pendentes. Limpo ao trocar de captura/desmontar a página.
+  const [conversionFeedback, setConversionFeedback] = useState<{
+    captureId: string
+    targetType: 'project' | 'action'
+    targetId: string
+    duplicate: boolean
+  } | null>(null)
+
   useEffect(() => {
     pageActive.current = true
     return () => {
       pageActive.current = false
       ++copilotSession.current
+      setConversionFeedback(null)
     }
   }, [])
 
@@ -189,6 +203,7 @@ export const CapturesPage: React.FC = () => {
 
   const openConvertToProject = (capture: CaptureItem) => {
     setConversionFromCopilot(false)
+    setConversionFeedback(null)
     setSelectedCapture(capture)
     setProjectTitle(capture.raw_text.split('\n')[0].slice(0, 80))
     setProjectContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
@@ -200,6 +215,7 @@ export const CapturesPage: React.FC = () => {
 
   const openConvertToAction = (capture: CaptureItem) => {
     setConversionFromCopilot(false)
+    setConversionFeedback(null)
     setSelectedCapture(capture)
     setActionTitle(capture.raw_text.slice(0, 100))
     setActionContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
@@ -218,6 +234,7 @@ export const CapturesPage: React.FC = () => {
     ++copilotSession.current
     setCopilotOpen(false)
     setCopilotCapture(null)
+    setConversionFeedback(null)
     setSelectedCapture(capture)
     setConversionFromCopilot(true)
     setCaptures((list) => list.map((item) => (item.id === capture.id ? capture : item)))
@@ -266,11 +283,25 @@ export const CapturesPage: React.FC = () => {
       // Idempotente: quando a captura já estava convertida (retry após perder
       // a resposta, duplo clique, chamada concorrente), o backend retorna o
       // destino REAL que já existia — nunca cria um segundo destino.
+      // BLOCO 2C — o mesmo destino retornado vira link local (sem nova leitura
+      // ao backend, sem inferir ID pelo título). Resposta inconclusiva (sem
+      // target.id) mantém o texto atual, sem inventar destino.
+      const targetType = result.target_type === 'action' ? 'action' : 'project'
+      const targetId = typeof result.target?.id === 'string' ? result.target.id : ''
+      if (targetId) {
+        setConversionFeedback({
+          captureId: selectedCapture.id,
+          targetType,
+          targetId,
+          duplicate: result.duplicate,
+        })
+      }
       if (result.duplicate) {
-        const destino = result.target_type === 'project' ? 'Projeto' : 'Ação'
         toast({
-          title: `Captura já estava convertida`,
-          description: `Exibindo o ${destino} que já existia — nenhum destino duplicado foi criado.`,
+          title: 'Captura já estava convertida',
+          description: targetId
+            ? 'Nenhum destino duplicado foi criado. Use o link abaixo para abrir o destino existente.'
+            : 'Nenhum destino duplicado foi criado. O destino não foi confirmado nesta resposta.',
         })
       } else {
         toast({
@@ -278,6 +309,9 @@ export const CapturesPage: React.FC = () => {
             target === 'project'
               ? 'Captura convertida em Projeto com sucesso!'
               : 'Captura convertida em Ação pronta!',
+          description: targetId
+            ? undefined
+            : 'O destino não foi retornado pela conversão; confira nas capturas convertidas.',
         })
       }
       setConversionType(null)
@@ -291,6 +325,35 @@ export const CapturesPage: React.FC = () => {
     } finally {
       setIsConverting(false)
     }
+  }
+
+  // BLOCO 2C — destino de captura já convertida: usa o ID gravado
+  // (converted_project_id/converted_action_id) sem consultar cada destino.
+  // Vínculo ausente/inválido → "Destino não disponível", sem URL vazia e sem
+  // habilitar reconversão por isso.
+  const renderConvertedDest = (item: CaptureItem) => {
+    if (item.status !== 'convertida_projeto' && item.status !== 'convertida_acao') return null
+    const targetId =
+      item.status === 'convertida_projeto' ? item.converted_project_id : item.converted_action_id
+    if (!targetId) {
+      return <span className="text-xs text-muted-foreground">Destino não disponível</span>
+    }
+    const to =
+      item.status === 'convertida_projeto'
+        ? `/projetos?id=${encodeURIComponent(targetId)}`
+        : `/acoes?id=${encodeURIComponent(targetId)}`
+    return (
+      <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
+        <Link to={to}>
+          {item.status === 'convertida_projeto' ? (
+            <FolderKanban className="w-3.5 h-3.5 text-primary" />
+          ) : (
+            <CheckSquare className="w-3.5 h-3.5 text-primary" />
+          )}
+          {item.status === 'convertida_projeto' ? 'Abrir projeto' : 'Abrir ação'}
+        </Link>
+      </Button>
+    )
   }
 
   const renderCaptureCard = (item: CaptureItem) => (
@@ -307,6 +370,13 @@ export const CapturesPage: React.FC = () => {
         </div>
         <p className="text-sm text-foreground whitespace-pre-wrap break-words">{item.raw_text}</p>
       </div>
+
+      {/* Destino de captura já convertida (BLOCO 2C) */}
+      {(item.status === 'convertida_projeto' || item.status === 'convertida_acao') && (
+        <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
+          {renderConvertedDest(item)}
+        </div>
+      )}
 
       {/* Ações de processamento */}
       {item.status === 'pendente' && (
@@ -433,6 +503,42 @@ export const CapturesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* BLOCO 2C — feedback pós-conversão com link para o destino real */}
+      {conversionFeedback && (
+        <div
+          role="status"
+          className="rounded-xl border border-ginga-success/30 bg-ginga-success-bg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              {conversionFeedback.duplicate
+                ? 'Captura já convertida'
+                : conversionFeedback.targetType === 'project'
+                  ? 'Captura convertida em Projeto'
+                  : 'Captura convertida em Ação'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {conversionFeedback.duplicate
+                ? 'Abrir leva ao destino que já existia — nenhum destino duplicado foi criado.'
+                : 'Abra o destino criado ou continue processando as demais capturas.'}
+            </p>
+          </div>
+          {conversionFeedback.targetType === 'project' ? (
+            <Button asChild size="sm" className="gap-1.5 shrink-0">
+              <Link to={`/projetos?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
+                Abrir projeto
+              </Link>
+            </Button>
+          ) : (
+            <Button asChild size="sm" className="gap-1.5 shrink-0">
+              <Link to={`/acoes?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
+                Abrir ação
+              </Link>
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Input de Captura Rápida */}
       <Card className="bg-card border-border shadow-md">
         <CardContent className="pt-4 space-y-3">
@@ -507,6 +613,12 @@ export const CapturesPage: React.FC = () => {
                   <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                     {item.raw_text}
                   </p>
+                  {/* Destino de captura já convertida (BLOCO 2C) */}
+                  {(item.status === 'convertida_projeto' || item.status === 'convertida_acao') && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {renderConvertedDest(item)}
+                    </div>
+                  )}
                   {item.status === 'pendente' && (
                     <div className="flex flex-wrap items-center gap-2">
                       <Button

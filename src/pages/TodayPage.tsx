@@ -531,6 +531,9 @@ export const TodayPage: React.FC = () => {
               <ListRow
                 key={action.id}
                 title={action.title}
+                numberKind="action"
+                numberValue={action.sequence_number}
+                numberEntityId={action.id}
                 open={view === 'cards' || Boolean(openRows[action.id])}
                 onToggle={() => view === 'list' && toggleRow(action.id)}
                 summary={
@@ -596,12 +599,20 @@ export const TodayPage: React.FC = () => {
               <ListRow
                 key={action.id}
                 title={action.title}
+                numberKind="action"
+                numberValue={action.sequence_number}
+                numberEntityId={action.id}
                 open={view === 'cards' || Boolean(openRows[action.id])}
                 onToggle={() => view === 'list' && toggleRow(action.id)}
                 summary={
                   showSummary && view === 'list'
                     ? actionSummaryLine(action, {
-                        projectTitle: resolveProject(action)?.title ?? null,
+                        projectTitle:
+                          formatEntityTitle(
+                            'project',
+                            resolveProject(action)?.sequence_number,
+                            resolveProject(action)?.title ?? '',
+                          ) || null,
                         today: todayStr,
                       })
                     : undefined

@@ -36,6 +36,8 @@ import { TimeControl } from '@/components/TimeControlCompact'
 import { useProjectTimeTotals } from '@/components/TimeControlCompact'
 import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
+import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 import {
   ListRow,
   SummaryToggle,

@@ -194,13 +194,28 @@ export default function Layout() {
                 end={item.to === '/'}
                 className={({ isActive }) =>
                   cn(
-                    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    // min-h-14 preserva a altura da barra; o recorte py-1 cabe
+                    // a cápsula do ícone sem crescer a navegação.
+                    'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
                     isActive ? 'text-primary' : 'text-muted-foreground',
                   )
                 }
               >
-                <Icon className="h-5 w-5" aria-hidden="true" />
-                <span>{item.label}</span>
+                {({ isActive }) => (
+                  <>
+                    {/* Cápsula de superfície: a seção ativa não depende só da cor. */}
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-150',
+                        isActive ? 'bg-accent text-accent-foreground' : 'bg-transparent',
+                      )}
+                    >
+                      <Icon className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                    <span className={cn(isActive && 'font-semibold')}>{item.label}</span>
+                  </>
+                )}
               </NavLink>
             )
           })}

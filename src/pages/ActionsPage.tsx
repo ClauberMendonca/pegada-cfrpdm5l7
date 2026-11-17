@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { ActionItem, ActionStatus, Project } from '@/types/execution'
@@ -20,7 +21,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ListChecks, Plus, AlertCircle, Search, RotateCcw, Star, SunMedium } from 'lucide-react'
+import {
+  ListChecks,
+  Plus,
+  AlertCircle,
+  Search,
+  RotateCcw,
+  Star,
+  SunMedium,
+  Link2,
+  X,
+  SearchX,
+  Loader2,
+  ArrowRight,
+} from 'lucide-react'
 import { ownerTimezone, todayInZone } from '@/lib/datetime'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
@@ -62,6 +76,15 @@ const LINK_OPTIONS: { value: 'todas' | 'sem_projeto' | 'com_projeto'; label: str
   { value: 'com_projeto', label: 'Com projeto' },
 ]
 
+// BLOCO 2B — resolução do destino de /acoes?id=<ID> (mesmo contrato já usado
+// por /projetos?id=<ID> na v0.0.45; sem parâmetros concorrentes).
+interface DestResolution {
+  id: string
+  action: ActionItem | null
+  state: 'resolving' | 'ready' | 'notfound' | 'error'
+  error: string | null
+}
+
 export const ActionsPage: React.FC = () => {
   const { user } = useAuth()
   const { contextFilter } = useGlobalFilter()
@@ -87,9 +110,14 @@ export const ActionsPage: React.FC = () => {
   // Catálogo de Ações — apresentação Cards/Lista (preferência por dono nesta área).
   const [view, setView] = useViewPreference('acoes', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
-  const toggleRow = useCallback((id: string) => {
-    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
+
+  // BLOCO 2B — destino retomável por URL: /acoes?id=<ID> abre/destaca a ação
+  // dentro deste catálogo; /acoes sem id continua sendo o catálogo completo.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlActionId = searchParams.get('id')?.trim() || null
+  const [dest, setDest] = useState<DestResolution | null>(null)
+  const [destRetryTick, setDestRetryTick] = useState(0)
+  const destElRef = useRef<HTMLDivElement | null>(null)
 
   // Modals state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -130,7 +158,11 @@ export const ActionsPage: React.FC = () => {
   }, [loadData])
 
   const loadTimeEntries = useCallback(async () => {
-    const actionIds = [...new Set(actions.map((action) => action.id))]
+    // BLOCO 2B — inclui o destino da URL na MESMA consulta batelada (nunca
+    // uma consulta por linha), mesmo quando ele está fora da lista carregada.
+    const actionIds = [
+      ...new Set([...actions.map((action) => action.id), ...(urlActionId ? [urlActionId] : [])]),
+    ]
     if (actionIds.length === 0) {
       setTimeEntries([])
       setTimeError(null)
@@ -147,11 +179,66 @@ export const ActionsPage: React.FC = () => {
     } finally {
       setTimeLoading(false)
     }
-  }, [actions])
+  }, [actions, urlActionId])
 
   useEffect(() => {
     if (!isLoading) void loadTimeEntries()
   }, [isLoading, loadTimeEntries, revision])
+
+  // BLOCO 2B(1)(6) — resolve o destino da URL na sessão do dono. Primeiro na
+  // batelada já carregada (mesma consulta do catálogo); fora dela, leitura
+  // pontual por ID com o vínculo expandido. A leitura é escopada à sessão
+  // autenticada — filtro visual nunca vira regra de autorização. Guarda contra
+  // retornos tardios: só o resultado do ID corrente é aplicado.
+  useEffect(() => {
+    if (!urlActionId) {
+      setDest(null)
+      return
+    }
+    if (isLoading) {
+      // Catálogo ainda carregando: não exibe destino de outro ID nem decide cedo.
+      setDest((prev) => (prev && prev.id === urlActionId ? prev : null))
+      return
+    }
+    let cancelled = false
+    if (actions.some((a) => a.id === urlActionId)) {
+      // Já está nos dados carregados — sem consulta extra, sem cópia duplicada.
+      setDest((prev) =>
+        prev && prev.id === urlActionId && prev.state === 'ready'
+          ? prev
+          : { id: urlActionId, action: null, state: 'ready', error: null },
+      )
+      return
+    }
+    setDest((prev) =>
+      prev && prev.id === urlActionId && prev.state === 'ready' && prev.action
+        ? prev // destino já aberto por leitura direta: mantém em tela
+        : { id: urlActionId, action: null, state: 'resolving', error: null },
+    )
+    actionService
+      .getById(urlActionId)
+      .then((a) => {
+        if (cancelled) return
+        setDest({ id: urlActionId, action: a, state: 'ready', error: null })
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        const status = (err as { status?: number } | null)?.status
+        setDest((prev) =>
+          prev && prev.id === urlActionId && prev.state === 'ready' && prev.action
+            ? prev // falha transitória ao revalidar: mantém o destino visível
+            : {
+                id: urlActionId,
+                action: null,
+                state: status === 404 ? 'notfound' : 'error',
+                error: errorMessage(err, 'Não foi possível abrir a ação deste link.'),
+              },
+        )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [urlActionId, isLoading, actions, destRetryTick])
 
   // FATIA 2 — resolvedor de situação REAL do projeto: usa a lista carregada do
   // backend (mesma consulta). Nunca assume "ativo" para relação não carregada.
@@ -198,17 +285,69 @@ export const ActionsPage: React.FC = () => {
   const hasActiveLocalFilters =
     search.trim() !== '' || statusFilter !== 'todos' || linkFilter !== 'todas'
 
+  // BLOCO 2B — o que fazer com o destino resolvido: se está no recorte visível,
+  // abre/destaca na própria listagem; se está fora (filtros locais ou recorte
+  // global de contexto), aparece em um agrupamento próprio — sem limpar ou
+  // trocar filtros e sem renderizar a ação duas vezes.
+  const destReady = Boolean(dest && dest.id === urlActionId && dest.state === 'ready')
+  const catalogDestAction = urlActionId ? (actions.find((a) => a.id === urlActionId) ?? null) : null
+  const destDisplayAction = destReady ? (catalogDestAction ?? dest?.action ?? null) : null
+  const destInFiltered = Boolean(
+    destDisplayAction && urlActionId && filteredActions.some((a) => a.id === urlActionId),
+  )
+  const showDestGroup = Boolean(destDisplayAction) && !destInFiltered
+  const destResolving =
+    Boolean(urlActionId) && (!dest || dest.id !== urlActionId || dest.state === 'resolving')
+  const destContextMismatch = Boolean(
+    destDisplayAction && contextFilter !== 'todos' && destDisplayAction.context !== contextFilter,
+  )
+
   const clearLocalFilters = () => {
     setSearch('')
     setStatusFilter('todos')
     setLinkFilter('todas')
   }
 
+  // BLOCO 2B(5) — fechar o destino remove o id da URL sem empilhar histórico
+  // (sem laço de reabrir); voltar pelo navegador também remove a seleção.
+  const closeDest = useCallback(() => {
+    setSearchParams({}, { replace: true })
+  }, [setSearchParams])
+
+  // BLOCO 2B(4) — abrir/recolher em Lista usa o mesmo contrato navegável:
+  // abrir reflete /acoes?id=<ID> (push: voltar fecha), recolher remove o id.
+  // Só muda a visualização — nunca grava, nem altera status ou tempo.
+  const handleRowToggle = useCallback(
+    (id: string) => {
+      const isOpen = Boolean(openRows[id]) || urlActionId === id
+      if (isOpen) {
+        setOpenRows((prev) => ({ ...prev, [id]: false }))
+        if (urlActionId === id) closeDest()
+      } else {
+        setOpenRows((prev) => ({ ...prev, [id]: true }))
+        if (urlActionId !== id) {
+          setSearchParams(new URLSearchParams({ id }), { state: { from: 'catalog' } })
+        }
+      }
+    },
+    [openRows, urlActionId, closeDest, setSearchParams],
+  )
+
+  // BLOCO 2B(2) — traz o destino à área visível quando ele está na listagem
+  // (Cards ou Lista). O grupo próprio já fica no topo, sem rolagem.
+  useEffect(() => {
+    if (!destReady || !destInFiltered) return
+    destElRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [destReady, destInFiltered, view])
+
   // FATIA 2 + FATIA 3 — seleção de foco com a MESMA regra compartilhada do Hoje;
   // estado pendente; sucesso só após confirmação real do backend.
   const handleToggleNextStep = async (id: string, current: boolean) => {
     if (savingActionId) return
-    const action = actions.find((a) => a.id === id)
+    // BLOCO 2B — destino fora da batelada também passa pelas guardas de
+    // elegibilidade (mesma regra compartilhada do Hoje).
+    const action =
+      actions.find((a) => a.id === id) ?? (destDisplayAction?.id === id ? destDisplayAction : null)
     if (!current && action) {
       const check = checkEligibility(action, resolveProject(action))
       if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
@@ -243,7 +382,9 @@ export const ActionsPage: React.FC = () => {
 
   const handleToggleTodaySelected = async (id: string, current: boolean) => {
     if (savingActionId) return
-    const action = actions.find((a) => a.id === id)
+    // BLOCO 2B — mesma guarda de elegibilidade para o destino fora da batelada.
+    const action =
+      actions.find((a) => a.id === id) ?? (destDisplayAction?.id === id ? destDisplayAction : null)
     if (!current && action) {
       const check = checkEligibility(action, resolveProject(action))
       if (!check.ok || !isSelectableForFocus(action, resolveProject(action))) {
@@ -293,12 +434,18 @@ export const ActionsPage: React.FC = () => {
     void loadData()
   }
 
-  const renderActionRow = (action: ActionItem) => {
+  const renderActionRow = (action: ActionItem, isDest = false) => {
     const project = resolveProject(action)
     const linkLabel = project ? project.title : action.project_id ? 'vínculo indisponível' : null
     return (
-      <div key={action.id} className="space-y-1">
+      <div className={cn('space-y-1 rounded-lg', isDest && 'ring-1 ring-primary/40')}>
         <div className="flex flex-wrap items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+          {isDest && (
+            <Badge variant="outline" className="gap-1 border-primary/40 text-primary">
+              <Link2 className="h-3 w-3" aria-hidden="true" />
+              Destino do link
+            </Badge>
+          )}
           {/* Vínculo: título do projeto carregado, ou indisponível sem inventar projeto. */}
           {linkLabel && (
             <span
@@ -426,6 +573,57 @@ export const ActionsPage: React.FC = () => {
         </div>
       )}
 
+      {/* BLOCO 2B(6) — estados do destino da URL, distintos entre si: resolução
+          em curso, ID inexistente/inacessível e falha com nova tentativa. */}
+      {urlActionId && destResolving && (
+        <div className="rounded-xl border border-border bg-muted p-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden="true" />
+          Abrindo a ação deste link…
+        </div>
+      )}
+
+      {dest && dest.id === urlActionId && dest.state === 'notfound' && (
+        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+          <SearchX className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-destructive font-medium">Ação não encontrada.</p>
+            <p className="text-xs text-destructive mt-0.5">
+              O link aponta para uma ação que não existe, foi removida ou não está acessível nesta
+              sessão.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={closeDest}
+              className="mt-2 gap-1.5 text-xs"
+            >
+              <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
+              Voltar ao catálogo
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {dest && dest.id === urlActionId && dest.state === 'error' && (
+        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-destructive font-medium">
+              Não foi possível abrir a ação deste link.
+            </p>
+            <p className="text-xs text-destructive mt-0.5">{dest.error}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDestRetryTick((t) => t + 1)}
+              className="mt-2 text-xs"
+            >
+              Tentar novamente
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Busca + filtros locais */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
@@ -477,6 +675,40 @@ export const ActionsPage: React.FC = () => {
         </Select>
       </div>
 
+      {/* BLOCO 2B(3) — destino fora do recorte visível: agrupamento contextual
+          próprio, com indicação clara. Filtros e modo preservados; a ação não é
+          renderizada duas vezes (neste caso ela não está na listagem abaixo). */}
+      {showDestGroup && destDisplayAction && (
+        <div className="rounded-xl border border-ring/40 bg-card p-3 space-y-2">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {destContextMismatch ? (
+                <span className="text-ginga-warning">
+                  Esta ação é de {destDisplayAction.context === 'trabalho' ? 'Trabalho' : 'Vida'} e
+                  está fora do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}).
+                  O filtro foi preservado.
+                </span>
+              ) : catalogDestAction ? (
+                <span>
+                  Esta ação está fora dos filtros atuais do catálogo (busca, status ou vínculo). Os
+                  filtros foram preservados.
+                </span>
+              ) : (
+                <span>
+                  Esta ação não está nos dados carregados do catálogo; foi aberta por leitura direta
+                  do link.
+                </span>
+              )}
+            </div>
+            <Button size="sm" variant="ghost" onClick={closeDest} className="gap-1 text-xs">
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              Fechar destino
+            </Button>
+          </div>
+          {renderActionRow(destDisplayAction, true)}
+        </div>
+      )}
+
       {/* Lista */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -517,22 +749,47 @@ export const ActionsPage: React.FC = () => {
           )}
         </div>
       ) : view === 'cards' ? (
-        <div className="grid gap-3">{filteredActions.map(renderActionRow)}</div>
+        <div className="grid gap-3">
+          {filteredActions.map((action) => {
+            const isDest = urlActionId === action.id
+            return (
+              <div key={action.id} ref={isDest ? destElRef : undefined}>
+                {renderActionRow(action, isDest)}
+              </div>
+            )
+          })}
+        </div>
       ) : (
         /* Lista: apenas o título em cada linha; abrir expande a apresentação
            completa existente (descrição, comandos, tempo) — recolher só altera
-           a visualização, sem encerrar cronômetro nem gravar nada. */
+           a visualização, sem encerrar cronômetro nem gravar nada. O destino
+           da URL abre automaticamente, com selo "Destino", pelo mesmo contrato. */
         <div className="grid gap-2">
-          {filteredActions.map((action) => (
-            <ListRow
-              key={action.id}
-              title={action.title}
-              open={Boolean(openRows[action.id])}
-              onToggle={() => toggleRow(action.id)}
-            >
-              {renderActionRow(action)}
-            </ListRow>
-          ))}
+          {filteredActions.map((action) => {
+            const isDest = urlActionId === action.id
+            return (
+              <div key={action.id} ref={isDest ? destElRef : undefined}>
+                <ListRow
+                  title={action.title}
+                  open={Boolean(openRows[action.id]) || isDest}
+                  hint={
+                    isDest ? (
+                      <Badge
+                        variant="outline"
+                        className="gap-1 border-primary/40 text-primary text-[10px]"
+                      >
+                        <Link2 className="h-3 w-3" aria-hidden="true" />
+                        Destino
+                      </Badge>
+                    ) : undefined
+                  }
+                  onToggle={() => handleRowToggle(action.id)}
+                >
+                  {renderActionRow(action, isDest)}
+                </ListRow>
+              </div>
+            )
+          })}
         </div>
       )}
 

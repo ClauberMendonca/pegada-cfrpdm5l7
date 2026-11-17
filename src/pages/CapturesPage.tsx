@@ -38,6 +38,7 @@ import {
   useViewPreference,
   ViewToggle,
 } from '@/components/ViewToggle'
+import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -73,6 +74,21 @@ export const CapturesPage: React.FC = () => {
     const clipped = first.length > 80 ? `${first.slice(0, 80)}…` : first
     return clipped
   }, [])
+
+  // BLOCO 6A — data de criação da captura no FUSO DO DONO: o dia é derivado do
+  // instante UTC (created) via dayInZone; nunca do fuso do dispositivo e nunca
+  // com slice(0,10) sobre o timestamp. Mesmo caminho para Cards, Lista (hint) e
+  // resumo opcional — sem lógica de fuso duplicada por modo. Valor ausente/
+  // inválido → "Data indisponível" (nunca Invalid Date); fuso vazio/inválido →
+  // fallback UTC do helper.
+  const ownerTz = ownerTimezone(user?.timezone)
+  const formatCreatedDay = useCallback(
+    (created: string | undefined | null): string => {
+      const day = dayInZone(created, ownerTz)
+      return day === '' ? 'Data indisponível' : formatCalendarDay(day)
+    },
+    [ownerTz],
+  )
 
   // Conversion Modals
   const [selectedCapture, setSelectedCapture] = useState<CaptureItem | null>(null)
@@ -372,7 +388,7 @@ export const CapturesPage: React.FC = () => {
         <div className="flex items-center gap-2">
           {getStatusBadge(item.status)}
           <span className="text-xs font-mono text-muted-foreground">
-            {new Date(item.created).toLocaleDateString('pt-BR')}
+            {formatCreatedDay(item.created)}
           </span>
         </div>
         <p className="text-sm text-foreground whitespace-pre-wrap break-words">{item.raw_text}</p>
@@ -629,10 +645,10 @@ export const CapturesPage: React.FC = () => {
                 title={captureDisplayTitle(item.raw_text)}
                 open={Boolean(openRows[item.id])}
                 onToggle={() => toggleRow(item.id)}
-                hint={new Date(item.created).toLocaleDateString('pt-BR')}
+                hint={formatCreatedDay(item.created)}
                 summary={
                   showSummary
-                    ? `${captureStatusLabel(item.status)} · ${new Date(item.created).toLocaleDateString('pt-BR')}`
+                    ? `${captureStatusLabel(item.status)} · ${formatCreatedDay(item.created)}`
                     : undefined
                 }
               >

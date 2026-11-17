@@ -43,10 +43,12 @@ import { projectService } from '@/services/projectService'
 import { ActionItem, Project } from '@/types/execution'
 
 /**
- * "P-3 · Título" (ou só o título) — formatter EXISTENTE formatEntityTitle,
- * sem duplicar prefixo. O código prop ("P-3"/"A-12") vem do sequence_number
- * do objeto persistido do alvo; sem código, título continua legível.
- * Aqui é só apresentação: nunca grava código em title/snapshots/payloads.
+ * "R-3 · Título" (ou só o título) — formatter EXISTENTE formatEntityTitle,
+ * sem duplicar prefixo. O código prop ("R-3"/"AV-12", ou legado "P-3"/"A-12")
+ * vem do sequence_number do objeto persistido do alvo; sem código, o título
+ * continua legível. Aqui é só apresentação: nunca grava código em title/
+ * snapshots/payloads. A correspondência de prefixo é exata (AV- não confunde
+ * com A-; 3 não casa com 13).
  */
 function entityNumberedText(
   targetType: TimeTargetType,
@@ -54,10 +56,9 @@ function entityNumberedText(
   title: string,
 ): string {
   if (!code) return title
-  const prefix = targetType === 'action' ? 'A-' : 'P-'
-  if (!code.startsWith(prefix)) return title
-  const n = Number(code.slice(prefix.length))
-  return Number.isFinite(n) ? formatEntityTitle(targetType, n, title) : title
+  const m = /^(R|AV|P|A)-(\d+)$/.exec(code)
+  if (!m) return title
+  return formatEntityTitle(targetType, Number(m[2]), title)
 }
 
 const dateInOwnerTz = (tz: string): string => {
@@ -668,7 +669,7 @@ export const ProjectTimeHistory: React.FC<ProjectTimeHistoryProps> = ({
 // ---------------------------------------------------------------------------
 
 /**
- * NUMERAÇÃO — código do alvo corrente ("P-3"/"A-12") para o indicador global.
+ * NUMERAÇÃO — código do alvo corrente ("R-3"/"AV-12") para o indicador global.
  * Resolve com UMA leitura autenticada por (dono, tipo, id) — cache de módulo
  * compartilhado entre montagens, válido enquanto sessão/alvo não mudam.
  * Falha de leitura não bloqueia Pausar/Encerrar nem altera reconciliação;

@@ -39,6 +39,7 @@ import {
   ViewToggle,
 } from '@/components/ViewToggle'
 import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
+import { useCaptureDraft } from '@/hooks/use-capture-draft'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -47,9 +48,22 @@ export const CapturesPage: React.FC = () => {
 
   const [captures, setCaptures] = useState<CaptureItem[]>([])
   const [filterStatus, setFilterStatus] = useState<CaptureStatus | 'todas'>('pendente')
-  const [newCaptureText, setNewCaptureText] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+
+  // BLOCO 8B — rascunho local opcional (off por padrão, por dono, sem envio).
+  const {
+    text: newCaptureText,
+    onTextChange: setNewCaptureText,
+    enabled: draftEnabled,
+    restored: draftRestored,
+    notice: draftNotice,
+    toggleEnabled: toggleDraft,
+    clearDraft,
+    beginSend,
+    isCurrent,
+    settleSuccess,
+  } = useCaptureDraft(user?.id)
 
   // Captura com Enter: trava síncrona além do estado visual — Enter repetido,
   // tecla segurada ou Enter seguido de clique não gravam duas vezes.
@@ -175,29 +189,36 @@ export const CapturesPage: React.FC = () => {
 
     savingRef.current = true
     setIsSubmitting(true)
+    // BLOCO 8B — snapshot do envio: dono, escopo, versão do texto e rascunho.
+    const snap = beginSend()
+    let current = true
     try {
       await captureService.create(text.trim())
-      // Texto limpo SOMENTE após confirmação do backend; se a pessoa já digitou
-      // algo novo enquanto o envio estava pendente, o rascunho novo é preservado.
-      setNewCaptureText((current) => (current === text ? '' : current))
-      toast({
-        title: 'Ideia capturada',
-        description: 'Armazenada com segurança para processar depois.',
-      })
+      // Texto limpo SOMENTE após confirmação do backend, e só se ainda for o
+      // mesmo rascunho/versão enviados (edição nova ou troca de dono preservam).
+      current = isCurrent(snap)
+      settleSuccess(snap)
+      if (current) {
+        toast({
+          title: 'Ideia capturada',
+          description: 'Armazenada com segurança para processar depois.',
+        })
+      }
       loadCaptures()
     } catch (err: unknown) {
-      // Em erro, mantém o texto para nova tentativa manual.
+      // Em erro, mantém o texto e o rascunho para nova tentativa manual.
+      current = isCurrent(snap)
       const msg = err instanceof Error ? err.message : 'Erro ao capturar'
-      toast({ variant: 'destructive', title: 'Erro', description: msg })
+      if (current) toast({ variant: 'destructive', title: 'Erro', description: msg })
     } finally {
       savingRef.current = false
       setIsSubmitting(false)
-      // Devolve o foco ao campo para a próxima ideia, sem apagar rascunho:
-      // só se o texto atual ainda for o que foi enviado (nada novo digitado).
+      // Devolve o foco ao campo somente se a sessão ainda for a mesma
+      // (retorno tardio não move foco).
       const field = quickAddRef.current
-      if (field && newCaptureText === text) field.focus()
+      if (field && current) field.focus()
     }
-  }, [newCaptureText, isSubmitting, loadCaptures, toast])
+  }, [beginSend, isCurrent, settleSuccess, isSubmitting, loadCaptures, toast])
 
   const quickAddRef = useRef<HTMLTextAreaElement>(null)
 
@@ -585,6 +606,33 @@ export const CapturesPage: React.FC = () => {
             <Lightbulb className="w-3.5 h-3.5" />
             <span>Anotação Rápida em Texto Livre</span>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-pressed={draftEnabled}
+            onClick={toggleDraft}
+            disabled={!user?.id || isSubmitting}
+            className="min-h-[44px] text-xs"
+          >
+            Manter rascunho neste dispositivo
+          </Button>
+          {draftEnabled && (
+            <p className="text-xs text-muted-foreground">
+              O texto não enviado fica neste navegador; só vira captura quando você confirmar com
+              Enter ou pelo botão.
+            </p>
+          )}
+          {draftEnabled && draftRestored && (
+            <p role="status" className="text-xs text-foreground">
+              Rascunho restaurado deste dispositivo
+            </p>
+          )}
+          {draftNotice && (
+            <p role="status" className="text-xs text-ginga-warning">
+              {draftNotice}
+            </p>
+          )}
           <Textarea
             ref={quickAddRef}
             value={newCaptureText}
@@ -598,21 +646,35 @@ export const CapturesPage: React.FC = () => {
             <span className="text-xs text-muted-foreground">
               Enter para capturar · Shift+Enter para nova linha
             </span>
-            <Button
-              type="button"
-              onClick={() => void submitCapture()}
-              disabled={isSubmitting || !newCaptureText.trim()}
-              className="gap-1.5 shrink-0"
-            >
-              {isSubmitting ? (
-                'Gravando…'
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Capturar Ideia
-                </>
+            <div className="flex items-center gap-2 shrink-0">
+              {draftEnabled && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDraft}
+                  disabled={isSubmitting || !newCaptureText}
+                  className="min-h-[44px] text-xs"
+                >
+                  Limpar rascunho
+                </Button>
               )}
-            </Button>
+              <Button
+                type="button"
+                onClick={() => void submitCapture()}
+                disabled={isSubmitting || !newCaptureText.trim()}
+                className="gap-1.5 min-h-[44px]"
+              >
+                {isSubmitting ? (
+                  'Gravando…'
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    Capturar Ideia
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

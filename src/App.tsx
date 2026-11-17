@@ -39,6 +39,10 @@ const ProtectedRoutes = () => {
           <Route element={<Layout />}>
             <Route path="/" element={<TodayPage />} />
             <Route path="/capturas" element={<CapturesPage />} />
+            {/* ENTREGA 1B — caminhos canônicos novos; /acoes e /projetos
+                permanecem como aliases legados (nenhum redirect). */}
+            <Route path="/avancos" element={<ActionsPage />} />
+            <Route path="/resultados" element={<ProjectsPage />} />
             <Route path="/acoes" element={<ActionsPage />} />
             <Route path="/projetos" element={<ProjectsPage />} />
             <Route path="/revisao" element={<ReviewPage />} />

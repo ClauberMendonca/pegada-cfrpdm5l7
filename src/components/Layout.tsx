@@ -38,13 +38,15 @@ export default function Layout() {
   const { running, error } = useTimer()
 
   // Ordem aprovada pelo dono: Hoje → Avanços → Resultados → Capturas → Revisão.
-  // Rotas /acoes e /projetos permanecem (aliases /avancos e /resultados virão
-  // depois); só o texto visível muda.
+  // ENTREGA 1B — caminhos canônicos novos (/avancos, /resultados); /acoes e
+  // /projetos permanecem no App.tsx como aliases legados. NavLink cobre os
+  // dois caminhos por padrão (mesma página em rotas distintas), então o
+  // estado ativo fica correto tanto no canônico quanto no alias.
   // Fonte única usada pela navegação desktop (sidebar) e móvel (bottom nav).
   const navItems = [
     { to: '/', label: 'Hoje', icon: SunMedium },
-    { to: '/acoes', label: 'Avanços', icon: ListChecks },
-    { to: '/projetos', label: 'Resultados', icon: FolderKanban },
+    { to: '/avancos', label: 'Avanços', icon: ListChecks },
+    { to: '/resultados', label: 'Resultados', icon: FolderKanban },
     { to: '/capturas', label: 'Capturas', icon: Inbox },
     { to: '/revisao', label: 'Revisão', icon: Compass },
   ]

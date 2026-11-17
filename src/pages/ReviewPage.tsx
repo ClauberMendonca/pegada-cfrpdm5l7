@@ -105,7 +105,7 @@ export const ReviewPage: React.FC = () => {
     (id: string) => {
       // BLOCO 2A — mesmo contrato de URL do catálogo (/projetos?id=<ID>) com a
       // origem declarada; a ficha usa esse estado para retornar a /revisao.
-      navigate(`/projetos?id=${encodeURIComponent(id)}`, { state: { from: 'review' } })
+      navigate(`/resultados?id=${encodeURIComponent(id)}`, { state: { from: 'review' } })
     },
     [navigate],
   )
@@ -183,7 +183,7 @@ export const ReviewPage: React.FC = () => {
           </CardHeader>
           <CardContent className="flex justify-center pt-2">
             <Button asChild className="gap-2">
-              <Link to="/projetos">
+              <Link to="/resultados">
                 <span>Ir para Resultados</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
@@ -386,7 +386,7 @@ export const ReviewPage: React.FC = () => {
 
             <div className="flex justify-center pt-2">
               <Button asChild className="gap-2">
-                <Link to="/projetos">
+                <Link to="/resultados">
                   <span>Ir para Resultados e Calibrar Fichas</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>

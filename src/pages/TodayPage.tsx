@@ -802,11 +802,11 @@ export const TodayPage: React.FC = () => {
                         <span className="text-ginga-warning truncate">
                           Motivo: {ineligibilityLabel(action, resolveProject)}
                         </span>
-                        {/* BLOCO 2C — atalho que SOMENTE navega: /acoes?id=<ID>
-                           já entregue pela v0.0.45/v0.0.46. Não libera foco,
-                           status ou qualquer gravação. */}
+                        {/* BLOCO 2C — atalho que SOMENTE navega: /avancos?id=<ID>
+                           (equivalente ao /acoes?id= da v0.0.45/v0.0.46). Não
+                           libera foco, status ou qualquer gravação. */}
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
-                          <Link to={`/acoes?id=${encodeURIComponent(action.id)}`}>
+                          <Link to={`/avancos?id=${encodeURIComponent(action.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
                             Abrir avanço
                           </Link>
@@ -841,10 +841,11 @@ export const TodayPage: React.FC = () => {
                       </div>
                       <span className="flex items-center gap-2 shrink-0">
                         <span className="text-muted-foreground">{projectBlockLabel(p)}</span>
-                        {/* BLOCO 2C — atalho que SOMENTE navega: /projetos?id=<ID>.
-                          Não pausa/ativa projeto nem altera estado. */}
+                        {/* BLOCO 2C — atalho que SOMENTE navega: /resultados?id=<ID>
+                          (equivalente ao /projetos?id=). Não pausa/ativa projeto
+                          nem altera estado. */}
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
-                          <Link to={`/projetos?id=${encodeURIComponent(p.id)}`}>
+                          <Link to={`/resultados?id=${encodeURIComponent(p.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
                             Abrir resultado
                           </Link>

@@ -163,7 +163,7 @@ export const ProjectsPage: React.FC = () => {
   // o retorno. Sem sistema novo de navegação, sem persistência de dados.
   const openSheet = useCallback(
     (id: string) => {
-      navigate(`/projetos?id=${encodeURIComponent(id)}`, {
+      navigate(`/resultados?id=${encodeURIComponent(id)}`, {
         state: { from: 'catalog' },
       })
     },
@@ -256,7 +256,7 @@ export const ProjectsPage: React.FC = () => {
               Verifique o endereço ou volte ao catálogo para escolher outra ficha.
             </p>
             <Button asChild variant="outline" size="sm" className="mt-3 gap-1.5">
-              <Link to="/projetos">
+              <Link to="/resultados">
                 <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
                 Voltar ao catálogo de resultados
               </Link>
@@ -426,7 +426,7 @@ export const ProjectsPage: React.FC = () => {
           {filteredProjects.map((project) => (
             <Link
               key={project.id}
-              to={`/projetos?id=${encodeURIComponent(project.id)}`}
+              to={`/resultados?id=${encodeURIComponent(project.id)}`}
               state={{ from: 'catalog' }}
               className="group p-5 rounded-2xl border border-border bg-card hover:bg-accent/50 hover:border-ring/40 transition-all cursor-pointer flex flex-col justify-between space-y-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >

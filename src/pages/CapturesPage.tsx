@@ -445,8 +445,8 @@ export const CapturesPage: React.FC = () => {
     const target = isProject ? targetMaps.projects.get(targetId) : targetMaps.actions.get(targetId)
     const label = target ? formatEntityTitle(kind, target.sequence_number, target.title) : null
     const to = isProject
-      ? `/projetos?id=${encodeURIComponent(targetId)}`
-      : `/acoes?id=${encodeURIComponent(targetId)}`
+      ? `/resultados?id=${encodeURIComponent(targetId)}`
+      : `/avancos?id=${encodeURIComponent(targetId)}`
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {label && (
@@ -674,13 +674,13 @@ export const CapturesPage: React.FC = () => {
           </div>
           {conversionFeedback.targetType === 'project' ? (
             <Button asChild size="sm" className="gap-1.5 shrink-0">
-              <Link to={`/projetos?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
+              <Link to={`/resultados?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
                 Abrir resultado
               </Link>
             </Button>
           ) : (
             <Button asChild size="sm" className="gap-1.5 shrink-0">
-              <Link to={`/acoes?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
+              <Link to={`/avancos?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
                 Abrir avanço
               </Link>
             </Button>

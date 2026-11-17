@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useId } from 'react'
 import { ActionItem, EntityContext, ActionStatus, Project } from '@/types/execution'
 import { actionService, CreateActionInput } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
@@ -7,6 +7,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,27 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   onSaved,
 }) => {
   const { toast } = useToast()
+  // BLOCO 4B — IDs estáveis e únicos por instância (useId no topo, antes de
+  // qualquer retorno condicional): rótulos apontam para o controle efetivo
+  // mesmo com dois modais de ação montados ao mesmo tempo.
+  const uid = useId()
+  const ids = React.useMemo(
+    () => ({
+      title: `${uid}-action-title`,
+      description: `${uid}-action-description`,
+      descriptionHelp: `${uid}-action-description-help`,
+      context: `${uid}-action-context`,
+      status: `${uid}-action-status`,
+      waitingFor: `${uid}-action-waiting-for`,
+      project: `${uid}-action-project`,
+      deadline: `${uid}-action-deadline`,
+      todaySelected: `${uid}-action-today-selected`,
+      todayHelp: `${uid}-action-today-help`,
+      nextStep: `${uid}-action-next-step`,
+      nextHelp: `${uid}-action-next-help`,
+    }),
+    [uid],
+  )
   const [title, setTitle] = useState('')
   const [context, setContext] = useState<EntityContext>(defaultContext)
   const [projectId, setProjectId] = useState<string>(defaultProjectId || '')
@@ -279,15 +301,20 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           <DialogTitle className="text-xl font-semibold text-foreground">
             {actionToEdit ? 'Editar ação' : 'Nova ação'}
           </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            {actionToEdit
+              ? 'Ajuste os dados desta ação. As alterações são gravadas somente ao confirmar.'
+              : 'Preencha os dados da ação. Ela é gravada somente ao confirmar.'}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
-            <Label htmlFor="actionTitle" className="text-sm font-medium text-foreground">
+            <Label htmlFor={ids.title} className="text-sm font-medium text-foreground">
               Título da ação
             </Label>
             <Input
-              id="actionTitle"
+              id={ids.title}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Ligar para fornecedor X e alinhar especificação"
@@ -297,20 +324,20 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="actionDescription" className="text-sm font-medium text-foreground">
+            <Label htmlFor={ids.description} className="text-sm font-medium text-foreground">
               Descrição e notas (opcional)
             </Label>
             <Textarea
-              id="actionDescription"
+              id={ids.description}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Detalhes, orientações e informações úteis para executar esta ação."
-              aria-describedby="actionDescriptionHelp"
+              aria-describedby={ids.descriptionHelp}
               maxLength={20000}
               rows={4}
               className="min-h-24 border-input bg-card text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
             />
-            <p id="actionDescriptionHelp" className="text-sm text-muted-foreground">
+            <p id={ids.descriptionHelp} className="text-sm text-muted-foreground">
               O que você precisa saber antes de agir?
               {description.length > 18000 && (
                 <span className="ml-1 font-medium text-ginga-warning">
@@ -322,12 +349,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="actionContext" className="text-sm font-medium text-foreground">
+              <Label htmlFor={ids.context} className="text-sm font-medium text-foreground">
                 Contexto
               </Label>
               <Select value={context} onValueChange={(val) => setContext(val as EntityContext)}>
                 <SelectTrigger
-                  id="actionContext"
+                  id={ids.context}
                   className="border-input bg-card text-base text-foreground sm:text-sm"
                 >
                   <SelectValue />
@@ -340,12 +367,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="actionStatus" className="text-sm font-medium text-foreground">
+              <Label htmlFor={ids.status} className="text-sm font-medium text-foreground">
                 Status
               </Label>
               <Select value={status} onValueChange={(val) => setStatus(val as ActionStatus)}>
                 <SelectTrigger
-                  id="actionStatus"
+                  id={ids.status}
                   className="border-input bg-card text-base text-foreground sm:text-sm"
                 >
                   <SelectValue />
@@ -364,11 +391,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           {(status === 'aguardando' || status === 'bloqueada') && (
             <div className="space-y-1.5">
-              <Label htmlFor="actionWaitingFor" className="text-sm font-medium text-foreground">
+              <Label htmlFor={ids.waitingFor} className="text-sm font-medium text-foreground">
                 Motivo / bloqueio
               </Label>
               <Input
-                id="actionWaitingFor"
+                id={ids.waitingFor}
                 value={waitingFor}
                 onChange={(e) => setWaitingFor(e.target.value)}
                 placeholder="Pelo que está aguardando?"
@@ -379,12 +406,12 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="actionProject" className="text-sm font-medium text-foreground">
+              <Label htmlFor={ids.project} className="text-sm font-medium text-foreground">
                 Projeto vinculado (opcional)
               </Label>
               <Select value={projectId} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
                 <SelectTrigger
-                  id="actionProject"
+                  id={ids.project}
                   className="truncate border-input bg-card text-base text-foreground sm:text-sm"
                 >
                   <SelectValue placeholder="Ação solta (sem projeto)" />
@@ -413,11 +440,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="actionDeadline" className="text-sm font-medium text-foreground">
+              <Label htmlFor={ids.deadline} className="text-sm font-medium text-foreground">
                 Prazo factual (opcional)
               </Label>
               <Input
-                id="actionDeadline"
+                id={ids.deadline}
                 type="date"
                 value={deadline}
                 onChange={(e) => setDeadline(e.target.value)}
@@ -447,17 +474,18 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label
-                  htmlFor="actionTodaySelected"
+                  htmlFor={ids.todaySelected}
                   className="block text-base font-medium text-foreground"
                 >
                   Selecionar para Hoje
                 </Label>
-                <span className="text-sm text-muted-foreground">
+                <span id={ids.todayHelp} className="text-sm text-muted-foreground">
                   Coloca esta ação entre as poucas de Hoje
                 </span>
               </div>
               <Switch
-                id="actionTodaySelected"
+                id={ids.todaySelected}
+                aria-describedby={ids.todayHelp}
                 checked={isTodaySelected || isNextStep}
                 disabled={isNextStep}
                 onCheckedChange={(checked) => {
@@ -473,17 +501,18 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <Label
-                  htmlFor="actionNextStep"
+                  htmlFor={ids.nextStep}
                   className="block text-base font-medium text-foreground"
                 >
                   Próximo avanço único
                 </Label>
-                <span className="text-sm text-muted-foreground">
+                <span id={ids.nextHelp} className="text-sm text-muted-foreground">
                   Destaque central de Hoje (escolha explícita por você)
                 </span>
               </div>
               <Switch
-                id="actionNextStep"
+                id={ids.nextStep}
+                aria-describedby={ids.nextHelp}
                 checked={isNextStep}
                 onCheckedChange={(checked) => {
                   if (checked && !validateFocusChoice()) return

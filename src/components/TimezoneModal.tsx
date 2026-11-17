@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useId } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   Dialog,
@@ -33,6 +33,16 @@ const COMMON_TIMEZONES = [
 
 export const TimezoneModal: React.FC = () => {
   const { needsTimezoneSetup, updateTimezone } = useAuth()
+  // BLOCO 4B — IDs estáveis e únicos por instância (useId no topo, antes do
+  // retorno condicional do needsTimezoneSetup): rótulo ligado ao SelectTrigger.
+  const uid = useId()
+  const ids = React.useMemo(
+    () => ({
+      timezone: `${uid}-timezone-select`,
+      detectedHelp: `${uid}-timezone-detected-help`,
+    }),
+    [uid],
+  )
   const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
   const [selectedTz, setSelectedTz] = useState(detectedTz)
   const [isSaving, setIsSaving] = useState(false)
@@ -66,12 +76,19 @@ export const TimezoneModal: React.FC = () => {
 
         <div className="space-y-4 py-3">
           <div className="space-y-2">
-            <Label className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Label
+              htmlFor={ids.timezone}
+              className="flex items-center gap-2 text-sm font-medium text-foreground"
+            >
               <Clock className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               Fuso Horário Local
             </Label>
             <Select value={selectedTz} onValueChange={setSelectedTz}>
-              <SelectTrigger className="min-h-11 border-input bg-card text-base text-foreground sm:text-sm">
+              <SelectTrigger
+                id={ids.timezone}
+                aria-describedby={ids.detectedHelp}
+                className="min-h-11 border-input bg-card text-base text-foreground sm:text-sm"
+              >
                 <SelectValue placeholder="Selecione o fuso" />
               </SelectTrigger>
               <SelectContent className="border-border bg-popover text-popover-foreground">
@@ -86,7 +103,7 @@ export const TimezoneModal: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          <p className="text-sm text-muted-foreground">
+          <p id={ids.detectedHelp} className="text-sm text-muted-foreground">
             Detectado automaticamente no navegador:{' '}
             <span className="font-medium text-foreground tabular-nums">{detectedTz}</span>
           </p>

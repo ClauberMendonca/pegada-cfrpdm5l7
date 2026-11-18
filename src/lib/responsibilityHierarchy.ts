@@ -12,6 +12,11 @@
  * 3. actions dos Resultados encontrados (por IDs únicos, em chunks), só se
  *    houver Resultados.
  * Nenhuma busca por tempo/logs; contagens só de dados confirmados e únicos.
+ *
+ * Filtro de subordinados: a API de coleções do PocketBase não aceita `IN` de
+ * SQL — cada ID vira uma igualdade nativa, unidas por `||` e agrupadas em
+ * parênteses após o &&, para que o recorte de dono nunca se perca na
+ * precedência (nunca `(dono && id1) || id2`).
  */
 import pb from '@/lib/pocketbase/client'
 import { ActionItem, Project } from '@/types/execution'
@@ -27,7 +32,7 @@ export interface ResponsibilityHierarchy {
   errors: string[]
 }
 
-const CHUNK_SIZE = 40 // limites seguros para o filtro IN do PocketBase
+const CHUNK_SIZE = 40 // limite seguro para a disjunção de igualdades por chunk
 
 function chunkArray(values: string[], size: number): string[][] {
   const chunks: string[][] = []
@@ -83,10 +88,10 @@ export async function loadResponsibilityHierarchy(
   const actionsByProject: Record<string, ActionItem[]> = {}
   const uniqueProjectIds = Array.from(new Set(projects.map((p) => p.id)))
   for (const chunk of chunkArray(uniqueProjectIds, CHUNK_SIZE)) {
-    const inList = chunk.map((id) => quoteFilterValue(id)).join(', ')
+    const inList = chunk.map((id) => `project_id = ${quoteFilterValue(id)}`).join(' || ')
     try {
       const page = await pb.collection('actions').getFullList<ActionItem>({
-        filter: `${ownerFilter} && project_id IN (${inList})`,
+        filter: `${ownerFilter} && (${inList})`,
         sort: '-created',
       })
       for (const action of page) {

@@ -10,6 +10,7 @@ import { TodayPage } from '@/pages/TodayPage'
 import { CapturesPage } from '@/pages/CapturesPage'
 import { ActionsPage } from '@/pages/ActionsPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
+import { ResponsibilitiesPage } from '@/pages/ResponsibilitiesPage'
 import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
 import { LoginPage } from '@/pages/LoginPage'
@@ -46,6 +47,9 @@ const ProtectedRoutes = () => {
             <Route path="/resultados" element={<ProjectsPage />} />
             <Route path="/acoes" element={<ActionsPage />} />
             <Route path="/projetos" element={<ProjectsPage />} />
+            {/* ENTREGA 3B — catálogo e ficha de Responsabilidades (mesmos
+                providers/Layout; ficha retomável via ?id=). */}
+            <Route path="/responsabilidades" element={<ResponsibilitiesPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
             {/* ENTREGA 2A — Configurações do perfil (propósito de vida). */}
             <Route path="/configuracoes" element={<SettingsPage />} />

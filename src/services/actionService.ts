@@ -7,6 +7,13 @@ export interface CreateActionInput {
   /** DESCRIÇÃO OPCIONAL: texto livre de notas/orientações (não é waiting_for). */
   description?: string
   project_id?: string
+  /**
+   * FATIA 3C1 — SOMENTE vínculo DIRETO do Avanço SOLTO (sem project_id), mesmo
+   * contrato de ActionItem.responsibility_id. Avanço subordinado envia ''
+   * explícito no MESMO patch que define/limpa project_id (nunca herança
+   * copiada). Outros métodos (status/foco) continuam OMITINDO este campo.
+   */
+  responsibility_id?: string
   status?: ActionStatus
   deadline?: string
   is_next_step?: boolean

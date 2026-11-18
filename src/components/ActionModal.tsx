@@ -24,6 +24,15 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
+import {
+  ResponsibilitySelect,
+  ResponsibilityOptionsState,
+  useResponsibilityOptions,
+} from '@/components/ResponsibilitySelect'
+import {
+  useResponsibilityReference,
+  ResponsibilityRefState,
+} from '@/hooks/use-responsibility-reference'
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { formatEntityTitle } from '@/lib/entityNumber'
@@ -64,6 +73,8 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       todayHelp: `${uid}-action-today-help`,
       nextStep: `${uid}-action-next-step`,
       nextHelp: `${uid}-action-next-help`,
+      responsibility: `${uid}-action-responsibility`,
+      inheritedResponsibility: `${uid}-action-inherited-responsibility`,
     }),
     [uid],
   )
@@ -83,6 +94,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [isSaving, setIsSaving] = useState(false)
   // B1 — aviso inline quando a nova seleção de foco é inelegível (não grava flags novas).
   const [focusNotice, setFocusNotice] = useState<string | null>(null)
+  // FATIA 3C1 — vínculo DIRETO do avanço SOLTO: ID nativo; '' = Nenhuma/remoção.
+  // Um único estado em memória: na edição, a escolha anterior do usuário não é
+  // reaproveitada entre aberturas; o valor inicial do modo é fixado no efeito
+  // de abertura abaixo. Na criação inicia '' (Nenhuma).
+  const [directResponsibilityId, setDirectResponsibilityId] = useState('')
+  // FATIA 3C1 — modo PERSISTIDO da abertura ('none' = originalmente subordinado,
+  // sem memória própria de vínculo direto). Aviso/comparação nunca usam escolha
+  // provisória: só pai e vínculo gravados quando o modal abriu.
+  const [persistedProjectId, setPersistedProjectId] = useState('')
+  const [persistedResponsibilityId, setPersistedResponsibilityId] = useState('')
+  const responsibilityOptions: ResponsibilityOptionsState = useResponsibilityOptions(isOpen)
 
   useEffect(() => {
     if (isOpen) {
@@ -110,7 +132,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsTodaySelected(Boolean(actionToEdit.is_today_selected))
         setWaitingFor(actionToEdit.waiting_for || '')
         setDescription(typeof actionToEdit.description === 'string' ? actionToEdit.description : '')
+        // FATIA 3C1 — modo PERSISTIDO na abertura: vínculo DIRETO persistido
+        // (avanço solto) inicializa a escolha; subordinado NÃO copia herança
+        // (escolha direta começa Nenhuma). Subordinado: modo herdado em leitura.
+        setPersistedProjectId(actionToEdit.project_id || '')
+        setPersistedResponsibilityId(actionToEdit.responsibility_id || '')
+        setDirectResponsibilityId(actionToEdit.responsibility_id || '')
       } else {
+        // FATIA 3C1 — criação: solto com escolha direta em Nenhuma.
+        setPersistedProjectId('')
+        setPersistedResponsibilityId('')
+        setDirectResponsibilityId('')
         setTitle('')
         setContext(defaultContext)
         setProjectId(defaultProjectId || '')
@@ -159,6 +191,8 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       // leitura mantém o formulário/texto e NÃO grava. Guarda de interface;
       // sem garantia transacional de concorrência.
       if (isCreate && projectId) {
+        // FATIA 3C1 — guarda de status na criação (encerrado/pausado) já cobre
+        // o mesmo caminho da revalidação de contexto abaixo.
         try {
           const freshProject = await projectService.getById(projectId)
           setProjects((prev) =>
@@ -171,6 +205,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               variant: 'destructive',
               title: 'Avanço não criado',
               description: `O resultado “${freshProject.title}” está ${freshProject.status === 'concluido' ? 'concluído' : 'arquivado'}. Reabra o resultado pelo comando existente antes de planejar novos avanços vinculados.`,
+            })
+            return
+          }
+          // FATIA 3C1 — coerência de CONTEXTO entre pai e filho na CRIAÇÃO.
+          if (freshProject.context !== context) {
+            toast({
+              variant: 'destructive',
+              title: 'Avanço não criado',
+              description: `O resultado escolhido é de contexto ${
+                freshProject.context === 'trabalho' ? 'Trabalho' : 'Vida'
+              }, mas o avanço é de ${context === 'trabalho' ? 'Trabalho' : 'Vida'}. Ajuste antes de salvar.`,
             })
             return
           }
@@ -223,16 +268,110 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setFocusNotice(null)
       }
 
+      // FATIA 3C1 — EDITAR: não reenviar flags de Hoje/avanço único INALTERADOS
+      // só por mudar grupo/pai (omitir em vez de enviar false — enviar false
+      // dispararia clearAllNextSteps no serviço). Escolhas explícitas seguem
+      // pelo fluxo/eligibilidade existentes, intocados neste bloco.
+      const omitUnchangedFocusFlags = Boolean(actionToEdit)
+
+      // FATIA 3C1 — transição na EDIÇÃO (novo pai diferente do persistido):
+      // revalidar o pai pela leitura getById existente antes de gravar. Falha
+      // de leitura ou pai/contexto incoerente mantém rascunho e NÃO grava.
+      if (actionToEdit && projectId && projectId !== persistedProjectId) {
+        try {
+          const freshProject = await projectService.getById(projectId)
+          setProjects((prev) =>
+            prev.some((p) => p.id === freshProject.id)
+              ? prev.map((p) => (p.id === freshProject.id ? freshProject : p))
+              : [...prev, freshProject],
+          )
+          if (freshProject.context !== context) {
+            toast({
+              variant: 'destructive',
+              title: 'Avanço não salvo',
+              description: `O resultado escolhido é de contexto ${
+                freshProject.context === 'trabalho' ? 'Trabalho' : 'Vida'
+              }, mas o avanço é de ${context === 'trabalho' ? 'Trabalho' : 'Vida'}. Ajuste antes de salvar.`,
+            })
+            return
+          }
+          if (freshProject.status === 'concluido' || freshProject.status === 'arquivado') {
+            toast({
+              variant: 'destructive',
+              title: 'Avanço não salvo',
+              description: `O resultado “${freshProject.title}” está ${
+                freshProject.status === 'concluido' ? 'concluído' : 'arquivado'
+              } e não recebe novo vínculo. Escolha outro resultado ou cancele.`,
+            })
+            return
+          }
+        } catch (readErr: unknown) {
+          const readMsg =
+            readErr instanceof Error ? readErr.message : 'Falha ao revalidar o resultado vinculado.'
+          toast({ variant: 'destructive', title: 'Avanço não salvo', description: readMsg })
+          return
+        }
+      }
+
+      // FATIA 3C1 — checagem de coerência do vínculo DIRETO NOVO antes de
+      // persistir (contexto incompatível ou opção não ativa bloqueiam o envio;
+      // falha não apaga escolhas). Vínculo ORIGINAL mantido como está (mesmo ID
+      // persistido, inclusive arquivado) NÃO é rechecado — editar outros campos
+      // permanece possível; remoção explícita segue possível. Vínculo escolhido
+      // que não está na lista (lista em erro) não é revalidado no cliente —
+      // backend 3A é autoridade final. Sem compensação automática.
+      if (directResponsibilityId && knownDirect) {
+        if (knownDirect.context !== context) {
+          toast({
+            variant: 'destructive',
+            title: 'Avanço não salvo',
+            description: `A responsabilidade escolhida é de contexto ${
+              knownDirect.context === 'trabalho' ? 'Trabalho' : 'Vida'
+            }, mas o avanço é de ${context === 'trabalho' ? 'Trabalho' : 'Vida'}. Ajuste o contexto ou escolha “Nenhuma” antes de salvar.`,
+          })
+          return
+        }
+        if (
+          knownDirect.status !== 'ativa' &&
+          directResponsibilityId !== persistedResponsibilityId
+        ) {
+          toast({
+            variant: 'destructive',
+            title: 'Avanço não salvo',
+            description:
+              'A responsabilidade escolhida não está ativa. Escolha “Nenhuma” ou outra ativa antes de salvar um vínculo novo.',
+          })
+          return
+        }
+      }
+
       const payload: CreateActionInput = {
         title: title.trim(),
         context,
-        project_id: projectId ? projectId : undefined,
+        // FATIA 3C1 — UM PATCH: project_id e responsibility_id juntos.
+        // - Solto: project_id=undefined e vínculo direto escolhido (ID ou '' de
+        //   remoção). '' explícito remove; nunca sentinel 'none'.
+        // - Com Resultado: herança é sempre do pai e JAMAIS copiada — envia ''
+        //   explícito; project_id='' explícito RETIRA o pai na edição (nunca
+        //   undefined, que omitiria a relação).
+        project_id: projectId ? projectId : actionToEdit && persistedProjectId ? '' : undefined,
+        responsibility_id: projectId
+          ? '' // subordinado: herança em leitura, vínculo direto vazio
+          : actionToEdit && directResponsibilityId === persistedResponsibilityId
+            ? undefined // edição solto sem mudança de vínculo: OMITIR (mantém)
+            : directResponsibilityId, // ID novo ou '' explícito de remoção
         status,
         // FATIA P1C — dia-calendário puro: aceita só 'YYYY-MM-DD'; vazio/parcial
         // NÃO cria prazo (sem parse de fuso que desloque o dia).
         deadline: calendarDayOrNull(deadline),
-        is_next_step: effNext,
-        is_today_selected: effToday,
+        // FATIA 3C1 — omitir flags INALTERADOS na edição (não reenviar false que
+        // dispararia clearAllNextSteps); na criação mantém defaults existentes.
+        ...(omitUnchangedFocusFlags
+          ? {
+              ...(effNext !== prevNext ? { is_next_step: effNext } : {}),
+              ...(effToday !== prevToday ? { is_today_selected: effToday } : {}),
+            }
+          : { is_next_step: effNext, is_today_selected: effToday }),
         waiting_for: waitingFor.trim() || undefined,
         // DESCRIÇÃO OPCIONAL: preserva quebras de linha e acentos; vazio segue
         // explícito (string ''), nunca undefined — limpar o campo apaga no banco.
@@ -279,6 +418,35 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   // planejamento condicionado (nunca exibido como projeto ativo).
   const contextualPausedNotice =
     isCreate && selectedPaused && Boolean(defaultProjectId) && projectId === defaultProjectId
+
+  // FATIA 3C1 — referência do vínculo DIRETO escolhido (rascunho em memória).
+  const knownDirect = directResponsibilityId
+    ? (responsibilityOptions.list.find((r) => r.id === directResponsibilityId) ?? null)
+    : null
+
+  // FATIA 3C1 — transição solto -> Resultado: aviso só quando o avanço era
+  // ORIGINALMENTE solto com vínculo direto PERSISTIDO na abertura (não escolha
+  // provisória em memória — experimentar pai e voltar não dispara aviso).
+  // Nunca fabrica "Nenhuma": sem nome disponível, aviso é genérico honesto.
+  const losingDirectLink = Boolean(projectId) && Boolean(persistedResponsibilityId)
+
+  // FATIA 3C1 — nome/referência original persistido se disponível (novo uso de
+  // dados JÁ lidos — sem nova leitura e sem nova fonte).
+  const persistedDirectName = persistedResponsibilityId
+    ? (responsibilityOptions.list.find((r) => r.id === persistedResponsibilityId)?.title ?? null)
+    : null
+
+  // FATIA 3C1 — HERANÇA EM LEITURA: hook no topo, incondicional (antes de
+  // qualquer retorno condicional), ÚNICO no modal — sem duplicar consulta/
+  // cache/provider. Usa o Resultado realmente selecionado (lista/getById
+  // existentes) e o responsibility_id dele. Pai ainda não carregado (null) =
+  // 'unknown' — NUNCA 'Nenhuma'; '' confirma ausência ('none'); erro
+  // preserva o estado 'error' (não vira Nenhuma). A herança JAMAIS é copiada
+  // para actions.responsibility_id (segue '' no envio do modo subordinado).
+  const currentParent = projectId ? (projects.find((p) => p.id === projectId) ?? null) : null
+  const inheritedRef: ResponsibilityRefState = useResponsibilityReference(
+    currentParent ? (currentParent.responsibility_id ?? null) : null,
+  )
 
   // BLOCO 5.2 — no vínculo contextual pelo próprio detalhe pausado, o planejamento
   // continua disponível com aviso identificado (não disfarça o projeto de ativo).
@@ -489,6 +657,41 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </p>
           )}
 
+          {/* FATIA 3C1 — solto: escolha DIRETA de Responsabilidade (seletor).
+             Subordinado: herança em LEITURA do Resultado corrente (nunca
+             copiada para actions.responsibility_id, que segue ''). */}
+          {!projectId && (
+            <ResponsibilitySelect
+              id={ids.responsibility}
+              value={directResponsibilityId}
+              onChange={setDirectResponsibilityId}
+              context={context}
+              options={responsibilityOptions}
+              disabled={isSaving}
+            />
+          )}
+          {projectId && (
+            <p id={ids.inheritedResponsibility} className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                Responsabilidade herdada do resultado:
+              </span>{' '}
+              {inheritedRef.status === 'none' ? (
+                <span className="italic">Nenhuma</span>
+              ) : inheritedRef.status === 'ready' ? (
+                <>
+                  {inheritedRef.data.title}
+                  {inheritedRef.data.status === 'arquivada' && ' (arquivada — vínculo atual)'}
+                </>
+              ) : inheritedRef.status === 'error' ? (
+                <span className="font-medium text-ginga-warning">
+                  Responsabilidade atual indisponível — vínculo preservado
+                </span>
+              ) : (
+                <span className="italic">carregando…</span>
+              )}
+            </p>
+          )}
+
           <div className="space-y-3 border-t border-border pt-4">
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -541,6 +744,19 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 }}
               />
             </div>
+
+            {/* FATIA 3C1 — transição solto -> Resultado com vínculo DIRETO original: aviso
+               antes de salvar; Salvar é a confirmação, cancelar nada grava (nunca dois
+               saves, nunca remoção silenciosa). */}
+            {losingDirectLink && (
+              <p role="alert" className="text-xs font-medium text-ginga-warning">
+                Ao salvar, o vínculo direto com{' '}
+                {persistedDirectName
+                  ? `“${persistedDirectName}”`
+                  : 'a responsabilidade atual (indisponível)'}{' '}
+                será removido. Este avanço seguirá a Responsabilidade do resultado escolhido.
+              </p>
+            )}
 
             {focusNotice && (
               <p role="alert" className="text-xs font-medium text-ginga-warning">

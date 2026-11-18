@@ -29,8 +29,10 @@ interface PlannedExecutionFieldsProps {
   keepsSavedTimezone: boolean
   /** Fuso SALVO que este navegador não reconhece: preservar literal e avisar. */
   savedTimezoneUnrecognized: boolean
-  /** true = a tupla ainda é exatamente a original da abertura (campo intacto). */
-  pristine: boolean
+  /** true = a tupla ainda é exatamente a original da abertura (campo intacto).
+     Opcional: a conversão 5C2 não tem 'original da abertura' e envia false;
+     o ActionModal 89 continua a enviar o boolean obrigatório. */
+  pristine?: boolean
   error: string | null
   /** true = desabilita a hora (data ausente/inválida — nunca hora isolada). */
   disableTime: boolean

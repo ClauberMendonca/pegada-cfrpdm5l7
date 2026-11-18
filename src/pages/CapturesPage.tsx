@@ -60,6 +60,14 @@ import {
   TargetMaps,
 } from '@/lib/captureTargets'
 import { currentOwnerSnapshot, isSameOwner } from '@/lib/ownerScope'
+import { PlannedExecutionFields } from '@/components/PlannedExecutionFields'
+import {
+  EMPTY_PLANNED,
+  isValidPlannedDate,
+  isValidPlannedTime,
+  plannedTimezoneOrFallback,
+  type PlannedExecution,
+} from '@/lib/plannedExecution'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -193,6 +201,19 @@ export const CapturesPage: React.FC = () => {
   const actionStrategies = useProjectStrategies(
     conversionType === 'action' && actionProjectId ? actionProjectId : '',
   )
+
+  // FATIA 5C2 — Planejamento (opcional) do NOVO Avanço no diálogo Converter em
+  // Avanço: MESMA tupla/rascunho do formulário 89 (PlannedExecutionFields +
+  // validação literal), montada APÓS vínculos e ANTES da confirmação. Intenção
+  // LOCAL ao diálogo: toda abertura NOVA (manual ou proposta local) inicia
+  // recolhida e VAZIA — nunca inferida de captura/raw_text/created, prazo,
+  // Resultado, Responsabilidade, Estratégia, filtro ou última conversão; a
+  // captura pendente NUNCA é lida como Avanço já salvo e duplicata não é
+  // consultada. Sem localStorage (o rascunho da entrada rápida é outra coisa).
+  const [actionPlanned, setActionPlanned] = useState<PlannedExecution>(EMPTY_PLANNED)
+  const [actionPlannedUtcFallback, setActionPlannedUtcFallback] = useState(false)
+  const [actionPlannedPendingInvalid, setActionPlannedPendingInvalid] = useState(false)
+  const [actionPlannedError, setActionPlannedError] = useState<string | null>(null)
 
   // FATIA 3C2B — Responsabilidade nos dois diálogos de conversão.
   // IDs estáveis por instância (useId no topo, antes de qualquer retorno).
@@ -442,6 +463,12 @@ export const CapturesPage: React.FC = () => {
     setActionStrategyChoice(null)
     setActionStrategyNotice(null)
     setActionStrategyModalOpen(false)
+    // FATIA 5C2 — abertura NOVA inicia recolhida e sem plano (dia/hora/fuso
+    // vazios); sem herdar valores da abertura anterior.
+    setActionPlanned(EMPTY_PLANNED)
+    setActionPlannedUtcFallback(false)
+    setActionPlannedPendingInvalid(false)
+    setActionPlannedError(null)
     setConversionType('action')
   }
 
@@ -479,6 +506,11 @@ export const CapturesPage: React.FC = () => {
       setActionStrategyChoice(null)
       setActionStrategyNotice(null)
       setActionStrategyModalOpen(false)
+      // FATIA 5C2 — proposta LOCAL não inventa planejamento: recolhida e vazia.
+      setActionPlanned(EMPTY_PLANNED)
+      setActionPlannedUtcFallback(false)
+      setActionPlannedPendingInvalid(false)
+      setActionPlannedError(null)
       setConversionType('action')
     }
   }
@@ -508,6 +540,55 @@ export const CapturesPage: React.FC = () => {
     if (!selectedCapture) return
     if (target === 'project' && !projectTitle.trim()) return
     if (target === 'action' && !actionTitle.trim()) return
+    // FATIA 5C2 — validação 89 do planejamento (dia real, hora HH:mm real,
+    // fuso explícito; parcial/badInput NÃO vira vazio válido) ANTES de chamar
+    // convert: bloqueia o serviço com o erro associado ao campo, mantendo o
+    // texto e as escolhas no formulário aberto. Só o ramo 'action' valida e
+    // envia; Resultado NUNCA lê este rascunho nem recebe os 3 campos.
+    let plannedPayload: {
+      planned_date?: string
+      planned_time?: string
+      planned_timezone?: string
+    } = {}
+    if (target === 'action') {
+      if (actionPlannedPendingInvalid) {
+        setActionPlannedError(
+          'Há data ou hora incompleta no planejamento. Conclua o valor ou limpe o campo antes de converter.',
+        )
+        return
+      }
+      if (actionPlanned.date === '') {
+        if (actionPlanned.time !== '' || actionPlanned.timezone !== '') {
+          setActionPlannedError('Planejamento incompleto: informe a data ou remova o planejamento.')
+          return
+        }
+      } else if (!isValidPlannedDate(actionPlanned.date)) {
+        setActionPlannedError(
+          'Informe uma data planejada real (AAAA-MM-DD, incluindo anos bissextos).',
+        )
+        return
+      } else if (actionPlanned.timezone === '') {
+        setActionPlannedError(
+          'O planejamento precisa do fuso. Remova o planejamento para converter sem ele.',
+        )
+        return
+      } else if (!isValidPlannedTime(actionPlanned.time)) {
+        setActionPlannedError('Informe uma hora planejada real (HH:mm) ou limpe o campo.')
+        return
+      } else {
+        setActionPlannedError(null)
+      }
+      // Payload único do plano: os 3 campos EXATOS escolhidos (dia/hora/fuso
+      // literais; hora '' = dia inteiro) no MESMO data do convert — sem fuso
+      // informativo sozinho, sem planned_at/offset/DST e sem segunda gravação.
+      if (actionPlanned.date !== '') {
+        plannedPayload = {
+          planned_date: actionPlanned.date,
+          planned_time: actionPlanned.time,
+          planned_timezone: actionPlanned.timezone,
+        }
+      }
+    }
     // Validação do vínculo novo ANTES de chamar convert (nada é gravado antes).
     const linkProblem =
       target === 'project'
@@ -616,6 +697,10 @@ export const CapturesPage: React.FC = () => {
               // do backend traz o vínculo PERSISTIDO; duplicate:true não afirma
               // a aplicação da escolha desta tentativa.
               strategy_id: actionProjectId ? actionStrategyId : '',
+              // FATIA 5C2 — planejamento no MESMO data do envio único 91:
+              // sem plano (inclusive remoção explícita) = omitir os 3 campos
+              // (default vazio nativo); com plano = os 3 valores locais exatos.
+              ...plannedPayload,
             },
       )
 
@@ -678,6 +763,54 @@ export const CapturesPage: React.FC = () => {
       convertingRef.current = false
       setIsConverting(false)
     }
+  }
+
+  // FATIA 5C2 — fuso que um plano novo capturaria: perfil válido ou UTC
+  // explícito (mesma função 89; sem resolvedOptions, sem offset do dispositivo,
+  // sem nova leitura do perfil). Só memória; UTC verdadeiro do perfil não é fallback.
+  const convertProfileTz = plannedTimezoneOrFallback(user?.timezone ?? '')
+
+  const handleActionPlannedDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.currentTarget
+    const raw = el.value
+    // Entrada parcial/inválida (badInput nativo): mantém a intenção e bloqueia
+    // a confirmação — nunca interpreta '' de badInput como remoção.
+    if (raw === '' && el.validity.badInput) {
+      setActionPlannedPendingInvalid(true)
+      return
+    }
+    setActionPlannedPendingInvalid(false)
+    setActionPlannedError(null)
+    if (raw === '') {
+      // Limpeza EXPLÍCITA da data: remove o GRUPO inteiro em memória.
+      setActionPlanned(EMPTY_PLANNED)
+      setActionPlannedUtcFallback(false)
+      return
+    }
+    if (actionPlanned.timezone === '') {
+      // Primeiro dia válido de um rascunho sem plano: captura o literal do
+      // perfil (ou UTC explícito com aviso) e o mantém até remoção/reinício.
+      const tz = convertProfileTz
+      setActionPlanned({ date: raw, time: '', timezone: tz.timezone })
+      setActionPlannedUtcFallback(tz.usedFallback)
+      return
+    }
+    // Plano em curso: mantém EXATAMENTE o fuso já escolhido; troca posterior
+    // do perfil/contexto/Resultado/etc. não reescreve nem reinterpreta.
+    setActionPlanned((prev) => ({ ...prev, date: raw }))
+  }
+
+  const handleActionPlannedTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.currentTarget
+    const raw = el.value
+    if (raw === '' && el.validity.badInput) {
+      setActionPlannedPendingInvalid(true)
+      return
+    }
+    setActionPlannedPendingInvalid(false)
+    setActionPlannedError(null)
+    // Limpar só a hora conserva dia/fuso; '' não ganha meia-noite nem horário atual.
+    setActionPlanned((prev) => ({ ...prev, time: raw }))
   }
 
   // BLOCO 2C — destino de captura já convertida: usa o ID gravado
@@ -1456,6 +1589,32 @@ export const CapturesPage: React.FC = () => {
                 {actionStrategyNotice}
               </p>
             )}
+
+            {/* FATIA 5C2 — Planejamento (opcional): o MESMO componente 89, com
+               a MESMA fórmula de rascunho/fuso/validação do ActionModal.
+               Recolher/expandir não muda valores; converter é o único commit;
+               cancelar não grava nem aciona IA. Key reinicia a apresentação a
+               cada abertura/dono/captura/tipo, sem tocar o rascunho em uso. */}
+            <PlannedExecutionFields
+              key={`${conversionType ?? 'closed'}-${selectedCapture?.id ?? 'none'}-${conversionFromCopilot ? 'copilot' : 'manual'}`}
+              draft={actionPlanned}
+              profileTimezone={convertProfileTz.timezone}
+              usingUtcFallback={actionPlannedUtcFallback}
+              keepsSavedTimezone={false}
+              savedTimezoneUnrecognized={false}
+              pristine={false}
+              error={actionPlannedError}
+              disableTime={actionPlanned.date !== '' && !isValidPlannedDate(actionPlanned.date)}
+              disabled={isConverting}
+              onChangeDate={handleActionPlannedDateChange}
+              onChangeTime={handleActionPlannedTimeChange}
+              onRemove={() => {
+                setActionPlanned(EMPTY_PLANNED)
+                setActionPlannedUtcFallback(false)
+                setActionPlannedPendingInvalid(false)
+                setActionPlannedError(null)
+              }}
+            />
           </div>
 
           <DialogFooter>

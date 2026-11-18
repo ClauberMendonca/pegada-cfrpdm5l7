@@ -27,12 +27,18 @@ interface PlannedExecutionFieldsProps {
   usingUtcFallback: boolean
   /** Edição: tupla persistida difere do fuso atual do perfil — nota discreta. */
   keepsSavedTimezone: boolean
+  /** Fuso SALVO que este navegador não reconhece: preservar literal e avisar. */
+  savedTimezoneUnrecognized: boolean
   /** true = a tupla ainda é exatamente a original da abertura (campo intacto). */
   pristine: boolean
   error: string | null
+  /** true = desabilita a hora (data ausente/inválida — nunca hora isolada). */
+  disableTime: boolean
   disabled: boolean
-  onChangeDate: (value: string) => void
-  onChangeTime: (value: string) => void
+  /** Handler recebe o EVENTO inteiro: validity.badInput (entrada parcial/inválida
+     do controle nativo) é lida no ActionModal e NÃO apaga o valor pendente. */
+  onChangeDate: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onChangeTime: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRemove: () => void
 }
 
@@ -41,20 +47,23 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
   profileTimezone,
   usingUtcFallback,
   keepsSavedTimezone,
-  pristine,
+  savedTimezoneUnrecognized,
   error,
+  disableTime,
   disabled,
   onChangeDate,
   onChangeTime,
   onRemove,
 }) => {
   const uid = useId()
-  const [open, setOpen] = useState(pristine && draft.date !== '')
+  // Edição com plano pode iniciar aberto; Novo sem plano inicia fechado.
+  const [open, setOpen] = useState(draft.date !== '')
   const dateId = `${uid}-planned-date`
   const timeId = `${uid}-planned-time`
   const helpId = `${uid}-planned-help`
   const timeHelpId = `${uid}-planned-time-help`
   const summaryId = `${uid}-planned-summary`
+  const dateErrorId = `${uid}-planned-date-error`
 
   const hasDraft = draft.date !== ''
   const summary = hasDraft
@@ -106,14 +115,17 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
                 type="date"
                 value={draft.date}
                 disabled={disabled}
-                onChange={(e) => onChangeDate(e.target.value)}
+                onChange={onChangeDate}
                 className={cn(
                   'min-h-11 border-input bg-card text-base text-foreground tabular-nums sm:text-sm',
                   dateInvalid && 'border-destructive',
                 )}
                 aria-invalid={dateInvalid}
-                aria-describedby={`${summaryId} ${timeHelpId}${error ? ` ${helpId}-error` : ''}`}
+                aria-describedby={`${summaryId} ${error ? dateErrorId : ''}`}
               />
+              {hasDraft && draft.time !== '' && (
+                <p className="break-words text-xs text-muted-foreground">{CLEAR_DATE_NOTICE}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -124,13 +136,13 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
                 id={timeId}
                 type="time"
                 value={draft.time}
-                disabled={disabled}
-                onChange={(e) => onChangeTime(e.target.value)}
+                disabled={disabled || disableTime}
+                onChange={onChangeTime}
                 className="min-h-11 border-input bg-card text-base text-foreground tabular-nums sm:text-sm"
-                aria-describedby={timeHelpId}
+                aria-describedby={`${timeHelpId}${error ? ` ${dateErrorId}` : ''}`}
               />
               <p id={timeHelpId} className="text-xs text-muted-foreground">
-                Deixe vazio para planejar apenas o dia.
+                Deixe a hora vazia para planejar apenas o dia.
               </p>
             </div>
           </div>
@@ -138,13 +150,19 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
           <p className="break-words text-xs text-muted-foreground">
             Fuso deste planejamento: {hasDraft ? draft.timezone : profileTimezone}
           </p>
-          {usingUtcFallback && !hasDraft && (
+          {usingUtcFallback && (
             <p role="alert" className="break-words text-xs font-medium text-ginga-warning">
               {UTC_FALLBACK_NOTICE}
             </p>
           )}
-          {hasDraft && keepsSavedTimezone && (
+          {hasDraft && keepsSavedTimezone && !savedTimezoneUnrecognized && (
             <p className="break-words text-xs text-muted-foreground">{SAVED_TZ_NOTE}</p>
+          )}
+          {savedTimezoneUnrecognized && (
+            <p role="alert" className="break-words text-xs font-medium text-ginga-warning">
+              O fuso salvo neste planejamento não é reconhecido por este navegador; o valor salvo
+              será mantido.
+            </p>
           )}
 
           {hasDraft && (
@@ -164,7 +182,7 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
 
       {error && (
         <p
-          id={`${helpId}-error`}
+          id={dateErrorId}
           role="alert"
           className="break-words text-xs font-medium text-destructive"
         >
@@ -174,5 +192,3 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
     </div>
   )
 }
-
-export { CLEAR_DATE_NOTICE }

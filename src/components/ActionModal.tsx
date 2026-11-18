@@ -46,6 +46,7 @@ import { PlannedExecutionFields } from '@/components/PlannedExecutionFields'
 import {
   EMPTY_PLANNED,
   isValidPlannedDate,
+  isValidPlannedTime,
   isValidTimezoneLiteral,
   plannedChanged,
   plannedOf,

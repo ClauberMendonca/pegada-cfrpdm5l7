@@ -1,8 +1,17 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useId } from 'react'
 import { Link } from 'react-router-dom'
-import { CaptureItem, CaptureStatus } from '@/types/execution'
+import { CaptureItem, CaptureStatus, Project } from '@/types/execution'
 import { captureService } from '@/services/captureService'
 import { projectService } from '@/services/projectService'
+import {
+  ResponsibilityOptionsState,
+  ResponsibilitySelect,
+  useResponsibilityOptions,
+} from '@/components/ResponsibilitySelect'
+import {
+  ResponsibilityRefState,
+  useResponsibilityReference,
+} from '@/hooks/use-responsibility-reference'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -115,6 +124,9 @@ export const CapturesPage: React.FC = () => {
   // Conversion Modals
   const [selectedCapture, setSelectedCapture] = useState<CaptureItem | null>(null)
   const [conversionType, setConversionType] = useState<'project' | 'action' | null>(null)
+  // FATIA 3C2B — trava SÍNCRONA dedicada à conversão (não reutiliza a trava da
+  // entrada rápida): uma confirmação chama captureService.convert UMA vez.
+  const convertingRef = useRef(false)
 
   // FATIA M1B1 — Painel do Copiloto (estado SEPARADO da conversão manual)
   const [copilotCapture, setCopilotCapture] = useState<CaptureItem | null>(null)
@@ -159,9 +171,42 @@ export const CapturesPage: React.FC = () => {
   const [actionTitle, setActionTitle] = useState('')
   const [actionContext, setActionContext] = useState<'vida' | 'trabalho'>('trabalho')
   const [actionProjectId, setActionProjectId] = useState<string>('')
-  const [availableProjects, setAvailableProjects] = useState<
-    { id: string; title: string; context: string; sequence_number?: number }[]
-  >([])
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([])
+
+  // FATIA 3C2B — Responsabilidade nos dois diálogos de conversão.
+  // IDs estáveis por instância (useId no topo, antes de qualquer retorno).
+  const uid = useId()
+  const convertIds = React.useMemo(
+    () => ({
+      projectResponsibility: `${uid}-convert-project-responsibility`,
+      actionResponsibility: `${uid}-convert-action-responsibility`,
+      actionInheritedResponsibility: `${uid}-convert-action-inherited-responsibility`,
+    }),
+    [uid],
+  )
+  // Vínculo NOVO escolhido em cada formulário; '' = Nenhuma. Toda nova
+  // abertura (manual e proposta local) começa Nenhuma — nunca inferida de
+  // propósito, filtro, texto, captura anterior ou proposta Manus. A escolha
+  // direta do Avanço permanece SÓ em memória enquanto um Resultado está
+  // selecionado (não é copiada da herança); nova abertura zera a conversão
+  // anterior.
+  const [projectResponsibilityId, setProjectResponsibilityId] = useState('')
+  const [actionDirectResponsibilityId, setActionDirectResponsibilityId] = useState('')
+  // Um único read por abertura (qualquer dos dois diálogos) — lista completa do
+  // dono, com loading/erro/retry reais do seletor.
+  const convertResponsibilityOptions: ResponsibilityOptionsState = useResponsibilityOptions(
+    conversionType !== null,
+  )
+  // HERANÇA EM LEITURA do Resultado realmente escolhido: hook existente no
+  // topo, incondicional. Pai ainda não carregado (null) NUNCA é 'Nenhuma';
+  // '' do pai confirma ausência ('none'); erro preserva 'error'. A herança
+  // JAMAIS é copiada para o payload do Avanço (envia responsibility_id='').
+  const selectedActionProject = actionProjectId
+    ? (availableProjects.find((p) => p.id === actionProjectId) ?? null)
+    : null
+  const inheritedActionRef: ResponsibilityRefState = useResponsibilityReference(
+    selectedActionProject ? (selectedActionProject.responsibility_id ?? null) : null,
+  )
 
   const loadCaptures = useCallback(async () => {
     setIsLoading(true)
@@ -298,6 +343,7 @@ export const CapturesPage: React.FC = () => {
     setProjectAspiration('')
     setProjectControllable('')
     setProjectCompletion('')
+    setProjectResponsibilityId('')
     setConversionType('project')
   }
 
@@ -308,6 +354,7 @@ export const CapturesPage: React.FC = () => {
     setActionTitle(capture.raw_text.slice(0, 100))
     setActionContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
     setActionProjectId('')
+    setActionDirectResponsibilityId('')
     setConversionType('action')
   }
 
@@ -332,24 +379,90 @@ export const CapturesPage: React.FC = () => {
       setProjectAspiration(proposal.aspiration ?? '')
       setProjectControllable(proposal.controllable_delivery ?? '')
       setProjectCompletion(proposal.completion_condition ?? '')
+      // Proposta local NÃO inventa Responsabilidade: vínculo começa Nenhuma.
+      setProjectResponsibilityId('')
       setConversionType('project')
     } else {
       setActionTitle(proposal.title)
       setActionContext(proposal.context)
       setActionProjectId('')
+      setActionDirectResponsibilityId('')
       setConversionType('action')
     }
   }
 
   const [isConverting, setIsConverting] = useState(false)
 
+  // FATIA 3C2B — validação do vínculo NOVO antes do envio único, pelos dados já
+  // carregados do seletor. Na conversão TODO vínculo explícito é novo: não há
+  // vínculo persistido a liberar grupo arquivado. Valor fora da lista (raro)
+  // segue para o backend, autoridade final.
+  const directLinkProblem = (chosenId: string, ctx: 'vida' | 'trabalho'): string | null => {
+    if (!chosenId) return null
+    const known = convertResponsibilityOptions.list.find((r) => r.id === chosenId) ?? null
+    if (!known) return null
+    if (known.context !== ctx) {
+      return `A responsabilidade escolhida é de contexto ${
+        known.context === 'trabalho' ? 'Trabalho' : 'Vida'
+      }, mas o formulário é de ${ctx === 'trabalho' ? 'Trabalho' : 'Vida'}. Escolha “Nenhuma” ou outra compatível antes de converter.`
+    }
+    if (known.status !== 'ativa') {
+      return 'A responsabilidade escolhida não está ativa. Escolha “Nenhuma” ou outra ativa antes de converter um vínculo novo.'
+    }
+    return null
+  }
+
   const handleConfirmConvert = async (target: 'project' | 'action') => {
     if (!selectedCapture) return
     if (target === 'project' && !projectTitle.trim()) return
     if (target === 'action' && !actionTitle.trim()) return
+    // Validação do vínculo novo ANTES de chamar convert (nada é gravado antes).
+    const linkProblem =
+      target === 'project'
+        ? directLinkProblem(projectResponsibilityId, projectContext)
+        : directLinkProblem(actionDirectResponsibilityId, actionContext)
+    if (linkProblem) {
+      toast({ variant: 'destructive', title: 'Conversão não realizada', description: linkProblem })
+      return
+    }
 
+    // Trava síncrona dedicada: Enter duplo/clique repetido não chamam convert
+    // duas vezes. Retorno tardio só se aplica à mesma intenção/dono/captura.
+    if (convertingRef.current || isConverting) return
+    convertingRef.current = true
     setIsConverting(true)
+    const snap = currentOwnerSnapshot()
     try {
+      // Avanço subordinado: revalidação pontual do pai vigente no confirmar
+      // (dados existentes primeiro). Se contexto/Responsabilidade do pai
+      // mudaram, atualiza SÓ a referência informativa, preserva os campos e
+      // pede revisão antes de enviar — falha de leitura não autoriza novo pai
+      // (segue os dados existentes; backend é autoridade final).
+      if (target === 'action' && actionProjectId) {
+        const presented = availableProjects.find((p) => p.id === actionProjectId)
+        if (presented) {
+          try {
+            const fresh = await projectService.getById(actionProjectId)
+            if (
+              (fresh.responsibility_id || '') !== (presented.responsibility_id || '') ||
+              fresh.context !== presented.context
+            ) {
+              setAvailableProjects((prev) => prev.map((p) => (p.id === fresh.id ? fresh : p)))
+              toast({
+                variant: 'destructive',
+                title: 'Conversão não realizada',
+                description:
+                  'O resultado escolhido mudou de contexto ou de Responsabilidade desde a abertura. Revise a herança exibida e confirme novamente.',
+              })
+              return
+            }
+          } catch {
+            // Revalidação indisponível: não bloqueia nem inventa pai — o
+            // backend valida dono/contexto/ativa na transação única.
+          }
+        }
+      }
+
       const result = await captureService.convert(
         selectedCapture.id,
         target,
@@ -360,13 +473,22 @@ export const CapturesPage: React.FC = () => {
               aspiration: projectAspiration.trim() || undefined,
               controllable_delivery: projectControllable.trim() || undefined,
               completion_condition: projectCompletion.trim() || undefined,
+              // FATIA 3C2B — vínculo NOVO escolhido ou '' (Nenhuma) no MESMO
+              // commit único do backend; nunca update depois da conversão.
+              responsibility_id: projectResponsibilityId,
             }
           : {
               title: actionTitle.trim(),
               context: actionContext,
               project_id: actionProjectId ? actionProjectId : undefined,
+              // Subordinado: project_id do pai e responsibility_id='' (herança
+              // é SEMPRE do Resultado, nunca copiada, nunca dois vínculos).
+              // Solto: escolha direta ou '' (Nenhuma).
+              responsibility_id: actionProjectId ? '' : actionDirectResponsibilityId,
             },
       )
+
+      if (!isSameOwner(snap) || !pageActive.current) return
 
       // Idempotente: quando a captura já estava convertida (retry após perder
       // a resposta, duplo clique, chamada concorrente), o backend retorna o
@@ -415,11 +537,14 @@ export const CapturesPage: React.FC = () => {
       setSelectedCapture(null)
       loadCaptures()
     } catch (err: unknown) {
-      // Falha: erro visível e dados digitados preservados (o modal permanece
-      // aberto com o estado do formulário intacto — nada é apagado).
+      // Falha: erro visível e dados digitados/escolhas preservados (o modal
+      // permanece aberto com o formulário intacto — nada é apagado, nenhum
+      // falso sucesso). Retorno tardio de outra sessão não exibe toast.
+      if (!isSameOwner(snap) || !pageActive.current) return
       const msg = err instanceof Error ? err.message : 'Erro na conversão'
       toast({ variant: 'destructive', title: 'Erro na conversão', description: msg })
     } finally {
+      convertingRef.current = false
       setIsConverting(false)
     }
   }
@@ -874,7 +999,10 @@ export const CapturesPage: React.FC = () => {
       {/* Modal: Converter em Projeto */}
       <Dialog
         open={conversionType === 'project'}
-        onOpenChange={(open) => !open && setConversionType(null)}
+        onOpenChange={(open) => {
+          // Durante o envio, fechar/Escape não descarta o formulário.
+          if (!open && !isConverting) setConversionType(null)
+        }}
       >
         <DialogContent className="bg-card text-card-foreground max-w-lg">
           <DialogHeader>
@@ -908,6 +1036,7 @@ export const CapturesPage: React.FC = () => {
                 value={projectTitle}
                 onChange={(e) => setProjectTitle(e.target.value)}
                 required
+                disabled={isConverting}
               />
             </div>
 
@@ -918,6 +1047,7 @@ export const CapturesPage: React.FC = () => {
               <Select
                 value={projectContext}
                 onValueChange={(v) => setProjectContext(v as 'vida' | 'trabalho')}
+                disabled={isConverting}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -929,6 +1059,18 @@ export const CapturesPage: React.FC = () => {
               </Select>
             </div>
 
+            {/* FATIA 3C2B — Responsabilidade (opcional) perto do Contexto: toda
+               nova abertura começa Nenhuma; opções ativas do dono no contexto
+               do formulário; sentinel 'none' nunca vai ao banco ('' = Nenhuma). */}
+            <ResponsibilitySelect
+              id={convertIds.projectResponsibility}
+              value={projectResponsibilityId}
+              onChange={setProjectResponsibilityId}
+              context={projectContext}
+              options={convertResponsibilityOptions}
+              disabled={isConverting}
+            />
+
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Aspiração (O que quero alcançar? Opcional)
@@ -939,6 +1081,7 @@ export const CapturesPage: React.FC = () => {
                 onChange={(e) => setProjectAspiration(e.target.value)}
                 placeholder="Ex: Ampliar minha influência estratégica na empresa"
                 className="text-xs"
+                disabled={isConverting}
               />
             </div>
 
@@ -952,6 +1095,7 @@ export const CapturesPage: React.FC = () => {
                 onChange={(e) => setProjectControllable(e.target.value)}
                 placeholder="Ex: Entregar proposta escrita de revisão de processos com 3 reuniões de validação"
                 className="text-xs"
+                disabled={isConverting}
               />
             </div>
             <div className="space-y-1.5">
@@ -964,12 +1108,13 @@ export const CapturesPage: React.FC = () => {
                 onChange={(e) => setProjectCompletion(e.target.value)}
                 placeholder="Como reconhecerei que a entrega foi concluída?"
                 className="text-xs"
+                disabled={isConverting}
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setConversionType(null)}>
+            <Button variant="ghost" onClick={() => setConversionType(null)} disabled={isConverting}>
               Cancelar
             </Button>
             <Button
@@ -985,7 +1130,9 @@ export const CapturesPage: React.FC = () => {
       {/* Modal: Converter em Ação */}
       <Dialog
         open={conversionType === 'action'}
-        onOpenChange={(open) => !open && setConversionType(null)}
+        onOpenChange={(open) => {
+          if (!open && !isConverting) setConversionType(null)
+        }}
       >
         <DialogContent className="bg-card text-card-foreground max-w-lg">
           <DialogHeader>
@@ -1018,6 +1165,7 @@ export const CapturesPage: React.FC = () => {
                 value={actionTitle}
                 onChange={(e) => setActionTitle(e.target.value)}
                 required
+                disabled={isConverting}
               />
             </div>
 
@@ -1029,6 +1177,7 @@ export const CapturesPage: React.FC = () => {
                 <Select
                   value={actionContext}
                   onValueChange={(v) => setActionContext(v as 'vida' | 'trabalho')}
+                  disabled={isConverting}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1047,6 +1196,7 @@ export const CapturesPage: React.FC = () => {
                 <Select
                   value={actionProjectId}
                   onValueChange={(v) => setActionProjectId(v === 'none' ? '' : v)}
+                  disabled={isConverting}
                 >
                   <SelectTrigger className="truncate text-xs">
                     <SelectValue placeholder="Avanço solto" />
@@ -1062,10 +1212,61 @@ export const CapturesPage: React.FC = () => {
                 </Select>
               </div>
             </div>
+
+            {/* FATIA 3C2B — solto: escolha DIRETA de Responsabilidade (Nenhuma
+               por abertura; opções ativas do dono/contexto do formulário).
+               Subordinado: herança SOMENTE LEITURA, resolvida pelo
+               responsibility_id do Resultado realmente escolhido (arquivada
+               indicada; "Nenhuma" só com ausência confirmada; erro/carregando
+               NUNCA viram Nenhuma) — texto puro e secundário, nunca seletor
+               desabilitado parecendo editável. */}
+            {actionProjectId ? (
+              <p
+                id={convertIds.actionInheritedResponsibility}
+                className="text-sm text-muted-foreground"
+              >
+                <span className="font-medium text-foreground">
+                  Responsabilidade herdada do resultado:
+                </span>{' '}
+                {inheritedActionRef.status === 'none' ? (
+                  <span className="italic">Nenhuma</span>
+                ) : inheritedActionRef.status === 'ready' ? (
+                  <>
+                    {inheritedActionRef.data.title}
+                    {inheritedActionRef.data.status === 'arquivada' &&
+                      ' (arquivada — vínculo do resultado)'}
+                  </>
+                ) : inheritedActionRef.status === 'error' ? (
+                  <span className="font-medium text-ginga-warning">
+                    Responsabilidade atual indisponível — vínculo do resultado preservado
+                  </span>
+                ) : (
+                  <span className="italic">carregando…</span>
+                )}
+              </p>
+            ) : (
+              <ResponsibilitySelect
+                id={convertIds.actionResponsibility}
+                value={actionDirectResponsibilityId}
+                onChange={setActionDirectResponsibilityId}
+                context={actionContext}
+                options={convertResponsibilityOptions}
+                disabled={isConverting}
+              />
+            )}
+            {/* Transição solto → Resultado com escolha direta provisória: a
+               escolha fica SÓ em memória (voltar a solto a mantém; voltar não
+               copia herança); nada persistido a apagar nesta captura pendente. */}
+            {actionProjectId && actionDirectResponsibilityId && (
+              <p role="alert" className="text-xs font-medium text-ginga-warning">
+                Ao confirmar, este avanço seguirá a Responsabilidade do resultado escolhido; a
+                escolha direta não será usada.
+              </p>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setConversionType(null)}>
+            <Button variant="ghost" onClick={() => setConversionType(null)} disabled={isConverting}>
               Cancelar
             </Button>
             <Button

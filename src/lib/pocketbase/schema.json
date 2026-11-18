@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-17T23:56:34.984Z",
+  "generatedAt": "2026-11-18T00:09:17.395Z",
   "collections": [
     {
       "name": "users",
@@ -40,6 +40,12 @@
         },
         {
           "name": "timezone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "life_purpose",
           "type": "text",
           "required": false,
           "system": false

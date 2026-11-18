@@ -11,6 +11,7 @@ import { CapturesPage } from '@/pages/CapturesPage'
 import { ActionsPage } from '@/pages/ActionsPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ReviewPage } from '@/pages/ReviewPage'
+import SettingsPage from '@/pages/SettingsPage'
 import { LoginPage } from '@/pages/LoginPage'
 import NotFound from '@/pages/NotFound'
 
@@ -46,6 +47,8 @@ const ProtectedRoutes = () => {
             <Route path="/acoes" element={<ActionsPage />} />
             <Route path="/projetos" element={<ProjectsPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
+            {/* ENTREGA 2A — Configurações do perfil (propósito de vida). */}
+            <Route path="/configuracoes" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

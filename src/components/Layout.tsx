@@ -14,6 +14,7 @@ import {
   Heart,
   Layers,
   Clock,
+  Settings,
 } from 'lucide-react'
 import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
@@ -120,7 +121,24 @@ export default function Layout() {
           })}
         </nav>
 
+        {/* ENTREGA 2A — acesso a Configurações pela área de perfil (desktop:
+           rodapé da sidebar, junto à conta). Link semântico, foco visível,
+           alvo de toque >= 44 px. Sem sistema de avatar/login novo. */}
         <div className="mt-auto flex flex-col gap-3 border-t border-border pt-4">
+          <NavLink
+            to="/configuracoes"
+            className={({ isActive }) =>
+              cn(
+                'flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                isActive
+                  ? 'bg-accent text-accent-foreground'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )
+            }
+          >
+            <Settings className="h-5 w-5" aria-hidden="true" />
+            <span>Configurações do perfil</span>
+          </NavLink>
           {user?.timezone && (
             <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -152,6 +170,15 @@ export default function Layout() {
                 <span className="max-w-[140px] truncate">{user.timezone.replace('_', ' ')}</span>
               </span>
             )}
+            {/* ENTREGA 2A — acesso a Configurações pela área de perfil (mobile:
+               cabeçalho da conta, ícone + rótulo acessível, >= 44 px). */}
+            <NavLink
+              to="/configuracoes"
+              aria-label="Configurações do perfil"
+              className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-muted hover:text-foreground"
+            >
+              <Settings className="h-5 w-5" aria-hidden="true" />
+            </NavLink>
             <Button
               variant="ghost"
               onClick={logout}

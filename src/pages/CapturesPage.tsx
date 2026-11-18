@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef, useId } from 'react'
 import { Link } from 'react-router-dom'
-import { CaptureItem, CaptureStatus, Project } from '@/types/execution'
+import { CaptureItem, CaptureStatus, Project, Strategy } from '@/types/execution'
 import { captureService } from '@/services/captureService'
 import { projectService } from '@/services/projectService'
+import { StrategySelect } from '@/components/StrategySelect'
+import { StrategyModal } from '@/components/StrategyModal'
+import { useProjectStrategies } from '@/hooks/use-project-strategies'
 import {
   ResponsibilityOptionsState,
   ResponsibilitySelect,
@@ -173,6 +176,24 @@ export const CapturesPage: React.FC = () => {
   const [actionProjectId, setActionProjectId] = useState<string>('')
   const [availableProjects, setAvailableProjects] = useState<Project[]>([])
 
+  // FATIA 4C2 — Estratégia (opcional) na conversão em Avanço: escolha SÓ em
+  // memória do formulário; '' = Nenhuma. Toda abertura NOVA (manual ou proposta
+  // local do Copiloto) começa Nenhuma — nunca inferida da captura, propósito,
+  // filtro ou proposta. A captura pendente não tem vínculo original persistido:
+  // nunca há Estratégia arquivada a liberar nesta conversão. Lista = hook82
+  // reusado (uma leitura completa do Resultado EFETIVAMENTE escolhido; sem IN
+  // SQL, sem consulta por opção, sem listagem global, sem polling).
+  const [actionStrategyId, setActionStrategyId] = useState('')
+  // Registro da escolha provisória (para identificar incompatibilidade ao
+  // trocar de pai sem nova consulta — dados já lidos, sem fonte nova).
+  const [actionStrategyChoice, setActionStrategyChoice] = useState<Strategy | null>(null)
+  const [actionStrategyNotice, setActionStrategyNotice] = useState<string | null>(null)
+  // Criação inline: reusa o StrategyModal REAL 4B1 sobre este diálogo.
+  const [actionStrategyModalOpen, setActionStrategyModalOpen] = useState(false)
+  const actionStrategies = useProjectStrategies(
+    conversionType === 'action' && actionProjectId ? actionProjectId : '',
+  )
+
   // FATIA 3C2B — Responsabilidade nos dois diálogos de conversão.
   // IDs estáveis por instância (useId no topo, antes de qualquer retorno).
   const uid = useId()
@@ -181,6 +202,7 @@ export const CapturesPage: React.FC = () => {
       projectResponsibility: `${uid}-convert-project-responsibility`,
       actionResponsibility: `${uid}-convert-action-responsibility`,
       actionInheritedResponsibility: `${uid}-convert-action-inherited-responsibility`,
+      actionStrategy: `${uid}-convert-action-strategy`,
     }),
     [uid],
   )
@@ -207,6 +229,66 @@ export const CapturesPage: React.FC = () => {
   const inheritedActionRef: ResponsibilityRefState = useResponsibilityReference(
     selectedActionProject ? (selectedActionProject.responsibility_id ?? null) : null,
   )
+
+  // FATIA 4C2 — incompatibilidade da escolha provisória com o pai ATUAL do
+  // formulário (troca de Resultado): identificada pelos dados já lidos; nunca
+  // tratada como opção válida nem enviada ao backend.
+  const actionStrategyIncompatible =
+    Boolean(actionStrategyId) &&
+    Boolean(actionProjectId) &&
+    actionStrategyChoice !== null &&
+    actionStrategyChoice.project_id !== actionProjectId
+
+  // FATIA 4C2 — troca de pai no diálogo de Avanço: a escolha de Estratégia é só
+  // memória; transições identificam (aviso) e nunca enviam grupo do pai
+  // anterior nem limpam silenciosamente. Sem escolha anterior, troca simples.
+  const handleActionProjectChange = (nextProjectId: string) => {
+    setActionProjectId(nextProjectId)
+    if (!nextProjectId) {
+      if (actionStrategyId) {
+        setActionStrategyNotice(
+          'Este avanço será criado solto, sem estratégia. Use “Remover escolha de Estratégia” para confirmar, ou volte ao resultado para mantê-la.',
+        )
+      }
+      return
+    }
+    if (!actionStrategyId) return
+    const chosen = actionStrategyChoice
+    if (chosen && chosen.project_id === nextProjectId) {
+      setActionStrategyNotice(null)
+      return
+    }
+    setActionStrategyNotice(
+      'A estratégia escolhida pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa do novo resultado antes de converter.',
+    )
+  }
+
+  // FATIA 4C2 — seleção direta no seletor: ID nativo ('' = Nenhuma); escolha
+  // registrada com o registro já lido; aviso de transição limpo.
+  const handleActionStrategyChange = (nextId: string) => {
+    setActionStrategyId(nextId)
+    setActionStrategyChoice(
+      nextId ? (actionStrategies.items.find((s) => s.id === nextId) ?? actionStrategyChoice) : null,
+    )
+    setActionStrategyNotice(null)
+  }
+
+  // FATIA 4C2 — criação INLINE de Estratégia: o StrategyModal REAL 4B1 salva
+  // via strategyService.create UMA vez (dentro dele); incluir o grupo confirmado
+  // nas opções é local ao hook82 (upsert). NÃO converte a captura, não fecha o
+  // diálogo-pai, não promove Hoje: são duas decisões independentes. Dono/pai/
+  // abertura do snapshot que iniciou a criação devem corresponder — retorno
+  // tardio não seleciona. Nunca apaga grupo como compensação.
+  const handleInlineStrategySaved = (saved: Strategy, created: boolean) => {
+    if (!created) return
+    if (conversionType !== 'action' || !actionProjectId) return
+    if (saved.project_id !== actionProjectId) return
+    if (!isSameOwner(currentOwnerSnapshot())) return
+    actionStrategies.upsert(saved)
+    setActionStrategyId(saved.id)
+    setActionStrategyChoice(saved)
+    setActionStrategyNotice(null)
+  }
 
   const loadCaptures = useCallback(async () => {
     setIsLoading(true)
@@ -355,6 +437,11 @@ export const CapturesPage: React.FC = () => {
     setActionContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
     setActionProjectId('')
     setActionDirectResponsibilityId('')
+    // FATIA 4C2 — toda abertura nova começa Nenhuma; sem editor filho aberto.
+    setActionStrategyId('')
+    setActionStrategyChoice(null)
+    setActionStrategyNotice(null)
+    setActionStrategyModalOpen(false)
     setConversionType('action')
   }
 
@@ -387,6 +474,11 @@ export const CapturesPage: React.FC = () => {
       setActionContext(proposal.context)
       setActionProjectId('')
       setActionDirectResponsibilityId('')
+      // FATIA 4C2 — proposta local NÃO inventa Estratégia: começa Nenhuma.
+      setActionStrategyId('')
+      setActionStrategyChoice(null)
+      setActionStrategyNotice(null)
+      setActionStrategyModalOpen(false)
       setConversionType('action')
     }
   }
@@ -424,6 +516,38 @@ export const CapturesPage: React.FC = () => {
     if (linkProblem) {
       toast({ variant: 'destructive', title: 'Conversão não realizada', description: linkProblem })
       return
+    }
+    // FATIA 4C2 — coerência da escolha de Estratégia ANTES do envio único
+    // (dados já lidos; backend 84 é autoridade final sobre dono/pai/ativa).
+    // Solto nunca envia estratégia; com pai, escolha precisa pertencer a ele.
+    if (target === 'action') {
+      if (!actionProjectId && actionStrategyId) {
+        toast({
+          variant: 'destructive',
+          title: 'Conversão não realizada',
+          description:
+            'Remova a escolha de Estratégia antes de converter: este avanço será criado solto, sem estratégia.',
+        })
+        return
+      }
+      if (actionProjectId && actionStrategyId && actionStrategyIncompatible) {
+        toast({
+          variant: 'destructive',
+          title: 'Conversão não realizada',
+          description:
+            'A estratégia escolhida pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa deste resultado antes de converter.',
+        })
+        return
+      }
+      if (actionProjectId && actionStrategyId && !actionStrategyChoice) {
+        toast({
+          variant: 'destructive',
+          title: 'Conversão não realizada',
+          description:
+            'Não foi possível confirmar a estratégia escolhida neste resultado. Escolha “Nenhuma” ou outra estratégia ativa antes de converter.',
+        })
+        return
+      }
     }
 
     // Trava síncrona dedicada: Enter duplo/clique repetido não chamam convert
@@ -485,6 +609,13 @@ export const CapturesPage: React.FC = () => {
               // é SEMPRE do Resultado, nunca copiada, nunca dois vínculos).
               // Solto: escolha direta ou '' (Nenhuma).
               responsibility_id: actionProjectId ? '' : actionDirectResponsibilityId,
+              // FATIA 4C2 — strategy_id no MESMO data do envio único (contrato
+              // 84): com pai, ID nativo escolhido (coerência já validada acima)
+              // ou '' (Nenhuma); solto, sempre ''. Nunca vínculo do pai anterior
+              // e nunca update de actionService/projectService depois. Resposta
+              // do backend traz o vínculo PERSISTIDO; duplicate:true não afirma
+              // a aplicação da escolha desta tentativa.
+              strategy_id: actionProjectId ? actionStrategyId : '',
             },
       )
 
@@ -1195,7 +1326,7 @@ export const CapturesPage: React.FC = () => {
                 </Label>
                 <Select
                   value={actionProjectId}
-                  onValueChange={(v) => setActionProjectId(v === 'none' ? '' : v)}
+                  onValueChange={(v) => handleActionProjectChange(v === 'none' ? '' : v)}
                   disabled={isConverting}
                 >
                   <SelectTrigger className="truncate text-xs">
@@ -1263,6 +1394,68 @@ export const CapturesPage: React.FC = () => {
                 escolha direta não será usada.
               </p>
             )}
+
+            {/* FATIA 4C2 — Estratégia (opcional), LOCAL ao Resultado escolhido.
+               Sem Resultado: sem seletor e sem grupos de outros pais, com
+               orientação discreta (Avanço solto segue utilizável, inclusive com
+               Responsabilidade direta). Escolha nova nunca herda/inferir;
+               sentinel 'none' interno nunca vai à API — vai ID nativo ou ''. */}
+            {actionProjectId && selectedActionProject && (
+              <StrategySelect
+                id={convertIds.actionStrategy}
+                value={actionStrategyId}
+                onChange={handleActionStrategyChange}
+                options={actionStrategies}
+                projectLabel={`[${selectedActionProject.context}] ${formatEntityTitle('project', selectedActionProject.sequence_number, selectedActionProject.title)}`}
+                onOpenCreate={() => {
+                  if (!isConverting) setActionStrategyModalOpen(true)
+                }}
+                incompatible={actionStrategyIncompatible}
+                disabled={isConverting}
+              />
+            )}
+            {actionProjectId && !selectedActionProject && (
+              <p className="text-xs text-muted-foreground">
+                Estratégias ficam disponíveis quando o resultado selecionado é carregado.
+              </p>
+            )}
+            {!actionProjectId && (
+              <p className="text-xs text-muted-foreground">
+                Vincule este avanço a um resultado para escolher uma estratégia.
+              </p>
+            )}
+            {/* Volta a solto com escolha provisória: identificada, nunca enviada
+               nem apagada em silêncio — ajuste explícito antes de confirmar. */}
+            {!actionProjectId && actionStrategyId && (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-ginga-warning/30 bg-ginga-warning-bg p-2 text-xs"
+              >
+                <span className="font-medium text-ginga-warning">
+                  Avanço solto não leva estratégia. Remova a escolha antes de converter, ou volte ao
+                  resultado para mantê-la.
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isConverting}
+                  onClick={() => {
+                    setActionStrategyId('')
+                    setActionStrategyChoice(null)
+                    setActionStrategyNotice(null)
+                  }}
+                  className="min-h-11 shrink-0"
+                >
+                  Remover escolha de Estratégia
+                </Button>
+              </div>
+            )}
+            {actionStrategyNotice && (
+              <p role="alert" className="text-xs font-medium text-ginga-warning">
+                {actionStrategyNotice}
+              </p>
+            )}
           </div>
 
           <DialogFooter>
@@ -1276,6 +1469,31 @@ export const CapturesPage: React.FC = () => {
               {isConverting ? 'Gravando…' : 'Criar Avanço Pronto'}
             </Button>
           </DialogFooter>
+
+          {/* FATIA 4C2 — editor de Estratégia REUSADO (4B1) sobre este diálogo,
+             para o Resultado CONFIRMADO do formulário. Duas decisões separadas:
+             Salvar aqui cria SOMENTE o grupo (a conversão é outro clique, pelo
+             contrato 84 — não há transação grupo↔Avanço). Cancelar o editor não
+             grava grupo nem converte a captura; volta ao mesmo rascunho. Durante
+             a conversão, o editor filho fica bloqueado (não abre). */}
+          {actionStrategyModalOpen && selectedActionProject && (
+            <>
+              <p className="sr-only">
+                Salvar cria a estratégia neste resultado. Cancelar a conversão depois não apaga a
+                estratégia.
+              </p>
+              <StrategyModal
+                open
+                strategy={null}
+                projectId={selectedActionProject.id}
+                projectLabel={`[${selectedActionProject.context}] ${formatEntityTitle('project', selectedActionProject.sequence_number, selectedActionProject.title)}`}
+                onOpenChange={(next) => {
+                  if (!next) setActionStrategyModalOpen(false)
+                }}
+                onSaved={handleInlineStrategySaved}
+              />
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

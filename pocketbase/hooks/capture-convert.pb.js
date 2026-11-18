@@ -14,6 +14,12 @@
 //   — retry/duplo clique não cria segundo destino). Se estiver em outro estado,
 //   409.
 // - Valida relações (project_id da ação: mesmo dono e mesmo contexto).
+// - Responsabilidade opcional (3C2A): data.responsibility_id vai para
+//   projects.responsibility_id (Resultado) ou actions.responsibility_id
+//   (Avanço SOLTO — subordinado fica vazio, herança é do Resultado corrente).
+//   Validada na MESMA transação: existe, dono da sessão, mesmo contexto e
+//   ativa — antes de qualquer gravação. O caminho idempotente (já convertida)
+//   roda ANTES dessas checagens e nunca toca a Responsabilidade do destino.
 // - Cria o destino e vincula a captura ATOMICAMENTE (mesma transação).
 // - Texto original (raw_text) nunca é alterado.
 //
@@ -109,6 +115,41 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       throw new ApiError(409, 'Captura não está mais pendente.')
     }
 
+    // ---------- Responsabilidade opcional (3C2A) ----------
+    // OPCIONAL: omitido ou '' = nenhum vínculo direto novo. Quando informado,
+    // DEVE ser string — tipo inválido é rejeitado, nunca convertido em Nenhuma.
+    // Validação (existe/dono/contexto/ativa) aqui dentro da transação, ANTES
+    // de qualquer gravação de destino/captura.
+    const rawResponsibilityId = data.responsibility_id
+    let responsibilityId = ''
+    if (
+      rawResponsibilityId !== undefined &&
+      rawResponsibilityId !== null &&
+      rawResponsibilityId !== ''
+    ) {
+      if (typeof rawResponsibilityId !== 'string') {
+        throw new BadRequestError('Responsabilidade informada é inválida.')
+      }
+      responsibilityId = rawResponsibilityId.trim()
+    }
+    if (responsibilityId) {
+      let responsibility
+      try {
+        responsibility = txApp.findRecordById('responsibilities', responsibilityId)
+      } catch (_) {
+        throw new BadRequestError('Responsabilidade informada não existe.')
+      }
+      if (responsibility.getString('user_id') !== userId) {
+        throw new ForbiddenError('Responsabilidade pertence a outro usuário.')
+      }
+      if (responsibility.getString('context') !== context) {
+        throw new BadRequestError('Responsabilidade está em contexto diferente do destino.')
+      }
+      if (responsibility.getString('status') !== 'ativa') {
+        throw new BadRequestError('Responsabilidade arquivada não pode ser vinculada.')
+      }
+    }
+
     // ---------- criação do destino + vínculo (mesma transação) ----------
     if (target === 'project') {
       const project = new Record(txApp.findCollectionByNameOrId('projects'))
@@ -123,6 +164,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       if (str(data.completion_condition)) {
         project.set('completion_condition', str(data.completion_condition))
       }
+      if (responsibilityId) project.set('responsibility_id', responsibilityId)
       txApp.save(project)
 
       capture.set('status', 'convertida_projeto')
@@ -135,6 +177,14 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
 
     // target === 'action'
     const projectId = str(data.project_id)
+    if (projectId && responsibilityId) {
+      // Avanço COM Resultado: campo direto fica VAZIO — herança é resolvida
+      // pelo Resultado corrente (mesmo se a Responsabilidade dele estiver
+      // arquivada). Rejeita explicitamente; não limpa nem modifica o Resultado.
+      throw new BadRequestError(
+        'Responsabilidade não pode ser definida diretamente em um Avanço com Resultado — a herança vem do Resultado.',
+      )
+    }
     if (projectId) {
       let project
       try {
@@ -158,6 +208,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
     action.set('is_next_step', false)
     action.set('is_today_selected', false)
     if (projectId) action.set('project_id', projectId)
+    if (responsibilityId) action.set('responsibility_id', responsibilityId) // só Avanço solto
     txApp.save(action)
 
     capture.set('status', 'convertida_acao')
@@ -215,6 +266,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           aspiration: expanded.getString('aspiration'),
           controllable_delivery: expanded.getString('controllable_delivery'),
           completion_condition: expanded.getString('completion_condition'),
+          responsibility_id: expanded.getString('responsibility_id') || undefined,
           created: expanded.getString('created'),
           updated: expanded.getString('updated'),
         }
@@ -222,6 +274,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           id: expanded.id,
           user_id: expanded.getString('user_id'),
           project_id: expanded.getString('project_id') || undefined,
+          responsibility_id: expanded.getString('responsibility_id') || undefined,
           title: expanded.getString('title'),
           context: expanded.getString('context'),
           status: expanded.getString('status'),

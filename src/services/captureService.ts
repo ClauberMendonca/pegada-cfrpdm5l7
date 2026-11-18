@@ -62,6 +62,7 @@ export const captureService = {
       title: string
       context: 'vida' | 'trabalho'
       project_id?: string
+      responsibility_id?: string
       aspiration?: string
       controllable_delivery?: string
       completion_condition?: string

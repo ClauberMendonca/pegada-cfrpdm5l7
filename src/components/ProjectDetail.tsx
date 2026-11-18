@@ -5,6 +5,7 @@ import { projectService } from '@/services/projectService'
 import { actionService } from '@/services/actionService'
 import { progressService } from '@/services/progressService'
 import { ActionRow } from '@/components/ActionRow'
+import { StrategySection } from '@/components/StrategySection'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { ProjectModal } from '@/components/ProjectModal'
@@ -240,8 +241,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     project.r_responsavel,
   )
 
-  const activeActions = actions.filter((a) => a.status !== 'feita' && a.status !== 'cancelada')
-  const completedActions = actions.filter((a) => a.status === 'feita' || a.status === 'cancelada')
   const timeTotalLabel = (seconds: number) =>
     timeTotals.loading || timeTotals.error
       ? '—'
@@ -280,6 +279,93 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       onChanged={timeTotals.reload}
     />
   )
+
+  // 4B1 — renderizador ÚNICO dos Avanços (abertos / Feitos-Cancelados) usado
+  // pela lista sem agrupamento e por cada grupo da seção de Estratégias.
+  const renderActionBlocks = (list: ActionItem[]) => {
+    const activeList = list.filter((a) => a.status !== 'feita' && a.status !== 'cancelada')
+    const completedList = list.filter((a) => a.status === 'feita' || a.status === 'cancelada')
+    return (
+      <div className="space-y-4">
+        {activeList.length > 0 && (
+          <div className="grid gap-2.5">
+            {activeList.map((action) => (
+              <ListRow
+                key={action.id}
+                title={action.title}
+                numberKind="action"
+                numberValue={action.sequence_number}
+                numberEntityId={action.id}
+                open={view === 'cards' || Boolean(openRows[action.id])}
+                onToggle={() => view === 'list' && toggleRow(action.id)}
+                summary={
+                  showSummary && view === 'list'
+                    ? actionSummaryLine(action, { today: todayStr })
+                    : undefined
+                }
+              >
+                <ActionRow
+                  action={action}
+                  isNextAdvance={action.is_next_step}
+                  saving={savingActionId === action.id}
+                  onToggleNextStep={handleToggleNextStep}
+                  onToggleTodaySelected={handleToggleTodaySelected}
+                  onStatusChange={handleStatusChange}
+                  focusBlockedReason={focusBlockReason(action)}
+                  onOpenLogModal={(a) => {
+                    setLogAction(a)
+                    setIsLogModalOpen(true)
+                  }}
+                  timeControl={renderActionTimeControl(action)}
+                  onEdit={(a) => {
+                    setEditingAction(a)
+                    setIsActionModalOpen(true)
+                  }}
+                />
+              </ListRow>
+            ))}
+          </div>
+        )}
+
+        {completedList.length > 0 && (
+          <div className="pt-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+              Avanços Feitos / Cancelados ({completedList.length})
+            </span>
+            <div className="grid gap-2">
+              {completedList.map((action) => (
+                <ListRow
+                  key={action.id}
+                  title={action.title}
+                  numberKind="action"
+                  numberValue={action.sequence_number}
+                  numberEntityId={action.id}
+                  open={view === 'cards' || Boolean(openRows[action.id])}
+                  onToggle={() => view === 'list' && toggleRow(action.id)}
+                  summary={
+                    showSummary && view === 'list'
+                      ? actionSummaryLine(action, { today: todayStr })
+                      : undefined
+                  }
+                >
+                  <ActionRow
+                    action={action}
+                    onStatusChange={handleStatusChange}
+                    focusBlockedReason={focusBlockReason(action)}
+                    onOpenLogModal={(a) => {
+                      setLogAction(a)
+                      setIsLogModalOpen(true)
+                    }}
+                    timeControl={renderActionTimeControl(action)}
+                  />
+                </ListRow>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -637,90 +723,18 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           ) : null}
         </div>
 
-        {actions.length === 0 ? (
+        <StrategySection
+          projectId={project.id}
+          projectLabel={formatEntityTitle('project', project.sequence_number, project.title)}
+          actions={actions}
+          renderActions={renderActionBlocks}
+        />
+
+        {actions.length === 0 && (
           <div className="p-6 rounded-xl border border-dashed border-border text-center bg-muted/50">
             <p className="text-xs text-muted-foreground">
               Nenhum avanço criado para este resultado ainda.
             </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {activeActions.length > 0 && (
-              <div className="grid gap-2.5">
-                {activeActions.map((action) => (
-                  <ListRow
-                    key={action.id}
-                    title={action.title}
-                    numberKind="action"
-                    numberValue={action.sequence_number}
-                    numberEntityId={action.id}
-                    open={view === 'cards' || Boolean(openRows[action.id])}
-                    onToggle={() => view === 'list' && toggleRow(action.id)}
-                    summary={
-                      showSummary && view === 'list'
-                        ? actionSummaryLine(action, { today: todayStr })
-                        : undefined
-                    }
-                  >
-                    <ActionRow
-                      action={action}
-                      isNextAdvance={action.is_next_step}
-                      saving={savingActionId === action.id}
-                      onToggleNextStep={handleToggleNextStep}
-                      onToggleTodaySelected={handleToggleTodaySelected}
-                      onStatusChange={handleStatusChange}
-                      focusBlockedReason={focusBlockReason(action)}
-                      onOpenLogModal={(a) => {
-                        setLogAction(a)
-                        setIsLogModalOpen(true)
-                      }}
-                      timeControl={renderActionTimeControl(action)}
-                      onEdit={(a) => {
-                        setEditingAction(a)
-                        setIsActionModalOpen(true)
-                      }}
-                    />
-                  </ListRow>
-                ))}
-              </div>
-            )}
-
-            {completedActions.length > 0 && (
-              <div className="pt-2">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
-                  Avanços Feitos / Cancelados ({completedActions.length})
-                </span>
-                <div className="grid gap-2">
-                  {completedActions.map((action) => (
-                    <ListRow
-                      key={action.id}
-                      title={action.title}
-                      numberKind="action"
-                      numberValue={action.sequence_number}
-                      numberEntityId={action.id}
-                      open={view === 'cards' || Boolean(openRows[action.id])}
-                      onToggle={() => view === 'list' && toggleRow(action.id)}
-                      summary={
-                        showSummary && view === 'list'
-                          ? actionSummaryLine(action, { today: todayStr })
-                          : undefined
-                      }
-                    >
-                      <ActionRow
-                        action={action}
-                        onStatusChange={handleStatusChange}
-                        focusBlockedReason={focusBlockReason(action)}
-                        onOpenLogModal={(a) => {
-                          setLogAction(a)
-                          setIsLogModalOpen(true)
-                        }}
-                        timeControl={renderActionTimeControl(action)}
-                      />
-                    </ListRow>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </section>

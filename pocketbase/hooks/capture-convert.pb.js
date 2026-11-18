@@ -32,6 +32,31 @@
 //   idempotente (já convertida) roda ANTES dessas checagens e devolve o
 //   destino EXISTENTE com duplicate:true — nunca lê nem ecoa a escolha da
 //   repetição, nunca altera a Estratégia do destino.
+// - Planejamento opcional do Avanço (5C1): data.planned_date (YYYY-MM-DD),
+//   data.planned_time (HH:mm local; '' = SEM HORA; 00:00 explícita fica
+//   00:00) e data.planned_timezone (IANA explícito ou UTC) — a MESMA tupla da
+//   fundação 5A, aplicada ao Record de actions ANTES do txApp.save(action),
+//   na MESMA transação do vínculo (nenhuma segunda gravação/update posterior
+//   para completar hora ou fuso). Omitidos ou exatamente vazios = sem
+//   planejamento (vazios nativos dos TextFields); valores informados passam
+//   EXATAMENTE como recebidos — sem trim/str da rota, sem default de fuso do
+//   perfil, de Hoje, de prazo ou de hora atual. Campo presente DEVE ser
+//   string: null/número/array/objeto é REJEITADO antes de Record.set (nunca
+//   convertido em texto ou vazio). A validação da tupla no estado final (dia
+//   real/bissexto, HH:mm 00:00–23:59, fuso IANA/UTC explícito, coerência
+//   data+hora+fuso) é a da guarda 5A (onRecordValidate de actions), que
+//   alcança o txApp.save — não é duplicada aqui; falha reverte a transação e
+//   preserva a captura pendente, sem persistir tupla parcial. Somente Avanço
+//   (solto ou com Resultado): NOVO Resultado NÃO recebe planejamento (projects
+//   não tem estes campos) — valor não vazio é rejeitado, nunca virou Avanço
+//   nem agendamento no lugar. TODAS as checagens novas — tipos, tupla e
+//   proibição em Resultado — rodam DEPOIS do caminho idempotente: captura já
+//   convertida devolve o destino EXISTENTE com duplicate:true mesmo se a
+//   repetição trouxer planejamento diferente, inválido, vazio ou passado — o
+//   destino nunca é replanejado/desplanejado e a escolha da repetição não é
+//   ecoada. A resposta serializa os três campos do registro PERSISTIDO
+//   somente quando o destino real é action (inclusive duplicate), como
+//   strings salvas/'' — nunca de body.data, perfil ou relógio do dispositivo.
 // - Cria o destino e vincula a captura ATOMICAMENTE (mesma transação).
 // - Texto original (raw_text) nunca é alterado.
 //
@@ -127,6 +152,37 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       throw new ApiError(409, 'Captura não está mais pendente.')
     }
 
+    // ---------- Planejamento opcional do Avanço (5C1): TIPOS ----------
+    // Checagem de tipo das três chaves, DEPOIS do caminho idempotente.
+    // Omitido é distinto de fornecido: só a PRESENÇA exige tipo string.
+    // '' é vazio canônico; string só de espaços NÃO é remoção — passa exata
+    // (a guarda 5A no txApp.save a rejeita pelo formato). Sem trim nem str()
+    // da rota: nenhum valor de planejamento é normalizado aqui.
+    const plannedProvided = {
+      date: false,
+      time: false,
+      timezone: false,
+    }
+    const plannedNames = {
+      date: 'planned_date',
+      time: 'planned_time',
+      timezone: 'planned_timezone',
+    }
+    const plannedKeys = ['date', 'time', 'timezone']
+    for (let k = 0; k < plannedKeys.length; k++) {
+      const key = plannedKeys[k]
+      const raw = data[plannedNames[key]]
+      if (raw === undefined) continue
+      if (typeof raw !== 'string') {
+        // null, número, booleano, array ou objeto: rejeição segura — nunca
+        // deixar Record.set converter tipo inesperado em texto ou vazio.
+        throw new BadRequestError(
+          'Planejamento do Avanço inválido: Data planejada, Hora e Fuso devem ser texto quando informados.',
+        )
+      }
+      plannedProvided[key] = raw !== ''
+    }
+
     // ---------- Responsabilidade opcional (3C2A) ----------
     // OPCIONAL: omitido ou '' = nenhum vínculo direto novo. Quando informado,
     // DEVE ser string — tipo inválido é rejeitado, nunca convertido em Nenhuma.
@@ -188,6 +244,19 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       throw new BadRequestError(
         'Estratégia não pode ser atribuída a um novo Resultado — o vínculo de Estratégia pertence ao Avanço.',
       )
+    }
+
+    // ---------- Planejamento (5C1): novo Resultado NÃO recebe ----------
+    // projects NÃO tem planned_date/planned_time/planned_timezone: campos
+    // omitidos ou EXATAMENTE vazios são compatíveis (nenhum efeito); tipo
+    // inválido já foi rejeitado acima e qualquer valor não vazio é rejeitado
+    // aqui — não vira Avanço, não ganha campo, não cria agendamento no lugar.
+    if (target === 'project') {
+      if (plannedProvided.date || plannedProvided.time || plannedProvided.timezone) {
+        throw new BadRequestError(
+          'Planejamento não pode ser atribuído a um novo Resultado — Data planejada, Hora e Fuso pertencem ao Avanço.',
+        )
+      }
     }
 
     // ---------- criação do destino + vínculo (mesma transação) ----------
@@ -281,6 +350,17 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
     if (projectId) action.set('project_id', projectId)
     if (responsibilityId) action.set('responsibility_id', responsibilityId) // só Avanço solto
     if (strategyId) action.set('strategy_id', strategyId) // só Avanço com Resultado validado
+
+    // Planejamento (5C1): aplica os valores informados EXATOS ao Record de
+    // actions ANTES do save — válidos ou não, sem correção/default aqui.
+    // A tupla (dia real/bissexto, HH:mm 00:00–23:59, fuso IANA/UTC explícito,
+    // coerência data+hora+fuso) é validada pela guarda 5A no txApp.save
+    // abaixo; falha reverte TODA a transação (destino/vínculo/captura não
+    // persistem, captura permanece pendente, sem tupla parcial). Nenhum
+    // update posterior nem segunda transação completa a hora/fuso depois.
+    if (plannedProvided.date) action.set('planned_date', data.planned_date)
+    if (plannedProvided.time) action.set('planned_time', data.planned_time)
+    if (plannedProvided.timezone) action.set('planned_timezone', data.planned_timezone)
     txApp.save(action)
 
     capture.set('status', 'convertida_acao')
@@ -348,6 +428,12 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           project_id: expanded.getString('project_id') || undefined,
           responsibility_id: expanded.getString('responsibility_id') || undefined,
           strategy_id: expanded.getString('strategy_id') || undefined,
+          // Planejamento (5C1): strings salvas/vazio '' do registro PERSISTIDO
+          // (mesmo no duplicate) — nunca de body.data, perfil ou relógio.
+          // Sem planned_at/scheduled_at/instante UTC: intenção local da 5A.
+          planned_date: expanded.getString('planned_date'),
+          planned_time: expanded.getString('planned_time'),
+          planned_timezone: expanded.getString('planned_timezone'),
           title: expanded.getString('title'),
           context: expanded.getString('context'),
           status: expanded.getString('status'),

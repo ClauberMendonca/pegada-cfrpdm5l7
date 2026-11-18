@@ -75,6 +75,19 @@ export const captureService = {
       aspiration?: string
       controllable_delivery?: string
       completion_condition?: string
+      /**
+       * FATIA 5C1 — Planejamento LOCAL opcional do NOVO Avanço (mesma tupla da
+       * 5A): planned_date 'YYYY-MM-DD', planned_time 'HH:mm' ('' = sem hora;
+       * 00:00 explícita permanece 00:00) e planned_timezone (IANA/UTC explícito).
+       * Só faz sentido com target:'action' — novo Resultado não recebe
+       * planejamento. Valores passam exatos (sem trim/default); a validação da
+       * tupla é da guarda 5A dentro da transação do hook. Omitidos = sem
+       * planejamento (clientes antigos não precisam enviá-los). Nenhum
+       * chamador atual os envia ainda — a interface vem na fatia 5C2.
+       */
+      planned_date?: string
+      planned_time?: string
+      planned_timezone?: string
     },
   ): Promise<ConvertResult> {
     const authId = pb.authStore.model?.id

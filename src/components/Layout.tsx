@@ -12,7 +12,6 @@ import {
   Anchor,
   Compass,
   MoreHorizontal,
-  X,
   LogOut,
   Briefcase,
   Heart,

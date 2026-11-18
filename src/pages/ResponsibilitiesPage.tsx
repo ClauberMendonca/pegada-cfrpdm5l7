@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   AlertCircle,
@@ -119,7 +119,7 @@ export const ResponsibilitiesPage: React.FC = () => {
     setIsLoading(true)
     setLoadError(null)
     try {
-      const list = await responsibilityService.list(user.id)
+      const list = await responsibilityService.list()
       setResponsibilities(list)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao listar responsabilidades'
@@ -131,32 +131,51 @@ export const ResponsibilitiesPage: React.FC = () => {
   }, [user?.id, toast])
 
   useEffect(() => {
+    // Sem dono autenticado, o catálogo fica vazio até a sessão existir
+    // (a rota é protegida, então isto só ocorre brevemente).
+    if (!user?.id) {
+      setResponsibilities([])
+      setIsLoading(false)
+      setLoadError(null)
+      return
+    }
     loadResponsibilities()
-  }, [loadResponsibilities])
+  }, [loadResponsibilities, user?.id])
 
   // Ficha por URL: leitura autenticada independente do recorte do catálogo,
   // com guarda de retornos tardios ao trocar ID.
   const [urlResponsibility, setUrlResponsibility] = useState<Responsibility | null>(null)
   const [urlState, setUrlState] = useState<'loading' | 'ready' | 'notfound'>('loading')
 
+  // Geração de leitura da ficha: mudar de ID (ou recarregar) invalida
+  // qualquer resposta tardia de leitura anterior — nunca sobrescreve a ficha
+  // de outro ID nem aplica dados fora de ordem.
+  const sheetGenRef = useRef(0)
+
   useEffect(() => {
+    // Troca de ID encerra o modal (a edição era da ficha anterior).
+    setIsModalOpen(false)
+    setEditingResponsibility(null)
     if (!urlResponsibilityId) {
+      sheetGenRef.current += 1
       setUrlResponsibility(null)
       setUrlState('loading')
       return
     }
+    sheetGenRef.current += 1
+    const gen = sheetGenRef.current
     let cancelled = false
     setUrlResponsibility(null)
     setUrlState('loading')
     responsibilityService
       .getById(urlResponsibilityId)
       .then((r) => {
-        if (cancelled) return
+        if (cancelled || gen !== sheetGenRef.current) return
         setUrlResponsibility(r)
         setUrlState('ready')
       })
       .catch(() => {
-        if (cancelled) return
+        if (cancelled || gen !== sheetGenRef.current) return
         setUrlResponsibility(null)
         setUrlState('notfound')
       })
@@ -203,6 +222,52 @@ export const ResponsibilitiesPage: React.FC = () => {
     setIsModalOpen(true)
   }, [])
 
+  // Falha ao reatualizar a ficha: mantém o que já está visível (sem apagar
+  // dados nem fingir sucesso); o catálogo continua com o erro dele.
+  const refreshUrlResponsibility = useCallback(() => {
+    if (!urlResponsibilityId) return
+    sheetGenRef.current += 1
+    const gen = sheetGenRef.current
+    responsibilityService
+      .getById(urlResponsibilityId)
+      .then((r) => {
+        if (gen !== sheetGenRef.current) return
+        setUrlResponsibility(r)
+        setUrlState('ready')
+      })
+      .catch(() => {
+        // Silencioso de propósito: a ficha aberta permanece como está.
+      })
+  }, [urlResponsibilityId])
+
+  const handleModalOpenChange = useCallback((next: boolean) => {
+    if (!next) setEditingResponsibility(null)
+    setIsModalOpen(next)
+  }, [])
+
+  // Salvo confirmado: catálogo atualiza; se a ficha deste ID estiver aberta,
+  // ela também reflete o registro salvo (mesmo ID ao cancelar/salvar).
+  const handleSaved = useCallback(
+    (saved: Responsibility) => {
+      loadResponsibilities()
+      setUrlResponsibility((current) => (current && current.id === saved.id ? saved : current))
+      toast({ title: 'Salvo', description: 'Responsabilidade salva com sucesso.' })
+    },
+    [loadResponsibilities, toast],
+  )
+
+  // Catálogo/formulário — mesma instância em TODAS as telas (o early return
+  // da ficha ainda precisa renderizá-la para o Editar funcionar por cima).
+  const modalElement = (
+    <ResponsibilityModal
+      open={isModalOpen}
+      responsibility={editingResponsibility}
+      globalContext={contextFilter}
+      onOpenChange={handleModalOpenChange}
+      onSaved={handleSaved}
+    />
+  )
+
   // Ficha fora do recorte do catálogo: aviso sem trocar filtros.
   const outOfScope =
     urlResponsibility != null &&
@@ -227,8 +292,12 @@ export const ResponsibilitiesPage: React.FC = () => {
           globalContext={contextFilter}
           onBack={closeSheet}
           onEdit={() => openEdit(urlResponsibility)}
-          onChanged={loadResponsibilities}
+          onChanged={() => {
+            loadResponsibilities()
+            refreshUrlResponsibility()
+          }}
         />
+        {modalElement}
       </div>
     )
   }
@@ -443,19 +512,7 @@ export const ResponsibilitiesPage: React.FC = () => {
       )}
 
       {/* Formulário — aberto do catálogo OU da ficha (mesma instância). */}
-      <ResponsibilityModal
-        open={isModalOpen}
-        responsibility={editingResponsibility}
-        globalContext={contextFilter}
-        onOpenChange={(next) => {
-          if (!next) setEditingResponsibility(null)
-          setIsModalOpen(next)
-        }}
-        onSaved={() => {
-          loadResponsibilities()
-          toast({ title: 'Salvo', description: 'Responsabilidade salva com sucesso.' })
-        }}
-      />
+      {modalElement}
     </div>
   )
 }

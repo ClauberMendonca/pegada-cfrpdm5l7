@@ -20,6 +20,18 @@
 //   Validada na MESMA transação: existe, dono da sessão, mesmo contexto e
 //   ativa — antes de qualquer gravação. O caminho idempotente (já convertida)
 //   roda ANTES dessas checagens e nunca toca a Responsabilidade do destino.
+// - Estratégia opcional (4C1): data.strategy_id vai SOMENTE para
+//   actions.strategy_id de um Avanço COM Resultado validado — 0..1 grupo,
+//   NUNCA inferido por pai/título/Responsabilidade. Omitido ou string
+//   exatamente vazia = nenhum vínculo (contrato opcional vigente); tipo
+//   inválido é REJEITADO, não transformado em Nenhuma. Validada na MESMA
+//   transação via txApp (existe, dono da sessão, project_id EXATAMENTE o pai
+//   validado do novo Avanço, ativa — vínculo novo nunca usa grupo arquivado),
+//   ANTES de qualquer gravação. Avanço SOLTO com strategy_id e novo Resultado
+//   com strategy_id são rejeitados (projects não tem strategy_id). O caminho
+//   idempotente (já convertida) roda ANTES dessas checagens e devolve o
+//   destino EXISTENTE com duplicate:true — nunca lê nem ecoa a escolha da
+//   repetição, nunca altera a Estratégia do destino.
 // - Cria o destino e vincula a captura ATOMICAMENTE (mesma transação).
 // - Texto original (raw_text) nunca é alterado.
 //
@@ -150,6 +162,34 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       }
     }
 
+    // ---------- Estratégia opcional (4C1) ----------
+    // OPCIONAL e SEM inferência: omitido ou string EXATAMENTE vazia = nenhum
+    // vínculo. Qualquer outro tipo (null/array/objeto/número) é REJEITADO —
+    // nunca transformado em Nenhuma por trim/default; string só de espaços
+    // também é rejeitada (apenas '' exato significa Nenhuma).
+    const rawStrategyId = data.strategy_id
+    let strategyId = ''
+    if (rawStrategyId !== undefined) {
+      if (rawStrategyId === '') {
+        strategyId = ''
+      } else if (typeof rawStrategyId !== 'string') {
+        throw new BadRequestError('Estratégia informada é inválida.')
+      } else {
+        strategyId = rawStrategyId.trim()
+        if (!strategyId) {
+          throw new BadRequestError('Estratégia informada é inválida.')
+        }
+      }
+    }
+    if (target === 'project' && strategyId) {
+      // Novo Resultado não pertence a Estratégia de outro Resultado e projects
+      // NÃO tem strategy_id: não vazio é rejeitado, não ignorado nem copiado.
+      // Nenhuma Estratégia automática é criada na conversão de Resultado.
+      throw new BadRequestError(
+        'Estratégia não pode ser atribuída a um novo Resultado — o vínculo de Estratégia pertence ao Avanço.',
+      )
+    }
+
     // ---------- criação do destino + vínculo (mesma transação) ----------
     if (target === 'project') {
       const project = new Record(txApp.findCollectionByNameOrId('projects'))
@@ -200,6 +240,37 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       }
     }
 
+    // Estratégia (4C1): só Avanço COM Resultado, 0..1, SEM inferência por
+    // pai/título/Responsabilidade/contexto. Avanço SOLTO com strategy_id é
+    // rejeitado (inclusive com Responsabilidade direta).
+    if (strategyId && !projectId) {
+      throw new BadRequestError(
+        'Avanço sem Resultado não recebe estratégia — a estratégia pertence a um Resultado-pai.',
+      )
+    }
+    if (strategyId) {
+      // Vínculo NOVO: registro existe, dono derivado da sessão, project_id
+      // EXATAMENTE o pai validado do novo Avanço e status ativa — grupo
+      // arquivado por vínculo antigo de outro Avanço NÃO serve. Consultas pela
+      // MESMA txApp, ANTES de qualquer save de destino/captura (a guarda 4A de
+      // modelo permanece ativa e também cobre txApp.save).
+      let strategy
+      try {
+        strategy = txApp.findRecordById('strategies', strategyId)
+      } catch (_) {
+        throw new BadRequestError('Estratégia informada não existe.')
+      }
+      if (strategy.getString('user_id') !== userId) {
+        throw new ForbiddenError('Estratégia pertence a outro usuário.')
+      }
+      if (strategy.getString('project_id') !== projectId) {
+        throw new BadRequestError('Estratégia pertence a outro Resultado.')
+      }
+      if (strategy.getString('status') !== 'ativa') {
+        throw new BadRequestError('Estratégia arquivada não pode ser vinculada a um novo Avanço.')
+      }
+    }
+
     const action = new Record(txApp.findCollectionByNameOrId('actions'))
     action.set('user_id', userId) // derivado da sessão, nunca do payload
     action.set('title', title)
@@ -209,6 +280,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
     action.set('is_today_selected', false)
     if (projectId) action.set('project_id', projectId)
     if (responsibilityId) action.set('responsibility_id', responsibilityId) // só Avanço solto
+    if (strategyId) action.set('strategy_id', strategyId) // só Avanço com Resultado validado
     txApp.save(action)
 
     capture.set('status', 'convertida_acao')
@@ -275,6 +347,7 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           user_id: expanded.getString('user_id'),
           project_id: expanded.getString('project_id') || undefined,
           responsibility_id: expanded.getString('responsibility_id') || undefined,
+          strategy_id: expanded.getString('strategy_id') || undefined,
           title: expanded.getString('title'),
           context: expanded.getString('context'),
           status: expanded.getString('status'),

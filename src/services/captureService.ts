@@ -54,6 +54,14 @@ export const captureService = {
    * destino; a resposta marca `duplicate: true`).
    *
    * Texto original (raw_text) nunca é alterado pela conversão.
+   *
+   * FATIA 4C1 — strategy_id é OPCIONAL no transporte e vai SEMPRE explícito
+   * (o hook nunca infere vínculo por pai/título/Responsabilidade): omitido ou
+   * string exatamente vazia = nenhum vínculo; informado, é validado na
+   * transação do hook (existe/dono/mesmo Resultado/ativa — só Avanço COM
+   * Resultado). A resposta traz strategy_id do registro PERSISTIDO (inclusive
+   * no caminho idempotente), nunca a escolha da repetição. Nenhum cliente
+   * antigo precisa enviar o campo. Não enviar '' como default oculto.
    */
   async convert(
     captureId: string,
@@ -63,6 +71,7 @@ export const captureService = {
       context: 'vida' | 'trabalho'
       project_id?: string
       responsibility_id?: string
+      strategy_id?: string
       aspiration?: string
       controllable_delivery?: string
       completion_condition?: string

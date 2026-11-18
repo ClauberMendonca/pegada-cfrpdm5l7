@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T03:23:20.576Z",
+  "generatedAt": "2026-11-18T03:42:15.774Z",
   "collections": [
     {
       "name": "users",
@@ -215,7 +215,7 @@
         "list": "@request.auth.id != '' && user_id = @request.auth.id",
         "view": "@request.auth.id != '' && user_id = @request.auth.id",
         "create": "@request.auth.id != '' && user_id = @request.auth.id",
-        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.project_id:isset = false || project_id = '' || @request.body.project_id = '' || project_id.user_id = @request.auth.id) && (@request.body.responsibility_id:isset = false || responsibility_id = '' || @request.body.responsibility_id = '' || responsibility_id.user_id = @request.auth.id)",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.project_id:isset = false || project_id = '' || @request.body.project_id = '' || project_id.user_id = @request.auth.id) && (@request.body.responsibility_id:isset = false || responsibility_id = '' || @request.body.responsibility_id = '' || responsibility_id.user_id = @request.auth.id) && (@request.body.strategy_id:isset = false || strategy_id = '' || @request.body.strategy_id = '' || strategy_id.user_id = @request.auth.id)",
         "delete": null
       },
       "fields": [
@@ -316,6 +316,13 @@
           "required": false,
           "system": false,
           "collectionRef": "responsibilities"
+        },
+        {
+          "name": "strategy_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "strategies"
         }
       ],
       "indexes": [
@@ -324,7 +331,8 @@
         "CREATE INDEX idx_actions_status ON actions (user_id, status)",
         "CREATE INDEX idx_actions_today ON actions (user_id, is_today_selected)",
         "CREATE UNIQUE INDEX `idx_actions_seqnum_unique` ON `actions` (sequence_number)",
-        "CREATE INDEX `idx_actions_responsibility` ON `actions` (responsibility_id)"
+        "CREATE INDEX `idx_actions_responsibility` ON `actions` (responsibility_id)",
+        "CREATE INDEX `idx_actions_strategy` ON `actions` (strategy_id)"
       ]
     },
     {
@@ -846,6 +854,72 @@
         "CREATE INDEX idx_responsibilities_user ON responsibilities (user_id)",
         "CREATE INDEX idx_responsibilities_user_context ON responsibilities (user_id, context)",
         "CREATE INDEX idx_responsibilities_user_status ON responsibilities (user_id, status)"
+      ]
+    },
+    {
+      "name": "strategies",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && user_id = @request.auth.id && (@request.body.user_id:isset = false || @request.body.user_id = user_id) && (@request.body.project_id:isset = false || @request.body.project_id = project_id)",
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativa", "arquivada"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_strategies_user ON strategies (user_id)",
+        "CREATE INDEX idx_strategies_project ON strategies (project_id)",
+        "CREATE INDEX idx_strategies_user_project ON strategies (user_id, project_id)",
+        "CREATE INDEX idx_strategies_user_status ON strategies (user_id, status)"
       ]
     }
   ]

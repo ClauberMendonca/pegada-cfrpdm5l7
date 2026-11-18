@@ -21,6 +21,30 @@ export type ProgressLogType = 'executei' | 'resultado_aconteceu'
 // nativo identifica o grupo). Propósito de vida NÃO é campo nem gerador.
 export type ResponsibilityStatus = 'ativa' | 'arquivada'
 
+// FATIA 4A — ESTRATÉGIAS LOCAIS AO RESULTADO: fundação (schema/regras/tipos).
+// Estratégia é um grupo de caminho DENTRO de um Resultado (4B dará a interface).
+// Sem context/responsibility_id próprios (são os do Resultado vigente), sem
+// sequence_number/código, sem subtarefas/tags/ordenação manual ou catálogo
+// global. Título não é único (ID nativo identifica o grupo local). Propriedade
+// e Resultado-pai são FIXOS; exclusão definitiva não existe pela API comum —
+// arquivar/desarquivar é via status.
+export type StrategyStatus = 'ativa' | 'arquivada'
+
+export interface Strategy {
+  id: string
+  user_id: string
+  project_id: string // Resultado ao qual pertence — FIXO, imutável pela API
+  title: string // simples, até 200; só de espaços é inválido
+  description?: string // simples, até 3000; sem HTML/editor rico
+  status: StrategyStatus // criação normal começa 'ativa'
+  created: string
+  updated: string
+  expand?: {
+    user_id?: UserProfile
+    project_id?: Project
+  }
+}
+
 export interface Responsibility {
   id: string
   user_id: string
@@ -103,12 +127,22 @@ export interface ActionItem {
   // vínculo direto automaticamente ao sair de Resultado. Mesmo nome técnico do
   // campo de projects, sentido definido por este contrato.
   responsibility_id?: string
+  // FATIA 4A — Estratégia OPCIONAL (0..1) do MESMO Resultado do Avanço.
+  // Avanço SEM project_id: strategy_id DEVE ser vazio (Estratégia pertence a
+  // um Resultado-pai — mesmo com Responsabilidade direta). Vínculo NOVO exige
+  // Estratégia ativa; manter o vínculo ORIGINAL persistido é permitido mesmo
+  // com ela arquivada (edição histórica); remover/trocar é explícito. Trocar
+  // de Resultado mantendo estratégia incompatível é rejeitado pelo backend —
+  // resolva ('' ou ativa compatível) no MESMO patch. Conversão de capturas
+  // (contrato78) NÃO aceita strategy_id e nada é inferido por default.
+  strategy_id?: string
   created: string
   updated: string
   // expand relation optional
   expand?: {
     project_id?: Project
     responsibility_id?: Responsibility
+    strategy_id?: Strategy
   }
 }
 

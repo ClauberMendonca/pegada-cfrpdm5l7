@@ -9,6 +9,7 @@ import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { ProjectModal } from '@/components/ProjectModal'
 import { CompleteProjectDialog } from '@/components/CompleteProjectDialog'
+import { ResponsibilityReference } from '@/components/ResponsibilitySelect'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -373,6 +374,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <EntityNumberBadge kind="project" n={project.sequence_number} entityId={project.id} />
             <span className="min-w-0">{project.title}</span>
           </h1>
+          {/* 3C1 — Responsabilidade do Resultado confirmado: leitura autenticada
+              por ID ( ResponsibilitySelect ), discreta e secundária ao título. */}
+          <ResponsibilityReference id={project.responsibility_id || null} />
         </div>
 
         {/* Separação Pragmática: Aspiração vs Entrega Controlável */}

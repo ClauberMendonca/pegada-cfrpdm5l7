@@ -261,7 +261,7 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
           <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-center">
             <p className="text-sm text-foreground font-medium">Ainda não há itens vinculados.</p>
             <p className="text-xs text-muted-foreground mt-1">
-              A escolha de Responsabilidade nos formulários será ligada na próxima etapa.
+              Escolha a Responsabilidade nos formulários de Resultados e Avanços soltos.
             </p>
           </div>
         ) : hierarchy ? (

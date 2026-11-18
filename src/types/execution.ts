@@ -15,6 +15,26 @@ export type CaptureStatus = 'pendente' | 'convertida_projeto' | 'convertida_acao
 
 export type ProgressLogType = 'executei' | 'resultado_aconteceu'
 
+// FATIA 3A — RESPONSABILIDADES: base mínima (fundação da 3B/3C).
+// Responsabilidade é um compromisso contínuo assumido (não tarefa, estratégia
+// ou Resultado). Sem sequence_number/código R/AV; título não é único (ID
+// nativo identifica o grupo). Propósito de vida NÃO é campo nem gerador.
+export type ResponsibilityStatus = 'ativa' | 'arquivada'
+
+export interface Responsibility {
+  id: string
+  user_id: string
+  title: string // simples, até 200; só de espaços é inválido
+  description?: string // simples, até 3000; sem HTML/editor rico
+  context: EntityContext // 'vida' | 'trabalho' ('todos' é só filtro)
+  status: ResponsibilityStatus // criação normal começa 'ativa'
+  created: string
+  updated: string
+  expand?: {
+    user_id?: UserProfile
+  }
+}
+
 export interface UserProfile {
   id: string
   email: string
@@ -49,8 +69,16 @@ export interface Project {
   r_responsavel?: string
   // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
   sequence_number?: number
+  // FATIA 3A — Responsabilidade do Resultado: 0..1, opcional, vazio por padrão.
+  // Ausente/vazio é legítimo (não exige propósito nem grupo fictício "Nenhuma").
+  // Vínculo novo exige destino existente, mesmo dono, mesmo contexto e ativa
+  // (validado no backend, incl. caminho txApp da conversão).
+  responsibility_id?: string
   created: string
   updated: string
+  expand?: {
+    responsibility_id?: Responsibility
+  }
 }
 
 export interface ActionItem {
@@ -67,11 +95,20 @@ export interface ActionItem {
   description?: string // notas/orientações de execução (opcional; ausente = vazio)
   // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
   sequence_number?: number
+  // FATIA 3A — SOMENTE vínculo DIRETO do Avanço SOLTO (sem project_id).
+  // Avanço subordinado a Resultado NÃO tem vínculo direto: a responsabilidade
+  // EFETIVA é SEMPRE herdada de projects.responsibility_id do Resultado
+  // corrente e JAMAIS é gravada no Avanço (nem em logs/tempo). O backend
+  // rejeita patch que vá a Resultado mantendo vínculo direto, e não preenche
+  // vínculo direto automaticamente ao sair de Resultado. Mesmo nome técnico do
+  // campo de projects, sentido definido por este contrato.
+  responsibility_id?: string
   created: string
   updated: string
   // expand relation optional
   expand?: {
     project_id?: Project
+    responsibility_id?: Responsibility
   }
 }
 

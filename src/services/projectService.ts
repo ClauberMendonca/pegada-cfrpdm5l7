@@ -18,6 +18,9 @@ export interface CreateProjectInput {
   r_restricoes?: string
   r_riscos?: string
   r_responsavel?: string
+  /** FATIA 3C1 — vínculo opcional com Responsabilidade: ID nativo; '' remove;
+     OMITIR (undefined) em update mantém o vínculo atual. */
+  responsibility_id?: string
 }
 
 export type UpdateProjectInput = Partial<CreateProjectInput>

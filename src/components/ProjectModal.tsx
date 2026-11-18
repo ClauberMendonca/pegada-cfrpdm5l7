@@ -25,6 +25,7 @@ import { ChevronDown, Sparkles, Target, Compass, BookOpen } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { ResponsibilitySelect, useResponsibilityOptions } from '@/components/ResponsibilitySelect'
 
 interface ProjectModalProps {
   isOpen: boolean
@@ -58,6 +59,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       completionCondition: `${uid}-project-completion-condition`,
       deadline: `${uid}-project-deadline`,
       learningAsset: `${uid}-project-learning-asset`,
+      responsibility: `${uid}-project-responsibility`,
       rResultado: `${uid}-project-r-resultado`,
       rRazao: `${uid}-project-r-razao`,
       rReferencia: `${uid}-project-r-referencia`,
@@ -77,6 +79,9 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const [completionCondition, setCompletionCondition] = useState('')
   const [deadline, setDeadline] = useState('')
   const [learningAsset, setLearningAsset] = useState('')
+  // FATIA 3C1 — vínculo com Responsabilidade: ID nativo; '' = Nenhuma/remoção.
+  const [responsibilityId, setResponsibilityId] = useState('')
+  const responsibilityOptions = useResponsibilityOptions(isOpen)
 
   // Os 8 Rs (opcionais recolhíveis)
   const [is8RsOpen, setIs8RsOpen] = useState(false)
@@ -112,6 +117,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setRRiscos(projectToEdit.r_riscos || '')
         setRResponsavel(projectToEdit.r_responsavel || '')
 
+        setResponsibilityId(projectToEdit.responsibility_id || '')
         const hasAnyR = Boolean(
           projectToEdit.r_resultado ||
           projectToEdit.r_razao ||
@@ -132,6 +138,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setCompletionCondition('')
         setDeadline('')
         setLearningAsset('')
+        setResponsibilityId('')
 
         setRResultado('')
         setRRazao('')
@@ -172,6 +179,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         r_restricoes: rRestricoes.trim() || undefined,
         r_riscos: rRiscos.trim() || undefined,
         r_responsavel: rResponsavel.trim() || undefined,
+        // FATIA 3C1 — '' remove; ID escolhido vincula; nunca o sentinel 'none'.
+        responsibility_id: responsibilityId,
       }
 
       if (projectToEdit) {
@@ -279,6 +288,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               </Select>
             </div>
           </div>
+
+          {/* FATIA 3C1 — Responsabilidade (opcional), perto de Contexto.
+             Sentinel interno 'none'; opção nunca inferida, sempre escolhida. */}
+          <ResponsibilitySelect
+            id={ids.responsibility}
+            value={responsibilityId}
+            onChange={setResponsibilityId}
+            context={context}
+            options={responsibilityOptions}
+            disabled={isSaving}
+          />
 
           {/* Aspiração vs Entrega Controlável */}
           <div className="p-3.5 rounded-xl bg-muted border border-border space-y-3">

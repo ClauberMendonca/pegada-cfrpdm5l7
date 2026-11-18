@@ -41,6 +41,17 @@ import {
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { formatEntityTitle } from '@/lib/entityNumber'
+import { useAuth } from '@/contexts/AuthContext'
+import { PlannedExecutionFields } from '@/components/PlannedExecutionFields'
+import {
+  EMPTY_PLANNED,
+  isValidPlannedDate,
+  isValidTimezoneLiteral,
+  plannedChanged,
+  plannedOf,
+  plannedTimezoneOrFallback,
+  type PlannedExecution,
+} from '@/lib/plannedExecution'
 
 interface ActionModalProps {
   isOpen: boolean
@@ -63,6 +74,9 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   onStrategyCreated,
 }) => {
   const { toast } = useToast()
+  // FATIA 5B1 — fonte ÚNICA do fuso de um plano NOVO: user.timezone do useAuth
+  // atual (sem consulta/provedor novos e sem seletor/enumerador de fuso).
+  const { user } = useAuth()
   // BLOCO 4B — IDs estáveis e únicos por instância (useId no topo, antes de
   // qualquer retorno condicional): rótulos apontam para o controle efetivo
   // mesmo com dois modais de ação montados ao mesmo tempo.
@@ -123,6 +137,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [strategyModalOpen, setStrategyModalOpen] = useState(false)
   // Aviso da ESTRATÉGIA por transição de pai (distinto do foco/3C1).
   const [strategyNotice, setStrategyNotice] = useState<string | null>(null)
+  // FATIA 5B1 — planejamento (intenção LOCAL: dia/hora literais + fuso salvo,
+  // nunca instante). Tupla válida separada de entrada pendente/inválida; erro
+  // ligado ao campo. Recolher/trocar pai/Estratégia não mexe aqui.
+  const [planned, setPlanned] = useState<PlannedExecution>(EMPTY_PLANNED)
+  const [plannedOriginal, setPlannedOriginal] = useState<PlannedExecution>(EMPTY_PLANNED)
+  const [plannedUtcFallback, setPlannedUtcFallback] = useState(false)
+  const [plannedPendingInvalid, setPlannedPendingInvalid] = useState(false)
+  const [plannedError, setPlannedError] = useState<string | null>(null)
   const projectStrategies = useProjectStrategies(isOpen ? projectId : '')
 
   useEffect(() => {
@@ -162,6 +184,15 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         // FATIA 4B2 — edição começa no vínculo PERSISTIDO (nunca inferido).
         setStrategyId(actionToEdit.strategy_id || '')
         setPersistedStrategyId(actionToEdit.strategy_id || '')
+        // FATIA 5B1 — carrega o planejamento PERSISTIDO (ausentes → ''), sem
+        // canonicalizar/recalcular fuso; o original da abertura decide a
+        // comparação (retorno tardio de consulta não reinicializa a edição).
+        const loadedPlanned = plannedOf(actionToEdit)
+        setPlanned(loadedPlanned)
+        setPlannedOriginal(loadedPlanned)
+        setPlannedUtcFallback(false)
+        setPlannedPendingInvalid(false)
+        setPlannedError(null)
       } else {
         // FATIA 3C1/4B2 — criação: solto, escolha direta e Estratégia em Nenhuma.
         setStrategyId('')
@@ -178,6 +209,13 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsTodaySelected(true)
         setWaitingFor('')
         setDescription('')
+        // FATIA 5B1 — Novo SEM plano: data/hora/fuso vazios (nunca Hoje/prazo/
+        // 00:00/hora atual/data inferida); fuso é capturado só na 1ª escolha.
+        setPlanned(EMPTY_PLANNED)
+        setPlannedOriginal(EMPTY_PLANNED)
+        setPlannedUtcFallback(false)
+        setPlannedPendingInvalid(false)
+        setPlannedError(null)
       }
     }
   }, [isOpen, actionToEdit, defaultContext, defaultProjectId])
@@ -205,9 +243,95 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     return false
   }
 
+  // FATIA 5B1 — validação do planejamento ANTES de persistência/qualquer fluxo
+  // de foco: dia real AAAA-MM-DD (bissexto/mês curto), hora real HH:mm se
+  // houver, fuso explícito com dia. Vazio é válido; parcial/inválido bloqueia
+  // Salvar e conserva TODOS os campos (sem normalização silenciosa). Fuso
+  // salvo NÃO é reinterpretado localmente numa edição intocada — o backend 5A
+  // é a autoridade final.
+  const validatePlannedDraft = (): boolean => {
+    if (plannedPendingInvalid) {
+      setPlannedError(
+        'Há data ou hora incompleta no planejamento. Conclua o valor ou limpe o campo antes de salvar.',
+      )
+      return false
+    }
+    if (planned.date === '') {
+      if (planned.time !== '' || planned.timezone !== '') {
+        setPlannedError('Planejamento incompleto: informe a data ou remova o planejamento.')
+        return false
+      }
+      setPlannedError(null)
+      return true
+    }
+    if (!isValidPlannedDate(planned.date)) {
+      setPlannedError('Informe uma data planejada real (AAAA-MM-DD, incluindo anos bissextos).')
+      return false
+    }
+    if (planned.timezone === '') {
+      setPlannedError('O planejamento precisa do fuso. Remova o planejamento para salvar sem ele.')
+      return false
+    }
+    if (!isValidPlannedTime(planned.time)) {
+      setPlannedError('Informe uma hora planejada real (HH:mm) ou limpe o campo.')
+      return false
+    }
+    setPlannedError(null)
+    return true
+  }
+
+  // FATIA 5B1 — data planejada: '' vindo do controle pode ser limpeza válida
+  // por escolha explícita OU entrada parcial/inválida (validity/badInput
+  // nativo). Parcial mantém a tupla e bloqueia Salvar; limpeza remove o GRUPO
+  // inteiro em memória (dia/hora/fuso) — só Salvar grava.
+  const handlePlannedDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.currentTarget
+    const raw = el.value
+    if (raw === '' && el.validity.badInput) {
+      setPlannedPendingInvalid(true)
+      return
+    }
+    setPlannedPendingInvalid(false)
+    setPlannedError(null)
+    if (raw === '') {
+      setPlanned(EMPTY_PLANNED)
+      setPlannedUtcFallback(false)
+      return
+    }
+    if (planned.timezone === '') {
+      // Primeiro dia de um plano novo: captura o fuso do perfil (ou UTC
+      // explícito com aviso mantido em memória), sem substituir alias/literal
+      // por resolvedOptions nem usar Local/offset do dispositivo.
+      const tz = plannedTimezoneOrFallback(user?.timezone ?? '')
+      setPlanned({ date: raw, time: '', timezone: tz.timezone })
+      setPlannedUtcFallback(tz.usedFallback)
+      return
+    }
+    // Plano existente: mantém EXATAMENTE o fuso salvo (mesmo alterando dia).
+    setPlanned({ ...planned, date: raw })
+  }
+
+  // FATIA 5B1 — hora planejada: limpar só a hora conserva dia/fuso; entrada
+  // parcial mantém a tupla e bloqueia Salvar (nunca converte inválido em '').
+  const handlePlannedTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const el = e.currentTarget
+    const raw = el.value
+    if (raw === '' && el.validity.badInput) {
+      setPlannedPendingInvalid(true)
+      return
+    }
+    setPlannedPendingInvalid(false)
+    setPlannedError(null)
+    setPlanned((prev) => ({ ...prev, time: raw }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!title.trim()) return
+
+    // FATIA 5B1 — planejamento inválido/parcial bloqueia o envio ANTES de
+    // persistência e de qualquer fluxo de foco; todos os campos conservados.
+    if (!validatePlannedDraft()) return
 
     setIsSaving(true)
     try {
@@ -416,6 +540,28 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         // FATIA 4B2 — strategy_id: ID nativo, ou '' explícito de Nenhuma/remoção;
         // sem pai, sempre '' (nunca leva vínculo ao sair do Resultado).
         strategy_id: projectId ? strategyId : '',
+        // FATIA 5B1 — planejamento no MESMO patch de Salvar (um envio normal):
+        // - Novo sem plano: OMITIR os 3 campos (vazio nativo 5A);
+        // - Novo com plano / edição ALTERADA: os 3 valores finais coerentes
+        //   (retirar hora envia '' conservando dia/fuso; remover envia '' x3);
+        // - Edição INALTERADA: OMITIR os 3 — o original da abertura decide a
+        //   comparação, não retorno tardio de consulta.
+        // Nunca null/sentinel, segundo update ou default de Hoje/UTC/fuso.
+        ...(actionToEdit
+          ? plannedChanged(planned, plannedOriginal)
+            ? {
+                planned_date: planned.date,
+                planned_time: planned.time,
+                planned_timezone: planned.timezone,
+              }
+            : {}
+          : planned.date !== ''
+            ? {
+                planned_date: planned.date,
+                planned_time: planned.time,
+                planned_timezone: planned.timezone,
+              }
+            : {}),
         waiting_for: waitingFor.trim() || undefined,
         // DESCRIÇÃO OPCIONAL: preserva quebras de linha e acentos; vazio segue
         // explícito (string ''), nunca undefined — limpar o campo apaga no banco.
@@ -545,6 +691,19 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     const original = projectStrategies.items.find((s) => s.id === persistedStrategyId)
     return original?.status === 'arquivada'
   })()
+
+  // FATIA 5B1 — derivados do planejamento (rascunho vs original da abertura).
+  const hasPlannedDraft = planned.date !== ''
+  const plannedPristine = !plannedChanged(planned, plannedOriginal)
+  const profileTz = plannedTimezoneOrFallback(user?.timezone ?? '')
+  const keepsSavedTimezone =
+    hasPlannedDraft && planned.timezone !== '' && planned.timezone !== profileTz.timezone
+  // Fuso antigo que este navegador não reconhece: preservar o literal e avisar
+  // (nunca inventar UTC); backend 5A continua a autoridade final.
+  const savedTimezoneUnrecognized =
+    hasPlannedDraft && planned.timezone !== '' && !isValidTimezoneLiteral(planned.timezone)
+  // Hora só fica habilitada com data válida presente (nunca hora isolada).
+  const plannedTimeDisabled = hasPlannedDraft && !isValidPlannedDate(planned.date)
 
   // FATIA 3C1 — HERANÇA EM LEITURA: hook no topo, incondicional (antes de
   // qualquer retorno condicional), ÚNICO no modal — sem duplicar consulta/
@@ -753,6 +912,33 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               />
             </div>
           </div>
+
+          {/* FATIA 5B1 — Planejamento (opcional): intenção local (dia/hora no
+             fuso salvo, nunca instante; 00:00 explícita é válida; passado/
+             futuro permitidos). Rascunho em memória; recolher não muda
+             valores; Salvar é o único commit (patch único). A key reinicia a
+             apresentação a cada abertura/alvo, sem apagar o rascunho em uso. */}
+          <PlannedExecutionFields
+            key={`${isOpen ? 'open' : 'closed'}-${actionToEdit?.id ?? 'new'}`}
+            draft={planned}
+            profileTimezone={profileTz.timezone}
+            usingUtcFallback={plannedUtcFallback}
+            keepsSavedTimezone={keepsSavedTimezone}
+            savedTimezoneUnrecognized={savedTimezoneUnrecognized}
+            pristine={plannedPristine}
+            error={plannedError}
+            disableTime={plannedTimeDisabled}
+            disabled={isSaving}
+            onChangeDate={handlePlannedDateChange}
+            onChangeTime={handlePlannedTimeChange}
+            onRemove={() => {
+              // Em memória: limpa o grupo; só Salvar grava a remoção ('' x3).
+              setPlanned(EMPTY_PLANNED)
+              setPlannedUtcFallback(false)
+              setPlannedPendingInvalid(false)
+              setPlannedError(null)
+            }}
+          />
 
           {/* FATIA 4B2 — ESTRATÉGIA (opcional), local ao Resultado do formulário.
              Sem Resultado: sem seletor, escolha limpa (nunca herda/inferir).

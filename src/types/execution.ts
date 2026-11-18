@@ -146,6 +146,14 @@ export interface ActionItem {
   planned_date?: string
   planned_time?: string
   planned_timezone?: string
+  // FATIA 6A1 — REGISTRO DE CONCLUSÃO (fundação, sem tela): instante UTC da
+  // PRIMEIRA conclusão conhecida, gravado SOMENTE pelo backend (guarda de
+  // modelo action-completion.pb.js) na operação que efetivamente persistiu a
+  // marcação Feito. É âncora histórica mínima, NÃO o Dia do fato e NÃO prova
+  // que o status presente seja Feito. Preservado exatamente em qualquer
+  // edição/reabertura/reconclusão; legado (antes da 6A1) fica no vazio
+  // canônico — sem data inventada/inferida. Não é campo editável no app.
+  completed_at?: string
   created: string
   updated: string
   // expand relation optional

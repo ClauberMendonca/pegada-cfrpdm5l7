@@ -28,6 +28,12 @@ import { cn } from '@/lib/utils'
 import { ActionDescriptionBlock } from '@/components/ActionDescriptionBlock'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { formatEntityTitle } from '@/lib/entityNumber'
+import {
+  PlannedExecution,
+  plannedDisplayLabel,
+  plannedIncoherent,
+  plannedOf,
+} from '@/lib/plannedExecution'
 
 interface ActionRowProps {
   action: ActionItem
@@ -144,6 +150,40 @@ export const ActionRow: React.FC<ActionRowProps> = ({
 
   const isDone = action.status === 'feita'
   const isCanceled = action.status === 'cancelada'
+
+  // FATIA 5B2 — LEITURA do planejamento persistido (dia/hora/fuso literais do
+  // carregamento atual; nenhuma consulta por item, nada inventado/recalculado):
+  // dia real -> "Planejado: DD/MM/AAAA [às HH:mm] · Fuso: <literal salvo>";
+  // tupla parcial/impossível -> "Planejado: informação incompleta" (neutro);
+  // três campos ausentes/vazios -> sem metadado (nada de "Sem planejamento").
+  const planned: PlannedExecution = plannedOf(action)
+  const plannedLabel = plannedDisplayLabel(planned)
+  const showPlanned = planned.date !== '' || planned.time !== '' || planned.timezone !== ''
+  const plannedMetadata = (() => {
+    if (!showPlanned) return null
+    if (plannedLabel !== null) {
+      return (
+        <span className="flex items-center gap-1 text-sm tabular-nums text-muted-foreground">
+          <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>
+            Planejado: {plannedLabel}
+            {planned.timezone !== '' ? (
+              <>
+                {' · '}
+                <span className="whitespace-nowrap">Fuso: {planned.timezone}</span>
+              </>
+            ) : null}
+          </span>
+        </span>
+      )
+    }
+    return (
+      <span className="flex items-center gap-1 text-sm text-muted-foreground">
+        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <span>Planejado: informação incompleta</span>
+      </span>
+    )
+  })()
   // B1 — bloqueio só impede NOVA seleção de foco; retirada explícita de flag já
   // gravada, leitura, edição, descrição, progresso, tempo e status continuam.
   const canSelectFocus = !isDone && !focusBlockedReason && !saving
@@ -234,9 +274,11 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             {action.deadline && (
               <span className="flex items-center gap-1 text-sm tabular-nums text-muted-foreground">
                 <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                {formatCalendarDay(action.deadline)}
+                <span>Prazo: {formatCalendarDay(action.deadline)}</span>
               </span>
             )}
+
+            {plannedMetadata}
           </div>
 
           {action.waiting_for && (

@@ -22,6 +22,16 @@ export interface CreateActionInput {
    * métodos (status/Hoje/nextstep) continuam OMITINDO este campo.
    */
   strategy_id?: string
+  /**
+   * FATIA 5A — AGENDAMENTO SIMPLES (persistência de intenção, sem tela):
+   * planejamento LOCAL do Avanço. Omissão no update PRESERVA o planejamento;
+   * enviar '' limpa explicitamente aquele campo. Grupo coerente: com data o
+   * fuso é obrigatório; hora/fuso sem data é recusado pela guarda de modelo.
+   * Strings tipadas — nunca null; nenhum default de Hoje/UTC/fuso do perfil.
+   */
+  planned_date?: string
+  planned_time?: string
+  planned_timezone?: string
   status?: ActionStatus
   deadline?: string
   is_next_step?: boolean

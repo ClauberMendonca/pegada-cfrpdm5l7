@@ -136,6 +136,16 @@ export interface ActionItem {
   // resolva ('' ou ativa compatível) no MESMO patch. Conversão de capturas
   // (contrato78) NÃO aceita strategy_id e nada é inferido por default.
   strategy_id?: string
+  // FATIA 5A — AGENDAMENTO SIMPLES (persistência de intenção, sem tela):
+  // planejamento LOCAL do Avanço — dia-calendário YYYY-MM-DD, hora local
+  // HH:mm opcional (vazia = dia inteiro; 00:00 explícita é válida e nunca
+  // default) e fuso IANA explícito ou UTC. Vazio canônico dos três = SEM
+  // agendamento; com data, fuso é obrigatório; hora/fuso sem data é inválido
+  // (recusado pela guarda de modelo). deadline NÃO é data planejada; não há
+  // instante UTC derivado — trocar fuso do perfil não reescreve planejamentos.
+  planned_date?: string
+  planned_time?: string
+  planned_timezone?: string
   created: string
   updated: string
   // expand relation optional

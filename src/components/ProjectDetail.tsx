@@ -87,6 +87,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false)
   // Modals
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
+  // FATIA 4B2 — criação INLINE de Estratégia confirmada no ActionModal:
+  // incrementa tick para a StrategySection recarregar SOMENTE sua lista de
+  // grupos (sem tocar logs/tempo/handlers). Mínimo necessário na ficha.
+  const [inlineStrategyTick, setInlineStrategyTick] = useState(0)
   const [editingAction, setEditingAction] = useState<ActionItem | null>(null)
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
   const [logAction, setLogAction] = useState<ActionItem | null>(null)
@@ -728,6 +732,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           projectLabel={formatEntityTitle('project', project.sequence_number, project.title)}
           actions={actions}
           renderActions={renderActionBlocks}
+          refreshTick={inlineStrategyTick}
         />
 
         {actions.length === 0 && (
@@ -860,6 +865,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         defaultContext={project.context}
         defaultProjectId={project.id}
         onSaved={loadData}
+        onStrategyCreated={() => setInlineStrategyTick((t) => t + 1)}
       />
 
       {/* Progress Log Modal */}

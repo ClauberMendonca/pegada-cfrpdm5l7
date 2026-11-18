@@ -35,6 +35,10 @@ export interface StrategySectionProps {
   actions: ActionItem[]
   /** Renderizador existente dos Avanços (abertos/Feitos, Cards/Lista, handlers da ficha). */
   renderActions: (list: ActionItem[]) => React.ReactNode
+  /** 4B2 — tick incrementado quando o ActionModal confirma criação INLINE de
+     Estratégia: recarrega SOMENTE esta lista de grupos (hook82), sem tocar
+     logs/tempo/handlers. Opcional — chamadores antigos continuam compatíveis. */
+  refreshTick?: number
 }
 
 const ARCHIVE_HINT =
@@ -45,6 +49,7 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
   projectLabel,
   actions,
   renderActions,
+  refreshTick,
 }) => {
   const { toast } = useToast()
   const strategies = useProjectStrategies(projectId)
@@ -67,6 +72,14 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
     setArchiveTarget(null)
     setArchiveError(null)
   }, [projectId])
+
+  // 4B2 — criação inline confirmada no ActionModal: recarrega SOMENTE a lista
+  // de grupos deste Resultado (mesmo que o Avanço seja cancelado depois).
+  useEffect(() => {
+    if (refreshTick === undefined || refreshTick === 0) return
+    strategies.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTick])
 
   const grouped = !strategies.loading && !strategies.error
   const groups = useMemo(

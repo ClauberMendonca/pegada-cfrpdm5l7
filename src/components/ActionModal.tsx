@@ -24,6 +24,11 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
+import { StrategySelect } from '@/components/StrategySelect'
+import { StrategyModal } from '@/components/StrategyModal'
+import { Strategy } from '@/types/execution'
+import { useProjectStrategies } from '@/hooks/use-project-strategies'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import {
   ResponsibilitySelect,
   ResponsibilityOptionsState,
@@ -44,6 +49,8 @@ interface ActionModalProps {
   defaultContext?: EntityContext
   defaultProjectId?: string
   onSaved?: () => void
+  /** 4B2 — FICHA: recarrega os grupos do Resultado após criação inline confirmada. */
+  onStrategyCreated?: (saved: Strategy) => void
 }
 
 export const ActionModal: React.FC<ActionModalProps> = ({
@@ -53,6 +60,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   defaultContext = 'trabalho',
   defaultProjectId,
   onSaved,
+  onStrategyCreated,
 }) => {
   const { toast } = useToast()
   // BLOCO 4B — IDs estáveis e únicos por instância (useId no topo, antes de
@@ -75,6 +83,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
       nextHelp: `${uid}-action-next-help`,
       responsibility: `${uid}-action-responsibility`,
       inheritedResponsibility: `${uid}-action-inherited-responsibility`,
+      strategy: `${uid}-action-strategy`,
     }),
     [uid],
   )
@@ -105,10 +114,22 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [persistedProjectId, setPersistedProjectId] = useState('')
   const [persistedResponsibilityId, setPersistedResponsibilityId] = useState('')
   const responsibilityOptions: ResponsibilityOptionsState = useResponsibilityOptions(isOpen)
+  // FATIA 4B2 — Estratégia: escolha em memória; modo PERSISTIDO da abertura
+  // (comparação/avisos nunca usam escolha provisória). '' = Nenhuma.
+  const [strategyId, setStrategyId] = useState('')
+  const [persistedStrategyId, setPersistedStrategyId] = useState('')
+  // Criação inline: reusa o StrategyModal REAL 4B1 (Dialog padrão) sobre este
+  // modal, SEM outro editor; abrir/fechar não altera o rascunho do Avanço.
+  const [strategyModalOpen, setStrategyModalOpen] = useState(false)
+  // Aviso da ESTRATÉGIA por transição de pai (distinto do foco/3C1).
+  const [strategyNotice, setStrategyNotice] = useState<string | null>(null)
+  const projectStrategies = useProjectStrategies(isOpen ? projectId : '')
 
   useEffect(() => {
     if (isOpen) {
       setFocusNotice(null)
+      setStrategyNotice(null)
+      setStrategyModalOpen(false)
       projectService
         .list()
         .then((list) => {
@@ -138,8 +159,13 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setPersistedProjectId(actionToEdit.project_id || '')
         setPersistedResponsibilityId(actionToEdit.responsibility_id || '')
         setDirectResponsibilityId(actionToEdit.responsibility_id || '')
+        // FATIA 4B2 — edição começa no vínculo PERSISTIDO (nunca inferido).
+        setStrategyId(actionToEdit.strategy_id || '')
+        setPersistedStrategyId(actionToEdit.strategy_id || '')
       } else {
-        // FATIA 3C1 — criação: solto com escolha direta em Nenhuma.
+        // FATIA 3C1/4B2 — criação: solto, escolha direta e Estratégia em Nenhuma.
+        setStrategyId('')
+        setPersistedStrategyId('')
         setPersistedProjectId('')
         setPersistedResponsibilityId('')
         setDirectResponsibilityId('')
@@ -345,6 +371,21 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         }
       }
 
+      // FATIA 4B2 — ESTRATÉGIA antes de persistir: escolha incompatível com o
+      // pai (grupo de outro Resultado ou vínculo pendente de decisão ao sair
+      // do pai) NÃO envia — exige Nenhuma ou ativa do Resultado do formulário
+      // (ou confirmação de remoção ao ficar solto). Falha mantém o rascunho.
+      if (strategyIncompatibleWithDraft) {
+        toast({
+          variant: 'destructive',
+          title: 'Avanço não salvo',
+          description:
+            strategyNotice ??
+            'A estratégia selecionada pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa do resultado atual antes de salvar.',
+        })
+        return
+      }
+
       const payload: CreateActionInput = {
         title: title.trim(),
         context,
@@ -372,6 +413,9 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               ...(effToday !== prevToday ? { is_today_selected: effToday } : {}),
             }
           : { is_next_step: effNext, is_today_selected: effToday }),
+        // FATIA 4B2 — strategy_id: ID nativo, ou '' explícito de Nenhuma/remoção;
+        // sem pai, sempre '' (nunca leva vínculo ao sair do Resultado).
+        strategy_id: projectId ? strategyId : '',
         waiting_for: waitingFor.trim() || undefined,
         // DESCRIÇÃO OPCIONAL: preserva quebras de linha e acentos; vazio segue
         // explícito (string ''), nunca undefined — limpar o campo apaga no banco.
@@ -400,6 +444,23 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // FATIA 4B2 — criação INLINE de Estratégia: o StrategyModal REAL 4B1 é
+  // renderizado sobre este modal com o Resultado confirmado. Salvar chama
+  // strategyService.create UMA vez (dentro do StrategyModal); incluir o grupo
+  // confirmado nas opções é local ao hook82 (upsert); callback da FICHA
+  // recarrega os grupos do Resultado mesmo se o Avanço for cancelado depois.
+  // Cancelar/Escape do editor não gravam nada e voltam ao rascunho atual.
+  const handleInlineStrategySaved = (saved: Strategy, created: boolean) => {
+    if (!created) return
+    // Dono/Resultado/sessão/abertura do Avanço devem corresponder ao snapshot
+    // que iniciou a criação — retorno tardio não seleciona nem feedback alheio.
+    if (!isOpen || !projectId || saved.project_id !== projectId) return
+    projectStrategies.upsert(saved)
+    setStrategyId(saved.id)
+    setStrategyNotice(null)
+    onStrategyCreated?.(saved)
   }
 
   // B5 — projetos permitidos para novos vínculos; vínculo atual sempre legível.
@@ -435,6 +496,55 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const persistedDirectName = persistedResponsibilityId
     ? (responsibilityOptions.list.find((r) => r.id === persistedResponsibilityId)?.title ?? null)
     : null
+
+  // FATIA 4B2 — ESTRATÉGIA por transição de pai (experimentar pai não persiste):
+  // - solto -> Resultado: Nenhuma (nunca herda);
+  // - Resultado A -> B com Estratégia de A: mantém o ID em memória IDENTIFICADO
+  //   como incompatível (aviso antes de Salvar exige Nenhuma ou ativa de B);
+  // - Resultado -> solto: mantém o ID em memória com aviso "Remover vínculo";
+  //   enquanto incompatível, NÃO envia;
+  // - mesmo Resultado: mantém a escolha atual.
+  // Cancelar/fechar/remoção explicitamente escolhida não é desfeita por
+  // retorno tardio de consulta; o original da abertura segue intocado aqui.
+  const handleProjectChange = (nextProjectId: string) => {
+    setProjectId(nextProjectId)
+    if (!nextProjectId) {
+      if (strategyId) {
+        setStrategyNotice(
+          'Remover vínculo de Estratégia: ao salvar, o vínculo com a estratégia será removido. Escolha “Nenhuma” para confirmar a remoção, ou volte ao Resultado para mantê-la.',
+        )
+      }
+      return
+    }
+    if (!strategyId) return
+    const chosen = projectStrategies.items.find((s) => s.id === strategyId)
+    if (chosen && chosen.project_id === nextProjectId) {
+      setStrategyNotice(null)
+      return
+    }
+    setStrategyNotice(
+      'A estratégia selecionada pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa do novo resultado antes de salvar.',
+    )
+  }
+
+  // FATIA 4B2 — coerência da ESTRATÉGIA com o pai do formulário (rascunho):
+  // escolha incompatível em memória é identificada, nunca tratada como opção
+  // válida nem persistida. Comparação usa o modo PERSISTIDO da abertura.
+  const selectedStrategy = strategyId
+    ? (projectStrategies.items.find((s) => s.id === strategyId) ?? null)
+    : null
+  const strategyIncompatibleWithDraft =
+    Boolean(strategyId) &&
+    Boolean(projectId) &&
+    selectedStrategy !== null &&
+    selectedStrategy.project_id !== projectId
+  // FATIA 4B2 — vínculo ORIGINAL (persistido na abertura) ARQUIVADO: legível,
+  // mantível/removível, sem bloquear outras edições e sem virar opção nova.
+  const originalStrategyArchived = (() => {
+    if (!persistedStrategyId) return false
+    const original = projectStrategies.items.find((s) => s.id === persistedStrategyId)
+    return original?.status === 'arquivada'
+  })()
 
   // FATIA 3C1 — HERANÇA EM LEITURA: hook no topo, incondicional (antes de
   // qualquer retorno condicional), ÚNICO no modal — sem duplicar consulta/
@@ -594,7 +704,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               <Label htmlFor={ids.project} className="text-sm font-medium text-foreground">
                 Resultado vinculado (opcional)
               </Label>
-              <Select value={projectId} onValueChange={(v) => setProjectId(v === 'none' ? '' : v)}>
+              {/* FATIA 4B2 — transições de pai + ESTRATÉGIA (nunca persiste provisório) */}
+              <Select
+                value={projectId}
+                onValueChange={(v) => handleProjectChange(v === 'none' ? '' : v)}
+              >
                 <SelectTrigger
                   id={ids.project}
                   className="truncate border-input bg-card text-base text-foreground sm:text-sm"
@@ -639,6 +753,40 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               />
             </div>
           </div>
+
+          {/* FATIA 4B2 — ESTRATÉGIA (opcional), local ao Resultado do formulário.
+             Sem Resultado: sem seletor, escolha limpa (nunca herda/inferir).
+             Estratégia pertence ao Resultado — não recebe responsibility_id. */}
+          {projectId && selectedProject && (
+            <StrategySelect
+              id={ids.strategy}
+              value={strategyId}
+              onChange={(nextId) => {
+                setStrategyId(nextId)
+                setStrategyNotice(null)
+              }}
+              options={projectStrategies}
+              projectLabel={
+                selectedProject
+                  ? `[${selectedProject.context}] ${formatEntityTitle('project', selectedProject.sequence_number, selectedProject.title)}`
+                  : ''
+              }
+              onOpenCreate={() => setStrategyModalOpen(true)}
+              incompatible={strategyIncompatibleWithDraft}
+              originalArchived={originalStrategyArchived}
+              disabled={isSaving}
+            />
+          )}
+          {projectId && !selectedProject && (
+            <p className="text-xs text-muted-foreground">
+              Estratégias ficam disponíveis quando o resultado selecionado é carregado.
+            </p>
+          )}
+          {strategyNotice && (
+            <p role="alert" className="text-xs font-medium text-ginga-warning">
+              {strategyNotice}
+            </p>
+          )}
 
           {/* BLOCO 5.1 — motivo legível de bloqueio ao criar com vínculo encerrado. */}
           {blockedByClosedProject && (
@@ -785,6 +933,33 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </Button>
           </DialogFooter>
         </form>
+
+        {/* FATIA 4B2 — editor de Estratégia REUSADO (4B1) sobre o modal, para o
+           Resultado CONFIRMADO do formulário. Duas decisões separadas: salvar
+           aqui cria o grupo (não o Avanço); Salvar do Avanço é outro clique.
+           Ajuda curta de escopo do grupo criado (não há transação grupo↔Avanço). */}
+        {strategyModalOpen && selectedProject && (
+          <>
+            <p className="sr-only">
+              Salvar cria a estratégia neste resultado. Cancelar o avanço depois não apaga a
+              estratégia.
+            </p>
+            <StrategyModal
+              open
+              strategy={null}
+              projectId={selectedProject.id}
+              projectLabel={
+                selectedProject
+                  ? `[${selectedProject.context}] ${formatEntityTitle('project', selectedProject.sequence_number, selectedProject.title)}`
+                  : ''
+              }
+              onOpenChange={(next) => {
+                if (!next) setStrategyModalOpen(false)
+              }}
+              onSaved={handleInlineStrategySaved}
+            />
+          </>
+        )}
       </DialogContent>
     </Dialog>
   )

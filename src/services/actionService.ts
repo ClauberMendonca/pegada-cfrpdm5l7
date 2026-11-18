@@ -14,6 +14,14 @@ export interface CreateActionInput {
    * copiada). Outros métodos (status/foco) continuam OMITINDO este campo.
    */
   responsibility_id?: string
+  /**
+   * FATIA 4B2 — Estratégia OPCIONAL (0..1) do MESMO Resultado do Avanço.
+   * NOVO AVANÇO / Nenhuma envia ''; REMOÇÃO explícita na edição envia '';
+   * manter o vínculo persistido OMITE o campo; escolha nova envia o ID nativo.
+   * Avanço solto (sem project_id) envia '' — nunca ID de outro pai. Outros
+   * métodos (status/Hoje/nextstep) continuam OMITINDO este campo.
+   */
+  strategy_id?: string
   status?: ActionStatus
   deadline?: string
   is_next_step?: boolean
@@ -93,46 +101,50 @@ export const actionService = {
   },
 
   async unsetNextStep(id: string): Promise<ActionItem> {
-    return pb.collection('actions').update<ActionItem>(id, {
-      is_next_step: false,
-    })
+    return pb.collection('actions').update<ActionItem>(
+      id,
+      {
+        is_next_step: false,
+      },
+      {
+        expand: 'project_id',
+      },
+    )
   },
 
   async setTodaySelected(id: string, selected: boolean): Promise<ActionItem> {
-    const patch: Partial<ActionItem> = {
-      is_today_selected: selected,
-    }
-    if (!selected) {
-      patch.is_next_step = false
-    }
-    return pb.collection('actions').update<ActionItem>(id, patch, {
-      expand: 'project_id',
-    })
+    return pb.collection('actions').update<ActionItem>(
+      id,
+      {
+        is_today_selected: selected,
+      },
+      {
+        expand: 'project_id',
+      },
+    )
   },
 
-  async updateStatus(id: string, status: ActionStatus, waiting_for?: string): Promise<ActionItem> {
-    const patch: Record<string, unknown> = { status }
-    if (waiting_for !== undefined) {
-      patch.waiting_for = waiting_for
+  async updateStatus(id: string, status: ActionStatus, reason?: string): Promise<ActionItem> {
+    const data: Record<string, unknown> = { status }
+    if (status === 'aguardando' || status === 'bloqueada') {
+      data.waiting_for = reason || ''
     }
-    // Note: Concluir uma ação NÃO encerra o projeto nem dá o resultado como garantido
-    if (status === 'feita' || status === 'cancelada') {
-      patch.is_next_step = false
-      patch.is_today_selected = false
-    }
-    return pb.collection('actions').update<ActionItem>(id, patch, {
+    return pb.collection('actions').update<ActionItem>(id, data, {
       expand: 'project_id',
     })
   },
 
   async clearAllNextSteps(exceptId?: string): Promise<void> {
-    const list = await pb.collection('actions').getFullList<ActionItem>({
-      filter: `is_next_step = true`,
+    const userId = pb.authStore.model?.id
+    if (!userId) throw new Error('Usuário não autenticado')
+    const nextSteps = await pb.collection('actions').getFullList<ActionItem>({
+      filter: `is_next_step = true && user_id = '${userId}'`,
     })
-    for (const item of list) {
-      if (item.id !== exceptId) {
-        await pb.collection('actions').update(item.id, { is_next_step: false })
-      }
+    for (const action of nextSteps) {
+      if (exceptId && action.id === exceptId) continue
+      await pb.collection('actions').update<ActionItem>(action.id, {
+        is_next_step: false,
+      })
     }
   },
 }

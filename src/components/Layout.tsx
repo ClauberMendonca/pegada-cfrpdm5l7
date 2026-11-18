@@ -20,6 +20,7 @@ import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
 import { useTimer } from '@/contexts/TimeContext'
+import { LifePurposeBar } from '@/components/LifePurposeBar'
 
 /** Símbolo temporário: monograma G + nome, até haver asset oficial no projeto. */
 function GingaMark() {
@@ -156,43 +157,58 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Mobile / tablet header (< 1024 px) */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-card lg:hidden">
-        <div className="flex h-14 items-center justify-between gap-3 px-4">
-          <div className="flex items-center gap-2">
-            <GingaMark />
-            <span className="text-lg font-semibold tracking-tight text-foreground">Ginga</span>
-          </div>
-          <div className="flex items-center gap-1">
-            {user?.timezone && (
-              <span className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:flex">
-                <Clock className="h-4 w-4" aria-hidden="true" />
-                <span className="max-w-[140px] truncate">{user.timezone.replace('_', ' ')}</span>
-              </span>
-            )}
-            {/* ENTREGA 2A — acesso a Configurações pela área de perfil (mobile:
-               cabeçalho da conta, ícone + rótulo acessível, >= 44 px). */}
-            <NavLink
-              to="/configuracoes"
-              aria-label="Configurações do perfil"
-              className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-muted hover:text-foreground"
-            >
-              <Settings className="h-5 w-5" aria-hidden="true" />
-            </NavLink>
-            <Button
-              variant="ghost"
-              onClick={logout}
-              aria-label="Sair da sessão"
-              className="min-h-11 min-w-11 px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <LogOut className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Sair</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
       <div className="flex min-w-0 flex-1 flex-col lg:ml-56">
+        {/* ENTREGA 2B — UMA pilha sticky no topo da coluna de conteúdo: no
+           mobile/tablet reúne o cabeçalho da conta já existente (marca/perfil/
+           configurações/sair) e a faixa do propósito; no desktop o header é
+           escondido (lg:hidden) e fica só a faixa. Uma única sticky — sem
+           cabeçalho duplicado, sem faixa fixed, sem offsets mágicos. */}
+        <div className="sticky top-0 z-40 bg-background lg:z-10 lg:bg-transparent">
+          {/* Mobile / tablet header (< 1024 px) */}
+          <header className="w-full border-b border-border bg-card lg:hidden">
+            <div className="flex h-14 items-center justify-between gap-3 px-4">
+              <div className="flex items-center gap-2">
+                <GingaMark />
+                <span className="text-lg font-semibold tracking-tight text-foreground">Ginga</span>
+              </div>
+              <div className="flex items-center gap-1">
+                {user?.timezone && (
+                  <span className="hidden items-center gap-1.5 text-sm text-muted-foreground sm:flex">
+                    <Clock className="h-4 w-4" aria-hidden="true" />
+                    <span className="max-w-[140px] truncate">
+                      {user.timezone.replace('_', ' ')}
+                    </span>
+                  </span>
+                )}
+                {/* ENTREGA 2A — acesso a Configurações pela área de perfil (mobile:
+                   cabeçalho da conta, ícone + rótulo acessível, >= 44 px). */}
+                <NavLink
+                  to="/configuracoes"
+                  aria-label="Configurações do perfil"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-muted hover:text-foreground"
+                >
+                  <Settings className="h-5 w-5" aria-hidden="true" />
+                </NavLink>
+                <Button
+                  variant="ghost"
+                  onClick={logout}
+                  aria-label="Sair da sessão"
+                  className="min-h-11 min-w-11 px-3 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">Sair</span>
+                </Button>
+              </div>
+            </div>
+          </header>
+
+          {/* Faixa global do propósito: montada uma vez, fora do Outlet,
+             lendo useAuth().user.life_purpose (perfil compartilhado) — sem
+             cópia por página, provider, cache ou consulta nova. Fica ABAIXO
+             dos diálogos/menus (z dentro da pilha do conteúdo, overlay z-50). */}
+          <LifePurposeBar />
+        </div>
+
         {/* Contexto global sempre acessível, no topo do conteúdo */}
         <div className="border-b border-border bg-background px-4 py-3 lg:px-8">
           <div className="mx-auto w-full max-w-[1080px]">{contextSwitcher}</div>

@@ -184,3 +184,63 @@ export type RecurrenceAfterCompletionInput = {
 // Orçamentos estáveis (espelham as constantes do módulo CJS).
 export const RECURRENCE_MAX_PREVIEW = 5
 export const RECURRENCE_MAX_PERIODS = 10000
+
+// ---------------------------------------------------------------------------
+// FATIA 6B1 — SÉRIE RECORRENTE PERSISTIDA (fundação, sem geração/UI)
+// ---------------------------------------------------------------------------
+
+/** Estados da SÉRIE (nunca do Avanço/Resultado). Criação começa em draft. */
+export type RecurrenceSeriesStatus = 'draft' | 'active' | 'paused' | 'stopped'
+
+/**
+ * Template v1 da série: espelho EXATO do contrato validado no backend
+ * (recurrence-series-guards.pb.js) — APENAS estes campos. Título simples
+ * obrigatório (não copia "AV-N" da fonte); descrição opcional; context é
+ * vida|trabalho; IDs reais (não labels/códigos).
+ */
+export type RecurrenceSeriesTemplate = {
+  version: 1
+  title: string
+  description?: string
+  context: EntityContextLike
+  project_id?: string
+  responsibility_id?: string
+  strategy_id?: string
+}
+
+/** 'vida' | 'trabalho' — espelho local para não criar dependência circular com execution.ts. */
+export type EntityContextLike = 'vida' | 'trabalho'
+
+/**
+ * Definição persistida de uma série recorrente (coleção recurrence_series,
+ * migration 0015). A fonte (source_action_id) é pertencimento/procedência —
+ * NÃO é implicitamente a ocorrência 1 e NÃO é configuração idêntica a cada
+ * edição. revision é a revisão da CONFIGURAÇÃO (não contador de ocorrências);
+ * na fundação vale sempre 1. rule/template são OBJETOS JSON (nunca string
+ * serializada). Escrita pela API comum é BLOQUEADA — comandos nativos futuros
+ * persistirão por caminho interno.
+ */
+export interface RecurrenceSeries {
+  id: string
+  user_id: string // dono, imutável
+  source_action_id: string // Avanço de origem, mesmo dono, imutável
+  status: RecurrenceSeriesStatus
+  rule: RecurrenceRule // objeto JSON da regra v1
+  template: RecurrenceSeriesTemplate // objeto JSON v1
+  revision: number // inteiro positivo, inicial 1
+  created: string
+  updated: string
+}
+
+/**
+ * Identidade OPCIONAL de ocorrência em um Avanço (campos de
+ * src/types/execution.ts). Tupla coerente: série vazia ⇔ ordinal 0/revisão 0;
+ * série informada exige ordinal >= 1 e revisão >= 1 (versão corrente da série
+ * — nesta fundação, 1). Uma vez atribuída, imutável (não troca/remove em
+ * edição normal, reabertura, reconclusão, cancelamento ou parada da série).
+ */
+export type ActionRecurrenceIdentity = {
+  recurrence_series_id: string
+  recurrence_ordinal: number
+  recurrence_revision: number
+}

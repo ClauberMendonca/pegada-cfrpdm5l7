@@ -154,6 +154,20 @@ export interface ActionItem {
   // edição/reabertura/reconclusão; legado (antes da 6A1) fica no vazio
   // canônico — sem data inventada/inferida. Não é campo editável no app.
   completed_at?: string
+  // FATIA 6B1 — IDENTIDADE OPCIONAL DE OCORRÊNCIA (fundação, sem tela): série
+  // recorrente da qual este Avanço é uma ocorrência. Vazios canônicos
+  // ('' / 0 / 0) = Avanço comum, SEM identidade. Tupla coerente validada e
+  // tornada IMUTÁVEL pelo backend (recurrence-series-guards.pb.js): série
+  // informada exige ordinal >= 1 e revisão >= 1 existente na versão corrente
+  // da série (nesta fundação, 1); série vazia exige ordinal 0/revisão 0; série
+  // do MESMO dono do Avanço. Nada é inferido de planned_date, título,
+  // posição de lista, conclusão ou sequence_number — IDs/ordinal/revisão
+  // ficam fora do texto. Campos TÉCNICOS: não editáveis pelo cliente comum
+  // (guarda de request rejeita presença no payload); o app NÃO os reenvia por
+  // spread. Uma ocorrência continua recebendo sequence_number normal.
+  recurrence_series_id?: string
+  recurrence_ordinal?: number
+  recurrence_revision?: number
   created: string
   updated: string
   // expand relation optional

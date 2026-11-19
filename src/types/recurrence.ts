@@ -244,3 +244,65 @@ export type ActionRecurrenceIdentity = {
   recurrence_ordinal: number
   recurrence_revision: number
 }
+
+// ---------------------------------------------------------------------------
+// FATIA 6B2A — COMANDOS DE GESTÃO: TRANSPORTE (hook recurrence-series-commands)
+// ---------------------------------------------------------------------------
+
+/**
+ * Registro normalizado DEVOLVIDO pelas rotas nativas (POST e GET). Espelho do
+ * serializer do hook recurrence-series-commands.pb.js: rule/template chegam
+ * como objetos JSON simples (nunca string), instantes no formato nativo.
+ * NÃO afirma que a série está pronta/ativa/concluída — é o estado persistido.
+ */
+export type RecurrenceSeriesPayload = {
+  id: string
+  user_id: string
+  source_action_id: string
+  status: RecurrenceSeriesStatus
+  revision: number
+  rule: RecurrenceRule // objeto JSON (nunca string serializada)
+  template: RecurrenceSeriesTemplate // objeto JSON v1
+  created: string
+  updated: string
+}
+
+/**
+ * Envelope de entrada do POST /backend/v1/recurrence/series — EXATAMENTE estas
+ * três chaves. source_action_id é o ID nativo do Avanço fonte;
+ * expected_source_updated é o LITERAL exato do `updated` da leitura autenticada
+ * da fonte (formato UTC/precisão PocketBase — sem conversão/parsing/trim/trunca-
+ * mento de milissegundos, sem relógio do cliente, sem comparar Date). rule é o
+ * objeto v1 do avaliador 6A2. Qualquer campo extra (user_id, template, status,
+ * revision, ordinal, identidade, completed_at, flags…) é rejeitado pelo
+ * servidor — inclusive com valor igual.
+ */
+export type RecurrenceSeriesRegisterInput = {
+  source_action_id: string
+  expected_source_updated: string
+  rule: RecurrenceRule
+}
+
+/**
+ * Resposta do POST: {series, duplicate, config_applied}. duplicate:true =
+ * série já existia para a fonte (qualquer status — devolvida SEM alteração;
+ * retentativa não é comando de edição, tem prioridade sobre expected_updated
+ * desatualizado e sobre validação semântica da rule); config_applied:true =
+ * o rascunho foi efetivamente criado a partir da fonte fresca validada.
+ */
+export type RecurrenceSeriesRegisterResult = {
+  series: RecurrenceSeriesPayload
+  duplicate: boolean
+  config_applied: boolean
+}
+
+/**
+ * Resposta do GET /backend/v1/recurrence/series/{seriesId}: {series} — o que
+ * está PERSISTIDO, sem revalidar a regra nem reler a origem. Erros do contrato:
+ * 401 sem sessão, 400 envelope/regra inválidos, 404 destino
+ * inexistente/inacessível (de outro dono), 409 updated divergente/Avanço já
+ * ocorrência de outra série/conflito de índice, 500 falha de armazenamento.
+ */
+export type RecurrenceSeriesGetResult = {
+  series: RecurrenceSeriesPayload
+}

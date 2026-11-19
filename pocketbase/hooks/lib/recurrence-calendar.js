@@ -519,10 +519,12 @@ function previewCalendar(rule, from_date, limit) {
         ordinal++
         if (cand.getTime() < fromUtc.getTime()) continue // prevista, mas antes de from_date
       } else {
-        if (cand.getTime() < fromUtc.getTime()) continue // anterior a from_date
+        // Ordinal é ESTÁVEL no calendário original desde start_date: candidata
+        // anterior a from_date (mas >= start_date) também consome ordinal —
+        // prévia a partir de data posterior NÃO reinicia em 1.
         ordinal++
+        if (cand.getTime() < fromUtc.getTime()) continue // anterior a from_date
       }
-
       dates.push({ date: candStr, ordinal: ordinal })
       if (dates.length >= lim) break
     }

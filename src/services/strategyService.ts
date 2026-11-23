@@ -10,15 +10,19 @@
  */
 import pb from '@/lib/pocketbase/client'
 import { Strategy, StrategyStatus } from '@/types/execution'
+import { op } from '@/lib/pegada/api'
 
 export interface CreateStrategyInput {
   title: string
   description?: string
+  /** PEGADA — sinal de teste da aposta. */
+  test_signal?: string
 }
 
 export interface UpdateStrategyInput {
   title?: string
   description?: string
+  test_signal?: string
 }
 
 /** Literal de filtro PocketBase com escape de aspas e barras invertidas. */
@@ -37,29 +41,28 @@ export const strategyService = {
     })
   },
 
-  /** Criação: dono da sessão, Resultado confirmado, status inicial 'ativa'. */
+  /** PEGADA — escrita pela API do método. */
   async create(projectId: string, data: CreateStrategyInput): Promise<Strategy> {
-    const userId = pb.authStore.model?.id
-    if (!userId) throw new Error('Usuário não autenticado')
-    return pb.collection('strategies').create<Strategy>({
-      user_id: userId,
-      project_id: projectId,
-      title: data.title,
-      description: data.description ?? '',
-      status: 'ativa',
+    const res = await op<{ estrategia_id: string }>('criar_estrategia', {
+      resultado_id: projectId,
+      titulo: data.title,
+      descricao: data.description ?? '',
+      sinal_de_teste: data.test_signal,
     })
+    return pb.collection('strategies').getOne<Strategy>(res.resultado!.estrategia_id)
   },
 
-  /** Edição: envia somente os campos informados (nunca dono/Resultado/status). */
   async update(id: string, data: UpdateStrategyInput): Promise<Strategy> {
-    const patch: Record<string, string> = {}
-    if (data.title !== undefined) patch.title = data.title
-    if (data.description !== undefined) patch.description = data.description
-    return pb.collection('strategies').update<Strategy>(id, patch)
+    const entrada: Record<string, unknown> = { estrategia_id: id }
+    if (data.title !== undefined) entrada.titulo = data.title
+    if (data.description !== undefined) entrada.descricao = data.description
+    if (data.test_signal !== undefined) entrada.sinal_de_teste = data.test_signal
+    await op('editar_estrategia', entrada)
+    return pb.collection('strategies').getOne<Strategy>(id)
   },
 
-  /** Arquivar/reativar: comando explícito que muda SOMENTE o status. */
   async setStatus(id: string, status: StrategyStatus): Promise<Strategy> {
-    return pb.collection('strategies').update<Strategy>(id, { status })
+    await op('arquivar_estrategia', { estrategia_id: id, reativar: status === 'ativa' })
+    return pb.collection('strategies').getOne<Strategy>(id)
   },
 }

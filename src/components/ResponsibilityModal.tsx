@@ -186,7 +186,7 @@ export function ResponsibilityModal({
               aria-describedby={titleHelpId}
               aria-invalid={titleTooLong}
               disabled={busy}
-              placeholder="Ex.: Saúde, Família, Produto Ginga"
+              placeholder="Ex.: Saúde, Família, Produto Pegada"
               className={cn(titleTooLong && 'border-destructive')}
             />
             <p id={titleHelpId} className="text-xs text-muted-foreground">

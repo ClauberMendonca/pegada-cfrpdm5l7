@@ -45,6 +45,7 @@ import {
 } from '@/components/ViewToggle'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 function projectBlockLabel(p: Project): string {
   if (p.status === 'pausado') return 'resultado pausado'
@@ -128,6 +129,7 @@ export const TodayPage: React.FC = () => {
       setIsLoading(false)
     }
   }, [contextFilter, toast])
+  usePegadaMudou(loadData)
 
   useEffect(() => {
     loadData()

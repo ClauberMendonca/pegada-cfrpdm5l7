@@ -33,6 +33,7 @@ import {
   ViewToggle,
 } from '@/components/ViewToggle'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 const STATUS_TABS = ['todos', 'ativo', 'rascunho', 'pausado', 'concluido', 'arquivado'] as const
 
@@ -111,6 +112,7 @@ export const ProjectsPage: React.FC = () => {
       setIsLoading(false)
     }
   }, [contextFilter, statusFilter, toast])
+  usePegadaMudou(loadProjects)
 
   useEffect(() => {
     loadProjects()

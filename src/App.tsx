@@ -13,6 +13,7 @@ import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ResponsibilitiesPage } from '@/pages/ResponsibilitiesPage'
 import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
+import { ActivityPage } from '@/pages/ActivityPage'
 import { LoginPage } from '@/pages/LoginPage'
 import NotFound from '@/pages/NotFound'
 
@@ -50,6 +51,8 @@ const ProtectedRoutes = () => {
             {/* ENTREGA 3B — catálogo e ficha de Responsabilidades (mesmos
                 providers/Layout; ficha retomável via ?id=). */}
             <Route path="/responsabilidades" element={<ResponsibilitiesPage />} />
+            {/* PEGADA — histórico com desfazer, propostas de agentes e agentes. */}
+            <Route path="/atividade" element={<ActivityPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
             {/* ENTREGA 2A — Configurações do perfil (propósito de vida). */}
             <Route path="/configuracoes" element={<SettingsPage />} />

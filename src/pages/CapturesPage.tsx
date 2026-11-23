@@ -68,6 +68,7 @@ import {
   plannedTimezoneOrFallback,
   type PlannedExecution,
 } from '@/lib/plannedExecution'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -323,6 +324,7 @@ export const CapturesPage: React.FC = () => {
       setIsLoading(false)
     }
   }, [filterStatus, toast])
+  usePegadaMudou(loadCaptures)
 
   useEffect(() => {
     loadCaptures()

@@ -49,6 +49,7 @@ import {
   useViewPreference,
   ViewToggle,
 } from '@/components/ViewToggle'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message
@@ -164,6 +165,7 @@ export const ActionsPage: React.FC = () => {
       setIsLoading(false)
     }
   }, [contextFilter, toast])
+  usePegadaMudou(loadData)
 
   useEffect(() => {
     loadData()

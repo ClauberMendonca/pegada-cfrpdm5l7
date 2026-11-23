@@ -1,8 +1,14 @@
 import pb from '@/lib/pocketbase/client'
-import { ActionItem, EntityContext, ActionStatus } from '@/types/execution'
+import { ActionItem, ActionKind, EntityContext, ActionStatus } from '@/types/execution'
+import { op, lote, LoteItem, RegraError } from '@/lib/pegada/api'
+import { pedirRastro, TipoComRastro } from '@/lib/pegada/rastro'
 
 export interface CreateActionInput {
   title: string
+  /** PEGADA — um dos seis tipos de avanço. Padrão: 'acao'. */
+  kind?: ActionKind
+  /** PEGADA — rastro (conclusão/decisão/destino) de Estudo, Reflexão e Ideia. */
+  trail?: string
   context: EntityContext
   /** DESCRIÇÃO OPCIONAL: texto livre de notas/orientações (não é waiting_for). */
   description?: string
@@ -41,6 +47,77 @@ export interface CreateActionInput {
 
 export type UpdateActionInput = Partial<CreateActionInput>
 
+// PEGADA — todas as escritas passam pela API do método (/backend/v1/pegada).
+// As assinaturas foram mantidas para as telas existentes continuarem iguais.
+
+const EXPAND = { expand: 'project_id,project_id.responsibility_id,strategy_id,responsibility_id' }
+
+export const notificarMudanca = () => window.dispatchEvent(new Event('pegada:mudou'))
+
+function linkInput(data: UpdateActionInput): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {}
+  if (data.project_id !== undefined) out.resultado_id = data.project_id
+  if (data.strategy_id !== undefined) out.estrategia_id = data.strategy_id
+  if (data.responsibility_id !== undefined) out.responsabilidade_id = data.responsibility_id
+  if (data.context !== undefined) out.contexto = data.context
+  return Object.keys(out).length ? out : null
+}
+
+function editInput(data: UpdateActionInput): Record<string, unknown> | null {
+  const out: Record<string, unknown> = {}
+  if (data.title !== undefined) out.titulo = data.title
+  if (data.kind !== undefined) out.tipo = data.kind
+  if (data.description !== undefined) out.descricao = data.description
+  if (data.deadline !== undefined) out.prazo = data.deadline
+  if (data.planned_date !== undefined) out.data_planejada = data.planned_date
+  if (data.planned_time !== undefined) out.hora_planejada = data.planned_time
+  if (data.waiting_for !== undefined) out.aguardando = data.waiting_for
+  return Object.keys(out).length ? out : null
+}
+
+function statusOps(current: ActionItem, status: ActionStatus, reason?: string): LoteItem[] {
+  const id = current.id
+  if (status === current.status) return []
+  if (status === 'feita')
+    return [{ op: 'concluir_avanco', entrada: { avanco_id: id, rastro: reason } }]
+  if (status === 'cancelada')
+    return [{ op: 'cancelar_avanco', entrada: { avanco_id: id, motivo: reason } }]
+  const ops: LoteItem[] = []
+  if (current.status === 'feita' || current.status === 'cancelada') {
+    ops.push({ op: 'reabrir_avanco', entrada: { avanco_id: id } })
+  }
+  if (status !== 'pronta' || ops.length === 0) {
+    ops.push({
+      op: 'mudar_situacao_avanco',
+      entrada: { avanco_id: id, situacao: status, motivo: reason },
+    })
+  }
+  return ops
+}
+
+/** Conclui pedindo o rastro quando a regra exigir (Estudo, Reflexão, Ideia). */
+async function concluir(action: ActionItem, rastro?: string, desfazer = true): Promise<void> {
+  try {
+    await op(
+      'concluir_avanco',
+      { avanco_id: action.id, rastro },
+      { desfazer, onDesfeito: notificarMudanca },
+    )
+  } catch (err) {
+    if (err instanceof RegraError && err.regra === 'REGRA_DO_RASTRO') {
+      const texto = await pedirRastro((action.kind || 'estudo') as TipoComRastro, action.title)
+      if (!texto) throw new Error('Conclusão cancelada: falta o rastro.')
+      await op(
+        'concluir_avanco',
+        { avanco_id: action.id, rastro: texto },
+        { desfazer, onDesfeito: notificarMudanca },
+      )
+      return
+    }
+    throw err
+  }
+}
+
 export const actionService = {
   async list(contextFilter?: EntityContext, projectId?: string): Promise<ActionItem[]> {
     const filters: string[] = []
@@ -54,107 +131,116 @@ export const actionService = {
     return pb.collection('actions').getFullList<ActionItem>({
       filter,
       sort: '-is_next_step,-is_today_selected,-created',
-      expand: 'project_id',
+      ...EXPAND,
     })
   },
 
   async getById(id: string): Promise<ActionItem> {
-    return pb.collection('actions').getOne<ActionItem>(id, {
-      expand: 'project_id',
-    })
+    return pb.collection('actions').getOne<ActionItem>(id, EXPAND)
   },
 
   async create(data: CreateActionInput): Promise<ActionItem> {
-    const userId = pb.authStore.model?.id
-    if (!userId) throw new Error('Usuário não autenticado')
-
-    // If marked as is_next_step, unmark previous next_steps first to ensure singular next step
-    if (data.is_next_step) {
-      await actionService.clearAllNextSteps()
+    const res = await op<{ avanco_id: string }>('criar_avanco', {
+      titulo: data.title,
+      tipo: data.kind || 'acao',
+      resultado_id: data.project_id || undefined,
+      estrategia_id: data.strategy_id || undefined,
+      responsabilidade_id: data.project_id ? undefined : data.responsibility_id || undefined,
+      contexto: data.context,
+      descricao: data.description || undefined,
+      prazo: data.deadline || undefined,
+      data_planejada: data.planned_date || undefined,
+      hora_planejada: data.planned_time || undefined,
+      aguardando: data.waiting_for || undefined,
+      para_hoje: data.is_today_selected === true,
+      principal: data.is_next_step === true,
+    })
+    const id = res.resultado!.avanco_id
+    if (data.status && data.status !== 'pronta' && data.status !== 'aguardando') {
+      const created = await actionService.getById(id)
+      const ops = statusOps(created, data.status, data.waiting_for)
+      if (ops.length) await lote(ops)
     }
-
-    return pb.collection('actions').create<ActionItem>(
-      {
-        user_id: userId,
-        status: data.status || 'pronta',
-        is_next_step: data.is_next_step ?? false,
-        is_today_selected: data.is_today_selected ?? (data.is_next_step ? true : false),
-        ...data,
-      },
-      {
-        expand: 'project_id',
-      },
-    )
+    return actionService.getById(id)
   },
 
   async update(id: string, data: UpdateActionInput): Promise<ActionItem> {
-    if (data.is_next_step) {
-      await actionService.clearAllNextSteps(id)
+    const current = await actionService.getById(id)
+    const ops: LoteItem[] = []
+    const edit = editInput(data)
+    if (edit) ops.push({ op: 'editar_avanco', entrada: { avanco_id: id, ...edit } })
+    const links = linkInput(data)
+    if (links) ops.push({ op: 'ligar_avanco', entrada: { avanco_id: id, ...links } })
+    if (
+      data.is_today_selected !== undefined &&
+      data.is_today_selected !== current.is_today_selected
+    ) {
+      ops.push({
+        op: 'escolher_para_hoje',
+        entrada: { avanco_id: id, hoje: data.is_today_selected },
+      })
     }
-    return pb.collection('actions').update<ActionItem>(id, data, {
-      expand: 'project_id',
-    })
+    if (data.is_next_step === true && !current.is_next_step) {
+      ops.push({ op: 'definir_avanco_principal', entrada: { avanco_id: id } })
+    } else if (data.is_next_step === false && current.is_next_step) {
+      ops.push({ op: 'definir_avanco_principal', entrada: { avanco_id: '' } })
+    }
+    let concluirDepois = false
+    if (data.status !== undefined && data.status !== current.status) {
+      if (data.status === 'feita') concluirDepois = true
+      else ops.push(...statusOps(current, data.status, data.waiting_for))
+    }
+    if (ops.length) await lote(ops)
+    if (concluirDepois) await concluir(await actionService.getById(id), data.trail, false)
+    return actionService.getById(id)
   },
 
   async setAsNextStep(id: string): Promise<ActionItem> {
-    await actionService.clearAllNextSteps(id)
-    return pb.collection('actions').update<ActionItem>(
-      id,
-      {
-        is_next_step: true,
-        is_today_selected: true,
-      },
-      {
-        expand: 'project_id',
-      },
+    await op(
+      'definir_avanco_principal',
+      { avanco_id: id },
+      { desfazer: true, onDesfeito: notificarMudanca },
     )
+    return actionService.getById(id)
   },
 
   async unsetNextStep(id: string): Promise<ActionItem> {
-    return pb.collection('actions').update<ActionItem>(
-      id,
-      {
-        is_next_step: false,
-      },
-      {
-        expand: 'project_id',
-      },
-    )
+    const current = await actionService.getById(id)
+    if (current.is_next_step) {
+      await op(
+        'definir_avanco_principal',
+        { avanco_id: '' },
+        { desfazer: true, onDesfeito: notificarMudanca },
+      )
+    }
+    return actionService.getById(id)
   },
 
   async setTodaySelected(id: string, selected: boolean): Promise<ActionItem> {
-    return pb.collection('actions').update<ActionItem>(
-      id,
-      {
-        is_today_selected: selected,
-      },
-      {
-        expand: 'project_id',
-      },
+    await op(
+      'escolher_para_hoje',
+      { avanco_id: id, hoje: selected },
+      { desfazer: true, onDesfeito: notificarMudanca },
     )
+    return actionService.getById(id)
   },
 
   async updateStatus(id: string, status: ActionStatus, reason?: string): Promise<ActionItem> {
-    const data: Record<string, unknown> = { status }
-    if (status === 'aguardando' || status === 'bloqueada') {
-      data.waiting_for = reason || ''
+    const current = await actionService.getById(id)
+    if (status === 'feita') {
+      await concluir(current, reason)
+    } else {
+      const ops = statusOps(current, status, reason)
+      if (ops.length === 1) {
+        await op(ops[0].op, ops[0].entrada, { desfazer: true, onDesfeito: notificarMudanca })
+      } else if (ops.length > 1) {
+        await lote(ops)
+      }
     }
-    return pb.collection('actions').update<ActionItem>(id, data, {
-      expand: 'project_id',
-    })
+    return actionService.getById(id)
   },
 
-  async clearAllNextSteps(exceptId?: string): Promise<void> {
-    const userId = pb.authStore.model?.id
-    if (!userId) throw new Error('Usuário não autenticado')
-    const nextSteps = await pb.collection('actions').getFullList<ActionItem>({
-      filter: `is_next_step = true && user_id = '${userId}'`,
-    })
-    for (const action of nextSteps) {
-      if (exceptId && action.id === exceptId) continue
-      await pb.collection('actions').update<ActionItem>(action.id, {
-        is_next_step: false,
-      })
-    }
+  async clearAllNextSteps(): Promise<void> {
+    await op('definir_avanco_principal', { avanco_id: '' })
   },
 }

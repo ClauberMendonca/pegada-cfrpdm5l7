@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import pb from '@/lib/pocketbase/client'
+import { op } from '@/lib/pegada/api'
 import { UserProfile } from '@/types/execution'
 import { mapUserProfile } from '@/lib/profileMapper'
 
@@ -86,7 +87,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateLifePurpose = async (text: string) => {
     if (!user) throw new Error('Sem sessão ativa para salvar o propósito.')
     const sessionId = user.id
-    const updated = await pb.collection('users').update(sessionId, { life_purpose: text })
+    // PEGADA — o Propósito é escolha do dono e passa pela API do método
+    // (histórico com desfazer). A escrita direta em users.life_purpose é recusada.
+    await op('definir_proposito', { texto: text })
+    const updated = await pb.collection('users').getOne(sessionId)
     if (pb.authStore.isValid && pb.authStore.model?.id === sessionId) {
       setUser(mapUserProfile(updated))
     }

@@ -49,6 +49,7 @@ import {
   ViewToggle,
 } from '@/components/ViewToggle'
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 interface ProjectDetailProps {
   projectId: string
@@ -117,6 +118,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       setIsLoading(false)
     }
   }, [projectId, toast])
+  usePegadaMudou(loadData)
 
   useEffect(() => {
     loadData()

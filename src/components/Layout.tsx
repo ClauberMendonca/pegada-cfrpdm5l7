@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Anchor,
   Compass,
+  History,
   MoreHorizontal,
   LogOut,
   Briefcase,
@@ -24,16 +25,17 @@ import { cn } from '@/lib/utils'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
 import { useTimer } from '@/contexts/TimeContext'
 import { LifePurposeBar } from '@/components/LifePurposeBar'
+import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
-/** Símbolo temporário: monograma G + nome, até haver asset oficial no projeto. */
-function GingaMark() {
+/** Símbolo temporário: monograma P + nome, até haver asset oficial no projeto. */
+function PegadaMark() {
   return (
     <span
       aria-hidden="true"
       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-primary ring-1 ring-primary/20"
     >
-      G
+      P
     </span>
   )
 }
@@ -60,6 +62,7 @@ export default function Layout() {
     { to: '/responsabilidades', label: 'Responsabilidades', icon: Anchor },
     { to: '/capturas', label: 'Capturas', icon: Inbox },
     { to: '/revisao', label: 'Revisão', icon: Compass },
+    { to: '/atividade', label: 'Atividade', icon: History },
   ]
 
   // ENTREGA 3B — cinco alvos confortáveis no fundo do celular: os quatro
@@ -112,8 +115,8 @@ export default function Layout() {
       {/* Desktop sidebar (>= 1024 px) */}
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-56 lg:flex-col lg:border-r lg:border-border lg:bg-card lg:px-4 lg:py-6">
         <div className="flex items-center gap-3 px-2">
-          <GingaMark />
-          <span className="text-xl font-semibold tracking-tight text-foreground">Ginga</span>
+          <PegadaMark />
+          <span className="text-xl font-semibold tracking-tight text-foreground">Pegada</span>
         </div>
 
         <nav aria-label="Principal" className="mt-8 flex flex-col gap-1">
@@ -186,8 +189,8 @@ export default function Layout() {
           <header className="w-full border-b border-border bg-card lg:hidden">
             <div className="flex h-14 items-center justify-between gap-3 px-4">
               <div className="flex items-center gap-2">
-                <GingaMark />
-                <span className="text-lg font-semibold tracking-tight text-foreground">Ginga</span>
+                <PegadaMark />
+                <span className="text-lg font-semibold tracking-tight text-foreground">Pegada</span>
               </div>
               <div className="flex items-center gap-1">
                 {user?.timezone && (
@@ -241,6 +244,7 @@ export default function Layout() {
           )}
         >
           <Outlet />
+          <RastroPromptHost />
         </main>
       </div>
 

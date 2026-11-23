@@ -1,7 +1,7 @@
 import pb from '@/lib/pocketbase/client'
-import { CaptureItem, CaptureStatus, Project, ActionItem } from '@/types/execution'
-import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { ClientResponseError } from 'pocketbase'
+import { CaptureItem, CaptureStatus, Project, ActionItem, ActionKind } from '@/types/execution'
+import { op, RegraError } from '@/lib/pegada/api'
+import { notificarMudanca } from '@/services/actionService'
 
 export interface CreateCaptureInput {
   raw_text: string
@@ -23,45 +23,35 @@ export const captureService = {
     })
   },
 
-  async create(raw_text: string): Promise<CaptureItem> {
-    const userId = pb.authStore.model?.id
-    if (!userId) throw new Error('Usuário não autenticado')
+  async getById(id: string): Promise<CaptureItem> {
+    return pb.collection('captures').getOne<CaptureItem>(id)
+  },
 
-    return pb.collection('captures').create<CaptureItem>({
-      user_id: userId,
-      raw_text,
-      status: 'pendente',
-    })
+  // PEGADA — escrita pela API do método.
+  async create(raw_text: string): Promise<CaptureItem> {
+    const res = await op<{ captura_id: string }>('capturar', { texto: raw_text })
+    return captureService.getById(res.resultado!.captura_id)
   },
 
   async updateText(id: string, raw_text: string): Promise<CaptureItem> {
-    return pb.collection('captures').update<CaptureItem>(id, { raw_text })
+    await op('editar_captura', { captura_id: id, texto: raw_text })
+    return captureService.getById(id)
   },
 
   async discard(id: string): Promise<CaptureItem> {
-    // Arquivamento/descarte lógico sem exclusão definitiva
-    return pb.collection('captures').update<CaptureItem>(id, {
-      status: 'descartada',
-    })
+    await op(
+      'descartar_captura',
+      { captura_id: id },
+      { desfazer: true, onDesfeito: notificarMudanca },
+    )
+    return captureService.getById(id)
   },
 
   /**
-   * Converte uma captura em Projeto ou Ação através da rota nativa autenticada
-   * do PocketBase (hook capture-convert.pb.js), que executa TUDO dentro de uma
-   * única transação: valida sessão/dono/estado, cria o destino, vincula a
-   * captura e responde com o destino real — inclusive quando a captura já
-   * estava convertida (idempotente: retry/concorrência não cria segundo
-   * destino; a resposta marca `duplicate: true`).
-   *
-   * Texto original (raw_text) nunca é alterado pela conversão.
-   *
-   * FATIA 4C1 — strategy_id é OPCIONAL no transporte e vai SEMPRE explícito
-   * (o hook nunca infere vínculo por pai/título/Responsabilidade): omitido ou
-   * string exatamente vazia = nenhum vínculo; informado, é validado na
-   * transação do hook (existe/dono/mesmo Resultado/ativa — só Avanço COM
-   * Resultado). A resposta traz strategy_id do registro PERSISTIDO (inclusive
-   * no caminho idempotente), nunca a escolha da repetição. Nenhum cliente
-   * antigo precisa enviar o campo. Não enviar '' como default oculto.
+   * Processa a captura em Resultado ou Avanço pela operação processar_captura
+   * (uma transação: cria o destino e vincula a captura, com histórico e
+   * desfazer). Se a captura já tinha sido processada, devolve o destino real
+   * com duplicate: true, como a rota antiga fazia.
    */
   async convert(
     captureId: string,
@@ -69,44 +59,63 @@ export const captureService = {
     data: {
       title: string
       context: 'vida' | 'trabalho'
+      kind?: ActionKind
       project_id?: string
       responsibility_id?: string
       strategy_id?: string
       aspiration?: string
       controllable_delivery?: string
       completion_condition?: string
-      /**
-       * FATIA 5C1 — Planejamento LOCAL opcional do NOVO Avanço (mesma tupla da
-       * 5A): planned_date 'YYYY-MM-DD', planned_time 'HH:mm' ('' = sem hora;
-       * 00:00 explícita permanece 00:00) e planned_timezone (IANA/UTC explícito).
-       * Só faz sentido com target:'action' — novo Resultado não recebe
-       * planejamento. Valores passam exatos (sem trim/default); a validação da
-       * tupla é da guarda 5A dentro da transação do hook. Omitidos = sem
-       * planejamento (clientes antigos não precisam enviá-los). Nenhum
-       * chamador atual os envia ainda — a interface vem na fatia 5C2.
-       */
+      deadline?: string
       planned_date?: string
       planned_time?: string
       planned_timezone?: string
     },
   ): Promise<ConvertResult> {
-    const authId = pb.authStore.model?.id
-    if (!authId) throw new Error('Usuário não autenticado')
-
+    const dados: Record<string, unknown> =
+      target === 'project'
+        ? {
+            titulo: data.title,
+            contexto: data.context,
+            responsabilidade_id: data.responsibility_id || undefined,
+            como_sei: data.completion_condition || undefined,
+            prazo: data.deadline || undefined,
+            situacao: data.deadline ? 'ativo' : 'rascunho',
+            _legado: {
+              aspiration: data.aspiration,
+              controllable_delivery: data.controllable_delivery,
+            },
+          }
+        : {
+            titulo: data.title,
+            tipo: data.kind || 'acao',
+            contexto: data.context,
+            resultado_id: data.project_id || undefined,
+            estrategia_id: data.strategy_id || undefined,
+            responsabilidade_id: data.project_id ? undefined : data.responsibility_id || undefined,
+            data_planejada: data.planned_date || undefined,
+            hora_planejada: data.planned_time || undefined,
+          }
+    let duplicate = false
     try {
-      const result = await pb.send<ConvertResult>(`backend/v1/pc/captures/${captureId}/convert`, {
-        method: 'POST',
-        body: { target, data },
+      await op('processar_captura', {
+        captura_id: captureId,
+        destino: target === 'project' ? 'resultado' : 'avanco',
+        dados,
       })
-      return result
-    } catch (err: unknown) {
-      // Mensagem legível para falhas da rota nativa (400/401/403/404/409).
-      if (err instanceof ClientResponseError) {
-        const msg =
-          (err.response as { message?: string } | undefined)?.message || getErrorMessage(err)
-        throw new Error(msg || `Falha na conversão (HTTP ${err.status}).`)
-      }
-      throw err
+    } catch (err) {
+      if (err instanceof RegraError && err.regra === 'CAPTURA_JA_PROCESSADA') duplicate = true
+      else throw err
     }
+    const capture = await captureService.getById(captureId)
+    if (capture.status === 'convertida_projeto' && capture.converted_project_id) {
+      const t = await pb.collection('projects').getOne<Project>(capture.converted_project_id)
+      return { duplicate, target_type: 'project', target: t, capture }
+    }
+    if (capture.status === 'convertida_acao' && capture.converted_action_id) {
+      const t = await pb.collection('actions').getOne<ActionItem>(capture.converted_action_id)
+      return { duplicate, target_type: 'action', target: t, capture }
+    }
+    throw new Error('Esta captura já foi processada para outro destino.')
   },
 }

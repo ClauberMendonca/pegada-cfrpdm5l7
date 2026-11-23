@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
-import { ActionItem, ActionStatus } from '@/types/execution'
+import { ActionItem, ActionKind, ActionStatus, ACTION_KIND_LABEL } from '@/types/execution'
 import { formatCalendarDay } from '@/lib/datetime'
 import { Badge } from '@/components/ui/badge'
+import { useAuth } from '@/contexts/AuthContext'
+import { fioDoAvanco } from '@/lib/pegada/fio'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -67,6 +69,8 @@ export const ActionRow: React.FC<ActionRowProps> = ({
   onEdit,
   timeControl,
 }) => {
+  const { user } = useAuth()
+  const fio = fioDoAvanco(action, user?.life_purpose)
   const [waitingReason, setWaitingReason] = useState('')
   const [showReasonInput, setShowReasonInput] = useState(false)
   const [targetStatus, setTargetStatus] = useState<ActionStatus | null>(null)
@@ -245,8 +249,18 @@ export const ActionRow: React.FC<ActionRowProps> = ({
             {action.title}
           </h4>
 
+          {/* PEGADA — o fio: a frase do porquê, sempre à vista no dia a dia. */}
+          {!isDone && (
+            <p className="mt-1 text-sm italic text-muted-foreground">
+              {fio.semFio ? 'Avanço livre: ainda sem porquê.' : fio.frase}
+            </p>
+          )}
+
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {getStatusBadge(action.status)}
+            <span className="rounded-md border border-border px-2 py-0.5 text-sm text-muted-foreground">
+              {ACTION_KIND_LABEL[(action.kind || 'acao') as ActionKind]}
+            </span>
             <span className="rounded-md bg-muted px-2 py-0.5 text-sm text-muted-foreground">
               {action.context === 'trabalho'
                 ? 'Trabalho'

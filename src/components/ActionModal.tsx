@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useId } from 'react'
-import { ActionItem, EntityContext, ActionStatus, Project } from '@/types/execution'
+import {
+  ActionItem,
+  ActionKind,
+  ACTION_KIND_LABEL,
+  EntityContext,
+  ActionStatus,
+  Project,
+} from '@/types/execution'
 import { actionService, CreateActionInput } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
 import {
@@ -110,6 +117,8 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   const [isNextStep, setIsNextStep] = useState(false)
   const [isTodaySelected, setIsTodaySelected] = useState(false)
   const [waitingFor, setWaitingFor] = useState('')
+  // PEGADA — tipo do avanço (os seis tipos do método).
+  const [kind, setKind] = useState<ActionKind>('acao')
   // DESCRIÇÃO OPCIONAL: texto livre de notas/orientações. Carrega no editar,
   // inicia vazio na criação, aceita multilinha/colagem e envia string vazia
   // explícita ao limpar — nunca herda o valor anterior.
@@ -175,6 +184,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsNextStep(Boolean(actionToEdit.is_next_step))
         setIsTodaySelected(Boolean(actionToEdit.is_today_selected))
         setWaitingFor(actionToEdit.waiting_for || '')
+        setKind((actionToEdit.kind || 'acao') as ActionKind)
         setDescription(typeof actionToEdit.description === 'string' ? actionToEdit.description : '')
         // FATIA 3C1 — modo PERSISTIDO na abertura: vínculo DIRETO persistido
         // (avanço solto) inicializa a escolha; subordinado NÃO copia herança
@@ -209,6 +219,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         setIsNextStep(false)
         setIsTodaySelected(true)
         setWaitingFor('')
+        setKind('acao')
         setDescription('')
         // FATIA 5B1 — Novo SEM plano: data/hora/fuso vazios (nunca Hoje/prazo/
         // 00:00/hora atual/data inferida); fuso é capturado só na 1ª escolha.
@@ -513,6 +524,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
       const payload: CreateActionInput = {
         title: title.trim(),
+        kind,
         context,
         // FATIA 3C1 — UM PATCH: project_id e responsibility_id juntos.
         // - Solto: project_id=undefined e vínculo direto escolhido (ID ou '' de
@@ -778,6 +790,34 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             )}
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">Tipo de avanço</Label>
+            <Select value={kind} onValueChange={(val) => setKind(val as ActionKind)}>
+              <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover text-popover-foreground">
+                {(Object.keys(ACTION_KIND_LABEL) as ActionKind[]).map((k) => (
+                  <SelectItem key={k} value={k}>
+                    {ACTION_KIND_LABEL[k]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {
+                {
+                  acao: 'Algo a fazer. Conclui quando foi feito.',
+                  compromisso: 'Tem data, hora ou outra pessoa. Conclui quando aconteceu.',
+                  estudo: 'Aprender ou analisar. Conclui com a conclusão anotada.',
+                  reflexao: 'Uma pergunta ou decisão. Conclui com a decisão registrada.',
+                  ideia: 'Possibilidade não decidida. Conclui quando vira avanço ou é descartada.',
+                  espera: 'Depende de outra pessoa. Conclui quando você recebe o que aguardava.',
+                }[kind]
+              }
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor={ids.description} className="text-sm font-medium text-foreground">
               Descrição e notas (opcional)
@@ -844,7 +884,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
           </div>
 
-          {(status === 'aguardando' || status === 'bloqueada') && (
+          {(status === 'aguardando' || status === 'bloqueada' || kind === 'espera') && (
             <div className="space-y-1.5">
               <Label htmlFor={ids.waitingFor} className="text-sm font-medium text-foreground">
                 Motivo / bloqueio
@@ -853,7 +893,11 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 id={ids.waitingFor}
                 value={waitingFor}
                 onChange={(e) => setWaitingFor(e.target.value)}
-                placeholder="Pelo que está aguardando?"
+                placeholder={
+                  kind === 'espera'
+                    ? 'De quem ou do quê você está aguardando?'
+                    : 'Pelo que está aguardando?'
+                }
                 className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground sm:text-sm"
               />
             </div>

@@ -1,7 +1,31 @@
 export type LifeWorkContext = 'todos' | 'vida' | 'trabalho'
 export type EntityContext = 'vida' | 'trabalho'
 
-export type ProjectStatus = 'rascunho' | 'ativo' | 'pausado' | 'concluido' | 'arquivado'
+// PEGADA — mapa de nomes: projects = Resultados, actions = Avanços.
+// 'futuro' = lista de futuros; 'abandonado' = decisão legítima da revisão.
+export type ProjectStatus =
+  | 'rascunho'
+  | 'futuro'
+  | 'ativo'
+  | 'pausado'
+  | 'concluido'
+  | 'abandonado'
+  | 'arquivado'
+
+// PEGADA — os seis tipos de avanço. Vazio em registros antigos = 'acao'.
+export type ActionKind = 'acao' | 'compromisso' | 'estudo' | 'reflexao' | 'ideia' | 'espera'
+
+export const ACTION_KIND_LABEL: Record<ActionKind, string> = {
+  acao: 'Ação',
+  compromisso: 'Compromisso',
+  estudo: 'Estudo',
+  reflexao: 'Reflexão',
+  ideia: 'Ideia',
+  espera: 'Espera',
+}
+
+/** Tipos que só se concluem com rastro (regra do rastro). */
+export const TRAIL_KINDS: ActionKind[] = ['estudo', 'reflexao', 'ideia']
 
 export type ActionStatus =
   | 'pronta'
@@ -11,7 +35,13 @@ export type ActionStatus =
   | 'feita'
   | 'cancelada'
 
-export type CaptureStatus = 'pendente' | 'convertida_projeto' | 'convertida_acao' | 'descartada'
+export type CaptureStatus =
+  | 'pendente'
+  | 'convertida_projeto'
+  | 'convertida_acao'
+  | 'convertida_responsabilidade'
+  | 'convertida_estrategia'
+  | 'descartada'
 
 export type ProgressLogType = 'executei' | 'resultado_aconteceu'
 
@@ -37,6 +67,7 @@ export interface Strategy {
   title: string // simples, até 200; só de espaços é inválido
   description?: string // simples, até 3000; sem HTML/editor rico
   status: StrategyStatus // criação normal começa 'ativa'
+  test_signal?: string // PEGADA — sinal de teste da aposta
   created: string
   updated: string
   expand?: {
@@ -52,6 +83,7 @@ export interface Responsibility {
   description?: string // simples, até 3000; sem HTML/editor rico
   context: EntityContext // 'vida' | 'trabalho' ('todos' é só filtro)
   status: ResponsibilityStatus // criação normal começa 'ativa'
+  chosen_by?: 'mim' | 'para_mim' | '' // PEGADA — escolhida por mim ou para mim
   created: string
   updated: string
   expand?: {
@@ -112,6 +144,8 @@ export interface ActionItem {
   title: string
   context: EntityContext
   status: ActionStatus
+  kind?: ActionKind | '' // PEGADA — vazio em registros antigos = 'acao'
+  trail?: string // PEGADA — rastro de Estudo, Reflexão e Ideia
   deadline?: string // YYYY-MM-DD
   is_next_step: boolean // Próximo avanço do Hoje
   is_today_selected: boolean // Selecionada explicitamente para Hoje
@@ -185,6 +219,8 @@ export interface CaptureItem {
   status: CaptureStatus
   converted_project_id?: string
   converted_action_id?: string
+  converted_responsibility_id?: string
+  converted_strategy_id?: string
   created: string
   updated: string
 }

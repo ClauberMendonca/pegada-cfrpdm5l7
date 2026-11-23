@@ -26,6 +26,7 @@ import { GlobalTimerIndicator } from '@/components/TimeControl'
 import { useTimer } from '@/contexts/TimeContext'
 import { LifePurposeBar } from '@/components/LifePurposeBar'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
+import { GlobalCaptureHost } from '@/components/GlobalCaptureHost'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 /** Símbolo temporário: monograma P + nome, até haver asset oficial no projeto. */
@@ -246,6 +247,8 @@ export default function Layout() {
           <Outlet />
           <RastroPromptHost />
         </main>
+        {/* PEGADA — captura global: botão fixo + tecla C, em todas as telas. */}
+        <GlobalCaptureHost />
       </div>
 
       {/* Mobile bottom navigation (< 1024 px) */}

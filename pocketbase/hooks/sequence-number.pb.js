@@ -30,6 +30,10 @@ onRecordCreate(
       e.app = txApp
       try {
         const name = e.record.collection().name
+        // CORREÇÃO (Pegada): UPDATE não devolve linhas — `.all()` não existe no
+        // resultado de execute(). Antes, toda criação falhava com "Controle de
+        // numeração ausente". Agora: UPDATE condicional, confere linhas
+        // afetadas e lê o valor com SELECT na MESMA transação.
         const res = txApp
           .db()
           .newQuery(
@@ -37,11 +41,22 @@ onRecordCreate(
           )
           .bind({ c: name, m: SEQ_MAX })
           .execute()
-        const rows = res && res.all ? res.all() : []
-        if (rows.length === 0) {
+        let affected = 0
+        try {
+          affected = Number(res.rowsAffected())
+        } catch (_) {
+          affected = 0
+        }
+        if (!affected) {
           throw new BadRequestError('Controle de numeração ausente ou esgotado para ' + name + '.')
         }
-        const nextNumber = Number(rows[0].last_value)
+        const row = new DynamicModel({ last_value: 0 })
+        txApp
+          .db()
+          .newQuery('SELECT last_value FROM ginga_seq_counters WHERE collection = {:c}')
+          .bind({ c: name })
+          .one(row)
+        const nextNumber = Number(row.last_value)
         if (!Number.isFinite(nextNumber) || nextNumber < 1) {
           throw new BadRequestError('Controle de numeração corrompido para ' + name + '.')
         }

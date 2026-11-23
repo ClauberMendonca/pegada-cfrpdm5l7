@@ -17,7 +17,16 @@ onRecordUpdateRequest((e) => {
   if (!e.auth) throw new UnauthorizedError()
   if (e.record.id !== e.auth.id) throw new ForbiddenError()
   // Só timezone é alterável pelo app; credenciais/identidade ficam no painel admin.
-  const sensitive = ['password', 'email', 'verified', 'emailVisibility', 'tokenKey', 'name']
+  // PEGADA: life_purpose só muda pela API do método (definir_proposito), com histórico.
+  const sensitive = [
+    'password',
+    'email',
+    'verified',
+    'emailVisibility',
+    'tokenKey',
+    'name',
+    'life_purpose',
+  ]
   for (const f of sensitive) {
     if (e.record.get(f) !== e.record.original().get(f)) {
       throw new ForbiddenError('Alteração de "' + f + '" não é permitida pela API do app.')

@@ -1,0 +1,53 @@
+# Publicação no Fly.io.
+#  - Cada mudança no main, com os testes verdes, vai para a PRÉVIA.
+#  - O app PUBLICADO só muda quando alguém roda este fluxo à mão
+#    (Actions → publicar → Run workflow → alvo: publicado) e o dono aprova
+#    no ambiente "producao" do GitHub.
+name: publicar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      alvo:
+        description: "Onde publicar"
+        required: true
+        default: previa
+        type: choice
+        options: [previa, publicado]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-${{ github.event.inputs.alvo || 'previa' }}
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    uses: ./.github/workflows/testes.yml
+
+  previa:
+    needs: testes
+    if: github.event_name == 'push' || github.event.inputs.alvo == 'previa'
+    runs-on: ubuntu-latest
+    environment: previa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --config fly.previa.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  publicado:
+    needs: testes
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.alvo == 'publicado'
+    runs-on: ubuntu-latest
+    environment: producao # configure no GitHub: exige aprovação do dono
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --config fly.toml
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -38,4 +38,14 @@ if (!r.ok) {
   console.error('Não consegui preparar a conta de teste (' + r.status + '): ' + JSON.stringify(r.json).slice(0, 300))
   process.exit(1)
 }
+// Rodadas anteriores deixam resultados ativos; o método limita quantos podem
+// estar ativos, então os antigos da conta de teste são pausados aqui.
+const id = achou.json.items?.[0]?.id
+if (id) {
+  const f = encodeURIComponent(`user_id="${id}" && status="ativo"`)
+  const ativos = await pede('GET', `/api/collections/projects/records?filter=${f}&perPage=200`, null, token)
+  for (const p of ativos.json.items || [])
+    await pede('PATCH', `/api/collections/projects/records/${p.id}`, { status: 'pausado' }, token)
+  if (ativos.json.items?.length) console.log(`Pausados ${ativos.json.items.length} resultados de rodadas anteriores.`)
+}
 console.log(achou.json.items?.length ? 'Conta de teste renovada.' : 'Conta de teste criada.')

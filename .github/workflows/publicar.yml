@@ -95,7 +95,9 @@ jobs:
         run: PEGADA_TESTE_TELA=celular PEGADA_TESTE_FOTOS=fotos/celular node scripts/teste-telas.mjs
       - name: Uso pelas telas no computador
         if: always() && env.PEGADA_DONO_EMAIL != ''
-        run: PEGADA_TESTE_TELA=computador PEGADA_TESTE_FOTOS=fotos/computador node scripts/teste-telas.mjs
+        run: |
+          node scripts/conta-teste.mjs "$PEGADA_URL"
+          PEGADA_TESTE_TELA=computador PEGADA_TESTE_FOTOS=fotos/computador node scripts/teste-telas.mjs
       - uses: actions/upload-artifact@v4
         if: always() && env.PEGADA_DONO_EMAIL != ''
         with:

@@ -23,7 +23,23 @@
 // NOTA JSVM: cada callback carrega o núcleo com require DENTRO dele.
 
 routerAdd('GET', '/backend/v1/pegada/operacoes', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   let actor = null
   try {
     actor = core.resolveActor(e)
@@ -34,7 +50,23 @@ routerAdd('GET', '/backend/v1/pegada/operacoes', (e) => {
 })
 
 routerAdd('POST', '/backend/v1/pegada/op/{nome}', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   const body = e.requestInfo().body || {}
   const res = core.execute(e.app, actor, e.request.pathValue('nome'), body)
@@ -42,44 +74,156 @@ routerAdd('POST', '/backend/v1/pegada/op/{nome}', (e) => {
 })
 
 routerAdd('POST', '/backend/v1/pegada/lote', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   const body = e.requestInfo().body || {}
   return e.json(200, core.executeBatch(e.app, actor, body.operacoes, body.atomico === true))
 })
 
 routerAdd('POST', '/backend/v1/pegada/desfazer/{eventoId}', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.undo(e.app, actor, e.request.pathValue('eventoId')))
 })
 
 routerAdd('POST', '/backend/v1/pegada/desfazer-lote/{loteId}', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.undoBatch(e.app, actor, e.request.pathValue('loteId')))
 })
 
 routerAdd('POST', '/backend/v1/pegada/propostas/{id}/confirmar', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.decideProposal(e.app, actor, e.request.pathValue('id'), true))
 })
 
 routerAdd('POST', '/backend/v1/pegada/propostas/{id}/recusar', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.decideProposal(e.app, actor, e.request.pathValue('id'), false))
 })
 
 routerAdd('POST', '/backend/v1/pegada/agentes', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.createAgent(e.app, actor, e.requestInfo().body || {}))
 })
 
 routerAdd('POST', '/backend/v1/pegada/agentes/{id}/revogar', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   return e.json(200, core.revokeAgent(e.app, actor, e.request.pathValue('id')))
 })
@@ -90,7 +234,23 @@ routerAdd('POST', '/backend/v1/pegada/agentes/{id}/revogar', (e) => {
 // aceitam uma URL. O token é revogável a qualquer momento pelo dono.
 
 routerAdd('POST', '/backend/v1/pegada/mcp', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   let actor
   try {
     actor = core.resolveActor(e)
@@ -124,7 +284,23 @@ routerAdd('POST', '/backend/v1/pegada/mcp', (e) => {
 })
 
 routerAdd('POST', '/backend/v1/pegada/mcp/{token}', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   let actor
   try {
     actor = core.resolveActor(e, e.request.pathValue('token'))
@@ -161,7 +337,23 @@ routerAdd('GET', '/backend/v1/pegada/mcp/{token}', (e) =>
 //   proposito  → frase "Eu existo para ..., para que ..."
 //   captura    → destino provável (avanco|resultado|responsabilidade|estrategia)
 routerAdd('POST', '/backend/v1/pegada/ia/sugerir', (e) => {
-  const core = require(__hooks + '/lib/pegada-core.js')
+  const core = (function () {
+    var ps = [
+      __hooks + '/lib/pegada-core.js',
+      __hooks + '/pegada-core.js',
+      __hooks + '/lib/pegada-core',
+      __hooks + '/pegada-core',
+    ]
+    var last = null
+    for (var i = 0; i < ps.length; i++) {
+      try {
+        return require(ps[i])
+      } catch (err) {
+        last = err
+      }
+    }
+    throw new ApiError(500, 'pegada-core indisponivel: ' + last + ' | __hooks=' + __hooks)
+  })()
   const actor = core.resolveActor(e)
   if (actor.type === 'agente')
     throw new ForbiddenError('Agentes já têm a própria IA; esta rota é do app.')

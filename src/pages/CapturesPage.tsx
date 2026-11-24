@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useId } from 'react'
+import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
 import { CaptureItem, CaptureStatus, Project, Strategy } from '@/types/execution'
 import { captureService } from '@/services/captureService'
@@ -884,6 +885,7 @@ export const CapturesPage: React.FC = () => {
       {/* Ações de processamento */}
       {item.status === 'pendente' && (
         <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
+          <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
           <Button
             size="sm"
             variant="outline"
@@ -1207,6 +1209,7 @@ export const CapturesPage: React.FC = () => {
                   )}
                   {item.status === 'pendente' && (
                     <div className="flex flex-wrap items-center gap-2">
+                      <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
                       <Button
                         size="sm"
                         variant="outline"

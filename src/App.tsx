@@ -11,6 +11,7 @@ import { CapturesPage } from '@/pages/CapturesPage'
 import { ActionsPage } from '@/pages/ActionsPage'
 import { ProjectsPage } from '@/pages/ProjectsPage'
 import { ResponsibilitiesPage } from '@/pages/ResponsibilitiesPage'
+import { MapPage } from '@/pages/MapPage'
 import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
 import { ActivityPage } from '@/pages/ActivityPage'
@@ -53,6 +54,7 @@ const ProtectedRoutes = () => {
             <Route path="/responsabilidades" element={<ResponsibilitiesPage />} />
             {/* PEGADA — histórico com desfazer, propostas de agentes e agentes. */}
             <Route path="/atividade" element={<ActivityPage />} />
+            <Route path="/mapa" element={<MapPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
             {/* ENTREGA 2A — Configurações do perfil (propósito de vida). */}
             <Route path="/configuracoes" element={<SettingsPage />} />

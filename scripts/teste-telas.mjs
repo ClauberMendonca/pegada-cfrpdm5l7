@@ -388,6 +388,39 @@ await passo('revisão guiada', async () => {
   await foto('revisao-guiada')
 })
 
+// 14c. IA embutida nas telas (só quando o servidor tem a chave): sugere, a pessoa decide
+if (process.env.PEGADA_TESTE_IA) {
+  await passo('IA em Capturas', async () => {
+    const ideia = T('ver uns tênis de corrida qualquer dia')
+    await ir('/capturas')
+    await page.locator('textarea').first().fill(ideia)
+    await botao('Capturar Ideia').click()
+    await page.waitForTimeout(1200)
+    const linha = page.locator('div.rounded-xl').filter({ hasText: ideia }).first()
+    await botao('Sugerir com IA', linha).click()
+    await botao('Dispensar', linha).waitFor({ timeout: 45000 })
+    confere('IA sugere o destino de uma captura', true)
+    if (await botao('Usar sugestão', linha).count()) {
+      await botao('Usar sugestão', linha).click()
+      await page.waitForTimeout(2000)
+      const pendente = await page.locator('div.rounded-xl').filter({ hasText: ideia }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
+      confere('usar a sugestão processa a captura', pendente === 0)
+    }
+  })
+  await passo('IA no Novo Avanço', async () => {
+    await ir('/')
+    await botao('Novo Avanço').click()
+    const d = dialogo()
+    await d.locator('input[id$=action-title]').fill('planilha de treino, olhar')
+    await botao('Sugerir com IA', d).click()
+    await botao('Usar sugestão', d).click({ timeout: 45000 })
+    const titulo = await d.locator('input[id$=action-title]').inputValue()
+    confere('IA reescreve o título do avanço e a pessoa decide', titulo.length > 3 && titulo !== 'planilha de treino, olhar', titulo)
+    await page.keyboard.press('Escape')
+    await esperaSumir()
+  })
+}
+
 // 15. Nenhuma tela pode ficar mais larga que o aparelho
 await passo('largura das telas', async () => {
   const largas = []

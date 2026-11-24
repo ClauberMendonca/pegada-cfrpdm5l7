@@ -1,3 +1,4 @@
+import { AiSuggest } from '@/components/AiSuggest'
 import React, { useState, useEffect, useId } from 'react'
 import { Project, EntityContext, ProjectStatus } from '@/types/execution'
 import { projectService, UpdateProjectInput } from '@/services/projectService'
@@ -204,6 +205,17 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               className="font-medium"
               required
             />
+            {!projectToEdit && (
+              <AiSuggest
+                tipo="resultado"
+                texto={title}
+                descrever={(s) => `${s.titulo}${/^\d{4}-\d{2}-\d{2}$/.test(s.prazo || '') ? ` · prazo ${s.prazo}` : ''}`}
+                onUsar={(s) => {
+                  if (s.titulo) setTitle(s.titulo)
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(s.prazo || '')) setDeadline(s.prazo)
+                }}
+              />
+            )}
             {/* NUMERAÇÃO PERMANENTE — número do projeto FORA do input: selo de
                leitura na edição; na criação, nota discreta (nunca P-0 ou
                número previsto). O título digitado continua puro. */}

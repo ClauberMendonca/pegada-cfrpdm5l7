@@ -66,6 +66,7 @@ jobs:
       PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
       PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
       TEM_CHAVE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      PEGADA_TESTE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' && '1' || '' }}
       PEGADA_TESTE_EMAIL: teste-telas@pegada.teste
       PLAYWRIGHT_MODULE: /tmp/pw/node_modules/playwright/index.mjs
     steps:

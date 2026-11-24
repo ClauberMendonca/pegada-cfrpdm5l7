@@ -1,7 +1,7 @@
 /* Global styles - Theme, font, utilities, animations and global components */
 
-/* Ginga: Inter única fonte do app, carregada com display=swap */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Pegada: Outfit única fonte do app, carregada com display=swap */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -9,47 +9,50 @@
 
 @layer base {
   :root {
-    /* Ginga: tema claro quente, verde-floresta (tokens HSL mapeados em tailwind.config.ts) */
-    --background: 80 17.647059% 96.666667%;
-    --foreground: 165 30.30303% 12.941176%;
-    --card: 0 0% 100%;
-    --card-foreground: 165 30.30303% 12.941176%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 165 30.30303% 12.941176%;
-    --primary: 162.077922 63.636364% 23.72549%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 132 16.129032% 93.921569%;
-    --secondary-foreground: 165 30.30303% 12.941176%;
-    --muted: 132 16.129032% 93.921569%;
-    --muted-foreground: 146.666667 12.328767% 28.627451%;
-    --accent: 145 40% 94.117647%;
-    --accent-foreground: 162.077922 63.636364% 23.72549%;
-    --destructive: 351.023622 67.195767% 37.058824%;
+    /* Pegada: tema claro quente, laranja terroso (tokens HSL mapeados em tailwind.config.ts) */
+    --pegada-ink: #17130f;
+    --pegada-on-ink: #f4eee6;
+    --pegada-on-ink-muted: #c9bfb2;
+    --pegada-line: #d9cfc2;
+    --background: 34.3 38.9% 92.9%;
+    --foreground: 30 21.1% 7.5%;
+    --card: 32.7 100% 97.8%;
+    --card-foreground: 30 21.1% 7.5%;
+    --popover: 32.7 100% 97.8%;
+    --popover-foreground: 30 21.1% 7.5%;
+    --primary: 18.3 75% 47.1%;
+    --primary-foreground: 30 21.1% 7.5%;
+    --secondary: 34.3 34.4% 88%;
+    --secondary-foreground: 30 21.1% 7.5%;
+    --muted: 34.3 34.4% 88%;
+    --muted-foreground: 30 11.5% 37.6%;
+    --accent: 34.3 34.4% 88%;
+    --accent-foreground: 30 21.1% 7.5%;
+    --destructive: 6.2 70.7% 37.5%;
     --destructive-foreground: 0 0% 100%;
-    --border: 127.5 12.903226% 87.843137%;
-    --input: 147 8.196721% 47.843137%;
-    --ring: 210.315789 59.748428% 31.176471%;
-    --radius: 1rem;
-    --ginga-primary-hover: #124e3d;
-    --ginga-mint: #35e0ac; /* só acento/símbolo, não texto pequeno sobre branco */
+    --border: 34.3 29.6% 86.1%;
+    --input: 30 10.4% 49%;
+    --ring: 30 21.1% 7.5%;
+    --radius: 1.25rem;
+    --ginga-primary-hover: #b8461a;
+    --ginga-mint: #d2551e; /* só acento/símbolo, não texto pequeno sobre branco */
     --ginga-warning: #79400b;
     --ginga-warning-bg: #fff3e4;
     --ginga-danger-bg: #fff0f2;
     --ginga-info: #204f7f;
     --ginga-info-bg: #eef5fc;
-    --ginga-shadow: 0 4px 18px rgb(23 43 38 / 0.045);
-    --ginga-font:
-      'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --ginga-shadow: none;
+    --ginga-font: 'Outfit', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     color-scheme: light;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 165 30.30303% 12.941176%;
-    --sidebar-primary: 162.077922 63.636364% 23.72549%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 145 40% 94.117647%;
-    --sidebar-accent-foreground: 162.077922 63.636364% 23.72549%;
-    --sidebar-border: 127.5 12.903226% 87.843137%;
-    --sidebar-ring: 210.315789 59.748428% 31.176471%;
+    --sidebar-background: 32.7 100% 97.8%;
+    --sidebar-foreground: 30 21.1% 7.5%;
+    --sidebar-primary: 30 21.1% 7.5%;
+    --sidebar-primary-foreground: 34.3 38.9% 92.9%;
+    --sidebar-accent: 34.3 34.4% 88%;
+    --sidebar-accent-foreground: 30 21.1% 7.5%;
+    --sidebar-border: 34.3 29.6% 86.1%;
+    --sidebar-ring: 30 21.1% 7.5%;
 
     --chart-1: 34 100% 44%;
     --chart-2: 189 100% 38%;
@@ -58,10 +61,10 @@
     --chart-5: 33 100% 50%;
 
     /* Pares semânticos Ginga: status e interações. */
-    --ginga-primary-pressed: #103f33;
+    --ginga-primary-pressed: #9e3b14;
     --ginga-destructive-hover: #831b2c;
     --ginga-destructive-pressed: #681521;
-    --ginga-mint-foreground: #10231a;
+    --ginga-mint-foreground: #17130f;
     --ginga-success: #16634c;
     --ginga-success-bg: #eaf6ef;
     --ginga-info-hsl: 210.315789 59.748428% 31.176471%;
@@ -75,41 +78,41 @@
 
   .dark {
     /* Esquema inverso correspondente; não ativa nem cria um seletor de tema. */
-    --background: 158.181818 24.444444% 8.823529%;
-    --foreground: 140 27.272727% 95.686275%;
+    --background: 30 21.1% 7.5%;
+    --foreground: 34.3 38.9% 92.9%;
 
-    --card: 156 23.076923% 12.745098%;
-    --card-foreground: 140 27.272727% 95.686275%;
+    --card: 30 17.9% 11%;
+    --card-foreground: 34.3 38.9% 92.9%;
 
-    --popover: 152.727273 25% 17.254902%;
-    --popover-foreground: 140 27.272727% 95.686275%;
+    --popover: 30 16.7% 14.1%;
+    --popover-foreground: 34.3 38.9% 92.9%;
 
-    --primary: 159.130435 60.846561% 62.941176%;
-    --primary-foreground: 151.578947 37.254902% 10%;
+    --primary: 18.3 75% 47.1%;
+    --primary-foreground: 30 21.1% 7.5%;
 
-    --secondary: 151.764706 20% 16.666667%;
-    --secondary-foreground: 140 27.272727% 95.686275%;
+    --secondary: 30 16.7% 14.1%;
+    --secondary-foreground: 34.3 38.9% 92.9%;
 
-    --muted: 151.764706 20% 16.666667%;
-    --muted-foreground: 137.647059 15.88785% 79.019608%;
+    --muted: 30 16.7% 14.1%;
+    --muted-foreground: 33.9 17.6% 74.3%;
 
-    --accent: 156 31.914894% 18.431373%;
-    --accent-foreground: 157.5 68.085106% 81.568627%;
+    --accent: 30 16.7% 14.1%;
+    --accent-foreground: 34.3 38.9% 92.9%;
 
     --destructive: 351.2 100% 85.294118%;
     --destructive-foreground: 340.5 51.282051% 15.294118%;
 
-    --border: 152.307692 18.84058% 27.058824%;
-    --input: 150 12.698413% 49.411765%;
-    --ring: 211.698113 96.363636% 78.431373%;
-    --sidebar-background: 156 23.076923% 12.745098%;
-    --sidebar-foreground: 140 27.272727% 95.686275%;
-    --sidebar-primary: 159.130435 60.846561% 62.941176%;
-    --sidebar-primary-foreground: 151.578947 37.254902% 10%;
-    --sidebar-accent: 156 31.914894% 18.431373%;
-    --sidebar-accent-foreground: 157.5 68.085106% 81.568627%;
-    --sidebar-border: 152.307692 18.84058% 27.058824%;
-    --sidebar-ring: 211.698113 96.363636% 78.431373%;
+    --border: 30 16% 19.6%;
+    --input: 30 10.4% 49%;
+    --ring: 34.3 38.9% 92.9%;
+    --sidebar-background: 30 17.9% 11%;
+    --sidebar-foreground: 34.3 38.9% 92.9%;
+    --sidebar-primary: 34.3 38.9% 92.9%;
+    --sidebar-primary-foreground: 30 21.1% 7.5%;
+    --sidebar-accent: 30 16.7% 14.1%;
+    --sidebar-accent-foreground: 34.3 38.9% 92.9%;
+    --sidebar-border: 30 16% 19.6%;
+    --sidebar-ring: 34.3 38.9% 92.9%;
 
     --chart-1: 270 100% 44%;
     --chart-2: 164 100% 38%;
@@ -118,12 +121,12 @@
     --chart-5: 10 100% 50%;
 
     /* Pares semânticos Ginga: status e interações. */
-    --ginga-primary-hover: #88e4c3;
-    --ginga-primary-pressed: #b0f0d8;
+    --ginga-primary-hover: #b8461a;
+    --ginga-primary-pressed: #9e3b14;
     --ginga-destructive-hover: #ffcbd2;
     --ginga-destructive-pressed: #ffe0e5;
-    --ginga-mint: #35e0ac;
-    --ginga-mint-foreground: #10231a;
+    --ginga-mint: #d2551e;
+    --ginga-mint-foreground: #17130f;
     --ginga-warning: #f6cd85;
     --ginga-warning-bg: #40301c;
     --ginga-danger-bg: #421f27;

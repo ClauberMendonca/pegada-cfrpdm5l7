@@ -28,17 +28,11 @@ import { LifePurposeBar } from '@/components/LifePurposeBar'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost } from '@/components/GlobalCaptureHost'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 
-/** Símbolo temporário: monograma P + nome, até haver asset oficial no projeto. */
+/** Símbolo do Pegada: a pegada laranja e o ponto. */
 function PegadaMark() {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-lg font-bold text-primary ring-1 ring-primary/20"
-    >
-      P
-    </span>
-  )
+  return <PegadaSimbolo className="h-9 w-9 shrink-0 text-foreground" />
 }
 
 export default function Layout() {

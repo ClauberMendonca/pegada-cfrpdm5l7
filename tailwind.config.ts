@@ -27,8 +27,15 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        sans: ['Outfit', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        display: [
+          'Outfit',
+          'ui-sans-serif',
+          'system-ui',
+          '-apple-system',
+          'Segoe UI',
+          'sans-serif',
+        ],
       },
       colors: {
         border: 'hsl(var(--border) / <alpha-value>)',

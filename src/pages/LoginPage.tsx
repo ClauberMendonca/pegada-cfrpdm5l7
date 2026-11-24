@@ -12,7 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle } from 'lucide-react'
+import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react'
+import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth()
@@ -39,13 +40,9 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-screen bg-background flex flex-col justify-center items-center p-4 text-foreground">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent border border-border mb-3 text-primary">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Execução Pragmática</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Sistema pessoal de execução para uso exclusivo do dono
-          </p>
+          <PegadaSimbolo className="mx-auto mb-3 h-14 w-14 text-foreground" />
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pegada</h1>
+          <p className="text-sm text-muted-foreground mt-1">Cada passo com o seu porquê</p>
         </div>
 
         <Card className="bg-card border-border text-card-foreground shadow-2xl">

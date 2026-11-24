@@ -294,7 +294,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     return (
       <div className="space-y-4">
         {activeList.length > 0 && (
-          <div className="grid gap-2.5">
+          <div className="grid gap-2.5 [&>*]:min-w-0">
             {activeList.map((action) => (
               <ListRow
                 key={action.id}
@@ -375,8 +375,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top back button and actions */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Top back button and actions — no celular, as ações descem para a
+         linha de baixo em vez de vazar da tela. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Button
           variant="ghost"
           size="sm"
@@ -387,7 +388,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           Voltar para Lista de Resultados
         </Button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {project.status === 'ativo' && (
             <Button
               variant="outline"
@@ -780,7 +781,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </p>
           </div>
         ) : (
-          <div className="grid gap-2.5">
+          <div className="grid gap-2.5 [&>*]:min-w-0">
             {logs.map((log) => (
               <div
                 key={log.id}

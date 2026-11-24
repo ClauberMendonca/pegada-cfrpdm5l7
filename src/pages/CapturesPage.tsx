@@ -397,7 +397,7 @@ export const CapturesPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
-          <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
             {(
               ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
             ).map((st) => (
@@ -524,7 +524,7 @@ export const CapturesPage: React.FC = () => {
             </p>
           </div>
         ) : view === 'cards' ? (
-          <div className="grid gap-3">{captures.map(renderCaptureCard)}</div>
+          <div className="grid gap-3 [&>*]:min-w-0">{captures.map(renderCaptureCard)}</div>
         ) : (
           <div className="grid gap-2">
             {captures.map((item) => (

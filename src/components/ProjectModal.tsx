@@ -248,10 +248,16 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
           <ResponsibilitySelect
             id={ids.responsibility}
             value={responsibilityId}
-            onChange={setResponsibilityId}
+            onChange={(nextId) => {
+              setResponsibilityId(nextId)
+              // O Resultado herda o contexto da Responsabilidade de onde nasce.
+              const escolhida = responsibilityOptions.list.find((r) => r.id === nextId)
+              if (escolhida) setContext(escolhida.context as EntityContext)
+            }}
             context={context}
             options={responsibilityOptions}
             disabled={isSaving}
+            anyContext
           />
 
           {/* Prazo & Como vou saber que cheguei */}

@@ -168,6 +168,12 @@ interface ResponsibilitySelectProps {
   context: EntityContext
   options: ResponsibilityOptionsState
   disabled?: boolean
+  /**
+   * Formulários sem seletor de contexto (Resultado): lista as responsabilidades
+   * ativas de Vida e de Trabalho, com o contexto no rótulo. Quem chama alinha o
+   * contexto do formulário ao da responsabilidade escolhida.
+   */
+  anyContext?: boolean
 }
 
 export const ResponsibilitySelect: React.FC<ResponsibilitySelectProps> = ({
@@ -177,8 +183,11 @@ export const ResponsibilitySelect: React.FC<ResponsibilitySelectProps> = ({
   context,
   options,
   disabled,
+  anyContext = false,
 }) => {
-  const activeOptions = activeResponsibilityOptions(options.list, context)
+  const activeOptions = anyContext
+    ? options.list.filter((r) => r.status === 'ativa')
+    : activeResponsibilityOptions(options.list, context)
   const listHasValue = options.list.some((r) => r.id === value)
   // Referência atual fora da lista carregada (lista em erro, ou ID ausente
   // dela): leitura escopada por ID — nunca exibir "Nenhuma" como se inexistisse.
@@ -215,7 +224,7 @@ export const ResponsibilitySelect: React.FC<ResponsibilitySelectProps> = ({
           </SelectItem>
           {activeOptions.map((r) => (
             <SelectItem key={r.id} value={r.id} className="min-h-11">
-              {r.title}
+              {anyContext ? `${r.title} · ${contextLabel(r.context as EntityContext)}` : r.title}
             </SelectItem>
           ))}
           {/* Vínculo atual fora das opções novas (arquivada/fora do contexto):

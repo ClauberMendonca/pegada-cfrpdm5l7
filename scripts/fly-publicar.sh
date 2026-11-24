@@ -2,7 +2,8 @@
 # Publica o Pegada no Fly.io, criando o app e o volume na primeira vez.
 # Uso: scripts/fly-publicar.sh fly.previa.toml   (ou fly.toml)
 # Precisa de FLY_API_TOKEN. Opcional: PEGADA_DONO_EMAIL e PEGADA_DONO_SENHA para
-# criar (ou atualizar) o superusuário e o dono do app logo após publicar.
+# criar (ou atualizar) o superusuário e o dono do app logo após publicar;
+# ANTHROPIC_API_KEY para ligar a IA embutida.
 set -euo pipefail
 
 CONFIG="${1:?informe o fly.toml}"
@@ -20,6 +21,11 @@ fi
 if [ "$(flyctl volumes list --app "$APP" --json | grep -c "\"name\": \"$VOLUME\"" || true)" = "0" ]; then
   echo "Criando o volume $VOLUME"
   flyctl volumes create "$VOLUME" --app "$APP" --region "$REGIAO" --size 1 --yes
+fi
+
+if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+  echo "Guardando a chave da IA embutida no Fly.io"
+  flyctl secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --app "$APP" --stage >/dev/null
 fi
 
 flyctl deploy --remote-only --config "$CONFIG" --app "$APP"

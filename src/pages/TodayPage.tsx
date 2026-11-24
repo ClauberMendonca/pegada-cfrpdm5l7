@@ -14,6 +14,7 @@ import {
   resolveProjectState,
 } from '@/lib/eligibility'
 import { ActionRow } from '@/components/ActionRow'
+import { AvancoPrincipalCard } from '@/components/AvancoPrincipalCard'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { TimeControl } from '@/components/TimeControlCompact'
@@ -379,7 +380,9 @@ export const TodayPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Hoje</h2>
+            <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
+              Hoje
+            </h1>
             {contextFilter !== 'todos' && (
               <Badge
                 variant="outline"
@@ -389,16 +392,11 @@ export const TodayPage: React.FC = () => {
               </Badge>
             )}
           </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Execução deliberada. Apenas o que você escolhe mover hoje, sem algoritmos de urgência
-            artificial.
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <ViewToggle view={view} onChange={setView} />
-          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
           <Button
+            variant="outline"
             onClick={() => {
               setEditingAction(null)
               setIsActionModalOpen(true)
@@ -440,83 +438,7 @@ export const TodayPage: React.FC = () => {
         </div>
       )}
 
-      {/* 1. SEÇÃO PRINCIPAL: Próximo Avanço (singular, deliberado) */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-ginga-warning-bg text-ginga-warning border border-ginga-warning/30">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold tracking-wide uppercase text-ginga-warning">
-                Próximo Avanço Único
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                O único avanço que, se feito hoje, garante tração real no dia.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {nextAdvanceAction ? (
-          <div className="relative">
-            {savingActionId === nextAdvanceAction.id && (
-              <p className="mb-1.5 text-xs text-ginga-warning flex items-center gap-1.5">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Gravando escolha…
-              </p>
-            )}
-            {/* Em Lista: o título do item expande a apresentação completa (comandos,
-               tempo, descrição); a seção continua identificando o foco. */}
-            <ListRow
-              title={nextAdvanceAction.title}
-              numberKind="action"
-              numberValue={nextAdvanceAction.sequence_number}
-              numberEntityId={nextAdvanceAction.id}
-              open={view === 'cards' || Boolean(openRows[nextAdvanceAction.id])}
-              onToggle={() => view === 'list' && toggleRow(nextAdvanceAction.id)}
-              summary={
-                showSummary && view === 'list'
-                  ? actionSummaryLine(nextAdvanceAction, {
-                      projectTitle:
-                        formatEntityTitle(
-                          'project',
-                          resolveProject(nextAdvanceAction)?.sequence_number,
-                          resolveProject(nextAdvanceAction)?.title ?? '',
-                        ) || null,
-                      today: todayStr,
-                    })
-                  : undefined
-              }
-            >
-              <ActionRow
-                action={nextAdvanceAction}
-                isNextAdvance={true}
-                saving={savingActionId === nextAdvanceAction.id}
-                onToggleNextStep={handleToggleNextStep}
-                onToggleTodaySelected={handleToggleTodaySelected}
-                onStatusChange={handleStatusChange}
-                onOpenLogModal={setLogModalAction}
-                timeControl={renderActionTimeControl(nextAdvanceAction)}
-                onEdit={(a) => {
-                  setEditingAction(a)
-                  setIsActionModalOpen(true)
-                }}
-              />
-            </ListRow>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-dashed border-border bg-muted p-6 text-center">
-            <p className="text-sm text-muted-foreground font-medium">
-              Qual avanço você quer fazer agora?
-            </p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
-              Escolha deliberadamente um avanço "pronto" da sua lista (estrela) para torná-lo o foco
-              do dia. Nada é promovido automaticamente. O catálogo completo está em{' '}
-              <span className="font-medium text-foreground">Avanços</span>.
-            </p>
-          </div>
-        )}
-      </section>
+      <AvancoPrincipalCard />
 
       {/* 2. Poucas ações selecionadas para Hoje */}
       <section className="space-y-3">

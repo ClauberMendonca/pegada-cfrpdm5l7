@@ -1,6 +1,6 @@
 {
-  "name": "skip-react-template",
-  "description": "A frontend React Vite TypeScript Shadcn UI template for Skip projects",
+  "name": "pegada",
+  "description": "Pegada: método de execução de vida e trabalho",
   "private": true,
   "version": "0.0.115",
   "type": "module",
@@ -14,8 +14,8 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "preview": "vite preview",
-    "test": "echo \"there are no tests for this project\" && exit 0",
-    "test:watch": "echo \"there are no tests for this project\" && exit 0"
+    "test": "node scripts/teste-api.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -86,5 +86,6 @@
     "tailwindcss": "^3.4.19",
     "typescript": "^6.0.3",
     "vite": "8.1.6"
-  }
+  },
+  "packageManager": "pnpm@10.28.0"
 }

@@ -1,0 +1,25 @@
+# Prepara o endereço próprio (usepegada.com.br) no Fly.io e mostra, no registro
+# desta execução, o que copiar na tela de DNS do Registro.br e a situação dos
+# certificados. Não publica o app. Roda quando este arquivo ou o script mudam,
+# ou à mão (Actions → dominio → Run workflow) para conferir de novo.
+name: dominio
+
+on:
+  push:
+    branches: [main, migracao/fora-do-skip]
+    paths: [".github/workflows/dominio.yml", "scripts/fly-dominio.sh"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dominio:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Preparar o endereço e mostrar o DNS
+        run: scripts/fly-dominio.sh fly.toml usepegada.com.br www.usepegada.com.br

@@ -271,7 +271,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
 
             {action.expand?.project_id && (
               <span
-                className="flex max-w-xs items-center gap-1 truncate text-sm text-muted-foreground"
+                className="flex min-w-0 max-w-full items-center gap-1 truncate text-sm text-muted-foreground sm:max-w-xs"
                 title={action.expand.project_id.title}
               >
                 <FolderKanban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />

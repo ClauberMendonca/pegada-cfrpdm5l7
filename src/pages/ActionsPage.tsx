@@ -493,7 +493,7 @@ export const ActionsPage: React.FC = () => {
           {/* Vínculo: título do projeto carregado, ou indisponível sem inventar projeto. */}
           {linkLabel && (
             <span
-              className={cn('inline-flex items-center gap-1', !project && 'text-ginga-warning')}
+              className={cn('inline-flex min-w-0 max-w-full items-center gap-1', !project && 'text-ginga-warning')}
             >
               {project ? (
                 <span className="truncate">Resultado: {project.title}</span>
@@ -795,7 +795,7 @@ export const ActionsPage: React.FC = () => {
           )}
         </div>
       ) : view === 'cards' ? (
-        <div className="grid gap-3">
+        <div className="grid gap-3 [&>*]:min-w-0">
           {filteredActions.map((action) => {
             const isDest = urlActionId === action.id
             return (

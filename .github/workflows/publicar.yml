@@ -1,0 +1,126 @@
+# Publicação no Fly.io.
+#  - Cada mudança no main (e, durante a migração, no ramo migracao/fora-do-skip),
+#    com os testes verdes, vai para a PRÉVIA.
+#  - O app PUBLICADO só muda quando alguém roda este fluxo à mão
+#    (Actions → publicar → Run workflow → alvo: publicado) e o dono aprova
+#    no ambiente "producao" do GitHub.
+# Segredos do repositório: FLY_API_TOKEN (obrigatório para publicar),
+# PEGADA_DONO_EMAIL e PEGADA_DONO_SENHA (criam o dono na primeira vez),
+# ANTHROPIC_API_KEY (liga a IA embutida).
+# Sem FLY_API_TOKEN, os passos de publicação são pulados.
+name: publicar
+
+on:
+  push:
+    branches: [main, migracao/fora-do-skip]
+  workflow_dispatch:
+    inputs:
+      alvo:
+        description: "Onde publicar"
+        required: true
+        default: previa
+        type: choice
+        options: [previa, publicado]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-${{ github.event.inputs.alvo || 'previa' }}
+  cancel-in-progress: false
+
+jobs:
+  testes:
+    uses: ./.github/workflows/testes.yml
+
+  previa:
+    needs: testes
+    if: github.event_name == 'push' || github.event.inputs.alvo == 'previa'
+    runs-on: ubuntu-latest
+    environment: previa
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sem FLY_API_TOKEN, nada a publicar
+        if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::Crie o segredo FLY_API_TOKEN para publicar a prévia."
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: env.FLY_API_TOKEN != ''
+      - name: Publicar a prévia
+        if: env.FLY_API_TOKEN != ''
+        run: scripts/fly-publicar.sh fly.previa.toml
+
+  # Depois de publicar a prévia, usa o app de verdade numa conta só de teste
+  # (teste-telas@pegada.teste, senha nova a cada vez): IA embutida e roteiro
+  # pelas telas no celular e no computador. A conta do dono não é tocada.
+  uso-na-previa:
+    needs: previa
+    runs-on: ubuntu-latest
+    environment: previa
+    env:
+      PEGADA_URL: https://pegada-cfrpdm5l7-previa.fly.dev
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
+      TEM_CHAVE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      PEGADA_TESTE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' && '1' || '' }}
+      PEGADA_TESTE_EMAIL: teste-telas@pegada.teste
+      PLAYWRIGHT_MODULE: /tmp/pw/node_modules/playwright/index.mjs
+    steps:
+      - uses: actions/checkout@v4
+        if: env.PEGADA_DONO_EMAIL != ''
+      - uses: actions/setup-node@v4
+        if: env.PEGADA_DONO_EMAIL != ''
+        with:
+          node-version: 22
+      - name: Preparar a conta de teste
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: |
+          senha="T-$(openssl rand -hex 12)"
+          echo "::add-mask::$senha"
+          echo "PEGADA_TESTE_SENHA=$senha" >> "$GITHUB_ENV"
+          PEGADA_TESTE_SENHA="$senha" node scripts/conta-teste.mjs "$PEGADA_URL"
+      - name: Cópia de segurança
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: node scripts/teste-copia.mjs "$PEGADA_URL"
+      - name: Sugestões da IA
+        if: env.PEGADA_DONO_EMAIL != '' && env.TEM_CHAVE_IA == 'true'
+        run: node scripts/teste-ia.mjs "$PEGADA_URL"
+      - name: Instalar o navegador de teste
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i --silent playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Uso pelas telas no celular
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: PEGADA_TESTE_TELA=celular PEGADA_TESTE_FOTOS=fotos/celular node scripts/teste-telas.mjs
+      - name: Uso pelas telas no computador
+        if: always() && env.PEGADA_DONO_EMAIL != ''
+        run: |
+          node scripts/conta-teste.mjs "$PEGADA_URL"
+          PEGADA_TESTE_TELA=computador PEGADA_TESTE_FOTOS=fotos/computador node scripts/teste-telas.mjs
+      - uses: actions/upload-artifact@v4
+        if: always() && env.PEGADA_DONO_EMAIL != ''
+        with:
+          name: fotos-das-telas
+          path: fotos/
+          if-no-files-found: ignore
+
+  publicado:
+    needs: testes
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.alvo == 'publicado'
+    runs-on: ubuntu-latest
+    environment: producao # configure no GitHub: exige aprovação do dono
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Publicar o app oficial
+        run: scripts/fly-publicar.sh fly.toml

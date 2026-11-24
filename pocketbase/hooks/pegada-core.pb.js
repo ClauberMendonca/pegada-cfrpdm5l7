@@ -2346,7 +2346,12 @@ function pegadaRota(e) {
     var actor = core.resolveActor(e)
     if (actor.type === 'agente')
       throw new ForbiddenError('Agentes já têm a própria IA; esta rota é do app.')
-    if (typeof $ai === 'undefined' || !$ai || typeof $ai.chat !== 'function') {
+    // Nível 1: chama o Claude pela API da Anthropic. Segredos do servidor:
+    //   ANTHROPIC_API_KEY  liga a IA embutida (sem ela, 503 honesto)
+    //   PEGADA_IA_MODELO   opcional, padrão claude-sonnet-5-5
+    //   PEGADA_IA_URL      só para testes (simulador local)
+    var apiKey = $os.getenv('ANTHROPIC_API_KEY')
+    if (!apiKey) {
       return e.json(503, { message: 'IA embutida indisponível neste servidor.' })
     }
     var body = corpo()
@@ -2364,23 +2369,47 @@ function pegadaRota(e) {
         'Classifique a captura: destino entre avanco, resultado, responsabilidade, estrategia; se avanco, o tipo. Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
     }[tipo]
     if (!guide) throw new BadRequestError('tipo deve ser resultado, avanco, proposito ou captura.')
-    var res = $ai.chat({
-      messages: [
-        {
-          role: 'system',
-          content:
+    var baseUrl = ($os.getenv('PEGADA_IA_URL') || 'https://api.anthropic.com').replace(/\/$/, '')
+    var modelo = $os.getenv('PEGADA_IA_MODELO') || 'claude-sonnet-5-5'
+    var res = null
+    try {
+      res = $http.send({
+        url: baseUrl + '/v1/messages',
+        method: 'POST',
+        timeout: 30,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2026-10-21',
+          'anthropic-beta': 'server-side-fallback-2026-07-01',
+        },
+        body: JSON.stringify({
+          model: modelo,
+          max_tokens: 2000,
+          output_config: { effort: 'low' },
+          fallbacks: 'default',
+          system:
             'Você ajuda a aplicar o método Pegada. ' +
             guide +
             ' Responda só o JSON, em português do Brasil.',
-        },
-        { role: 'user', content: texto },
-      ],
-    })
-    var content = ''
-    try {
-      content = res.choices[0].message.content
+          messages: [{ role: 'user', content: texto }],
+        }),
+      })
     } catch (_) {
-      content = ''
+      return e.json(502, { message: 'A IA não respondeu. Tente de novo.' })
+    }
+    if (!res || res.statusCode !== 200 || !res.json) {
+      return e.json(502, { message: 'A IA não respondeu. Tente de novo.' })
+    }
+    if (res.json.stop_reason === 'refusal') {
+      return e.json(502, {
+        message: 'A IA não quis sugerir para este texto. Escreva com suas palavras.',
+      })
+    }
+    var content = ''
+    var blocos = Array.isArray(res.json.content) ? res.json.content : []
+    for (var bi = 0; bi < blocos.length; bi++) {
+      if (blocos[bi] && blocos[bi].type === 'text') content += String(blocos[bi].text || '')
     }
     var sugestao = null
     try {

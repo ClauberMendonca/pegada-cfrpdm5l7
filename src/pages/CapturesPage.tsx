@@ -9,6 +9,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Inbox, Plus, FolderKanban, CheckSquare, Trash2, Lightbulb } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { toast as aviso } from 'sonner'
+import { op } from '@/lib/pegada/api'
+import { notificarMudanca } from '@/services/actionService'
+import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
+import { AiSuggest } from '@/components/AiSuggest'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   ListRow,
@@ -72,6 +77,22 @@ interface ConversionFeedback {
   duplicate: boolean
   targetSequenceNumber: number | null
   targetTitle: string
+}
+
+const TIPOS_SUGERIVEIS: ActionKind[] = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia']
+const DESTINO_ROTULO: Record<string, string> = {
+  avanco: 'Avanço',
+  resultado: 'Resultado (rascunho)',
+  responsabilidade: 'Responsabilidade',
+  estrategia: 'Estratégia',
+}
+function descreverSugestaoCaptura(s: Record<string, string>): string {
+  const destino = DESTINO_ROTULO[s.destino] || s.destino
+  const tipo =
+    s.destino === 'avanco' && s.tipo in ACTION_KIND_LABEL
+      ? ` · ${ACTION_KIND_LABEL[s.tipo as ActionKind]}`
+      : ''
+  return `Virar ${destino}${tipo}${s.titulo ? `: ${s.titulo}` : ''}`
 }
 
 export const CapturesPage: React.FC = () => {
@@ -295,6 +316,33 @@ export const CapturesPage: React.FC = () => {
     )
   }
 
+  // PEGADA — Nível 1: aplica a sugestão da IA pela mesma operação do método,
+  // marcada como sugestão da IA no histórico, e com Desfazer.
+  const aplicarSugestaoCaptura = async (capturaId: string, s: Record<string, string>) => {
+    const tipo = (TIPOS_SUGERIVEIS as string[]).includes(s.tipo) ? s.tipo : 'acao'
+    const dados: Record<string, unknown> =
+      s.destino === 'resultado' ? { situacao: 'rascunho' } : { tipo }
+    if (s.titulo) dados.titulo = s.titulo
+    try {
+      await op(
+        'processar_captura',
+        { captura_id: capturaId, destino: s.destino, dados },
+        {
+          origem: 'sugestao_ia',
+          desfazer: true,
+          onDesfeito: () => {
+            void loadCaptures()
+            notificarMudanca()
+          },
+        },
+      )
+      void loadCaptures()
+      notificarMudanca()
+    } catch (e) {
+      aviso.error(e instanceof Error ? e.message : 'Não foi possível aplicar a sugestão.')
+    }
+  }
+
   const renderCaptureCard = (item: CaptureItem) => (
     <div
       key={item.id}
@@ -308,6 +356,19 @@ export const CapturesPage: React.FC = () => {
           </span>
         </div>
         <p className="text-sm text-foreground whitespace-pre-wrap break-words">{item.raw_text}</p>
+        {item.status === 'pendente' && (
+          <AiSuggest
+            tipo="captura"
+            texto={item.raw_text}
+            descrever={descreverSugestaoCaptura}
+            impedimento={(s) =>
+              s.destino === 'avanco' || s.destino === 'resultado'
+                ? null
+                : 'Para este destino, escolha no botão Processar.'
+            }
+            onUsar={(s) => aplicarSugestaoCaptura(item.id, s)}
+          />
+        )}
       </div>
 
       {/* Destino de captura já convertida (BLOCO 2C) */}
@@ -397,7 +458,7 @@ export const CapturesPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <ViewToggle view={view} onChange={setView} />
           {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
-          <div className="flex items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
+          <div className="flex flex-wrap items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
             {(
               ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
             ).map((st) => (
@@ -524,7 +585,7 @@ export const CapturesPage: React.FC = () => {
             </p>
           </div>
         ) : view === 'cards' ? (
-          <div className="grid gap-3">{captures.map(renderCaptureCard)}</div>
+          <div className="grid gap-3 [&>*]:min-w-0">{captures.map(renderCaptureCard)}</div>
         ) : (
           <div className="grid gap-2">
             {captures.map((item) => (

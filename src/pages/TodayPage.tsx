@@ -451,7 +451,7 @@ export const TodayPage: React.FC = () => {
         </div>
 
         {todaySelectedActions.length > 0 ? (
-          <div className="grid gap-2.5">
+          <div className="grid gap-2.5 [&>*]:min-w-0">
             {todaySelectedActions.map((action) => (
               <ListRow
                 key={action.id}
@@ -519,7 +519,7 @@ export const TodayPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid gap-2.5">
+          <div className="grid gap-2.5 [&>*]:min-w-0">
             {todayDeadlineActions.map((action) => (
               <ListRow
                 key={action.id}
@@ -712,7 +712,7 @@ export const TodayPage: React.FC = () => {
                   {focusImpediments.map((action) => (
                     <div
                       key={action.id}
-                      className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3 text-xs"
+                      className="p-3 rounded-lg border border-border bg-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-xs"
                     >
                       <span className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
                         <EntityNumberBadge
@@ -722,8 +722,8 @@ export const TodayPage: React.FC = () => {
                         />
                         <span className="truncate">{action.title}</span>
                       </span>
-                      <span className="flex items-center gap-2 shrink-0 min-w-0">
-                        <span className="text-ginga-warning truncate">
+                      <span className="flex flex-wrap items-center gap-2 min-w-0">
+                        <span className="text-ginga-warning">
                           Motivo: {ineligibilityLabel(action, resolveProject)}
                         </span>
                         {/* BLOCO 2C — atalho que SOMENTE navega: /avancos?id=<ID>
@@ -754,7 +754,7 @@ export const TodayPage: React.FC = () => {
                   {reevaluateProjects.map((p) => (
                     <div
                       key={p.id}
-                      className="p-3 rounded-lg border border-border bg-card flex items-center justify-between gap-3 text-xs"
+                      className="p-3 rounded-lg border border-border bg-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-xs"
                     >
                       <div className="flex items-center gap-2 truncate min-w-0">
                         <Badge variant="outline" className="text-[10px] uppercase">
@@ -763,7 +763,7 @@ export const TodayPage: React.FC = () => {
                         <EntityNumberBadge kind="project" n={p.sequence_number} entityId={p.id} />
                         <span className="font-medium text-foreground truncate">{p.title}</span>
                       </div>
-                      <span className="flex items-center gap-2 shrink-0">
+                      <span className="flex flex-wrap items-center gap-2">
                         <span className="text-muted-foreground">{projectBlockLabel(p)}</span>
                         {/* BLOCO 2C — atalho que SOMENTE navega: /resultados?id=<ID>
                           (equivalente ao /projetos?id=). Não pausa/ativa projeto

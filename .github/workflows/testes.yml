@@ -1,0 +1,60 @@
+# Roda a cada pull request (e antes de cada publicação): tipos, lint, build e o
+# teste de ponta a ponta da API num PocketBase igual ao de produção.
+name: testes
+
+on:
+  pull_request:
+  workflow_call: # chamado pelo fluxo de publicação a cada mudança no main
+
+permissions:
+  contents: read
+
+env:
+  PB_VERSION: 0.28.4
+  PB_SHA256: 44161d9e8838d3226fee7f2a857b8033f642ace1f3486a1125b99fd6b8b08532
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm build
+
+      - name: Baixar o PocketBase
+        run: |
+          curl -sSL -o pb.zip "https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip"
+          echo "${PB_SHA256}  pb.zip" | sha256sum -c -
+          unzip -q pb.zip -d pb
+
+      - name: Subir servidor de teste com a IA simulada
+        run: |
+          node scripts/simulador-anthropic.mjs &
+          ./pb/pocketbase migrate up --dir=pb_data --migrationsDir=pocketbase/migrations
+          ./pb/pocketbase superuser upsert ci@pegada.teste "$PB_ADMIN_SENHA" --dir=pb_data --migrationsDir=pocketbase/migrations
+          ANTHROPIC_API_KEY=teste PEGADA_IA_URL=http://127.0.0.1:8787 \
+            ./pb/pocketbase serve --http=127.0.0.1:8090 --dir=pb_data \
+            --hooksDir=pocketbase/hooks --migrationsDir=pocketbase/migrations --publicDir=dist > pb.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8090/api/health && break; sleep 1; done
+        env:
+          PB_ADMIN_SENHA: ci-${{ github.run_id }}-Senha9
+
+      - name: Teste de ponta a ponta da API
+        run: pnpm test
+        env:
+          PEGADA_URL: http://127.0.0.1:8090
+          PEGADA_TESTE_IA: simulada
+          PB_ADMIN_EMAIL: ci@pegada.teste
+          PB_ADMIN_SENHA: ci-${{ github.run_id }}-Senha9
+
+      - name: Log do servidor (se falhar)
+        if: failure()
+        run: tail -200 pb.log

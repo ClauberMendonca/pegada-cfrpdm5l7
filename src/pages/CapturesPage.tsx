@@ -19,7 +19,7 @@ import {
 } from '@/components/ViewToggle'
 import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
 import { useCaptureDraft } from '@/hooks/use-capture-draft'
-import { EntityNumberKind, formatEntityTitle } from '@/lib/entityNumber'
+import { EntityNumberKind, entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 import {
   collectTargetIds,
   emptyTargetMaps,
@@ -28,6 +28,51 @@ import {
 } from '@/lib/captureTargets'
 import { currentOwnerSnapshot, isSameOwner } from '@/lib/ownerScope'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
+import {
+  EMPTY_PLANNED,
+  isValidPlannedDate,
+  isValidPlannedTime,
+  PlannedExecution,
+  plannedTimezoneOrFallback,
+} from '@/lib/plannedExecution'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Project } from '@/types/execution'
+import { projectService } from '@/services/projectService'
+import { ResponsibilitySelect } from '@/components/ResponsibilitySelect'
+import {
+  ResponsibilityRefState,
+  useResponsibilityReference,
+} from '@/hooks/use-responsibility-reference'
+import { StrategySelect } from '@/components/StrategySelect'
+import { StrategyModal } from '@/components/StrategyModal'
+import { Strategy } from '@/types/execution'
+
+type ConversionType = 'project' | 'action' | null
+
+interface ConversionFeedback {
+  captureId: string
+  targetType: 'project' | 'action'
+  targetId: string
+  duplicate: boolean
+  targetSequenceNumber: number | null
+  targetTitle: string
+}
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
@@ -91,8 +136,6 @@ export const CapturesPage: React.FC = () => {
     [ownerTz],
   )
 
-
-
   const loadCaptures = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -141,7 +184,6 @@ export const CapturesPage: React.FC = () => {
       cancelled = true
     }
   }, [captures, user?.id])
-
 
   // Envio único compartilhado por teclado e botão (captureService.create).
   const submitCapture = useCallback(async () => {
@@ -207,284 +249,6 @@ export const CapturesPage: React.FC = () => {
       const msg = err instanceof Error ? err.message : 'Não foi possível descartar a captura.'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
     }
-  }
-
-
-
-    if (!selectedCapture) return
-    if (target === 'project' && !projectTitle.trim()) return
-    if (target === 'action' && !actionTitle.trim()) return
-    // FATIA 5C2 — validação 89 do planejamento (dia real, hora HH:mm real,
-    // fuso explícito; parcial/badInput NÃO vira vazio válido) ANTES de chamar
-    // convert: bloqueia o serviço com o erro associado ao campo, mantendo o
-    // texto e as escolhas no formulário aberto. Só o ramo 'action' valida e
-    // envia; Resultado NUNCA lê este rascunho nem recebe os 3 campos.
-    let plannedPayload: {
-      planned_date?: string
-      planned_time?: string
-      planned_timezone?: string
-    } = {}
-    if (target === 'action') {
-      if (actionPlannedPendingInvalid) {
-        setActionPlannedError(
-          'Há data ou hora incompleta no planejamento. Conclua o valor ou limpe o campo antes de converter.',
-        )
-        return
-      }
-      if (actionPlanned.date === '') {
-        if (actionPlanned.time !== '' || actionPlanned.timezone !== '') {
-          setActionPlannedError('Planejamento incompleto: informe a data ou remova o planejamento.')
-          return
-        }
-      } else if (!isValidPlannedDate(actionPlanned.date)) {
-        setActionPlannedError(
-          'Informe uma data planejada real (AAAA-MM-DD, incluindo anos bissextos).',
-        )
-        return
-      } else if (actionPlanned.timezone === '') {
-        setActionPlannedError(
-          'O planejamento precisa do fuso. Remova o planejamento para converter sem ele.',
-        )
-        return
-      } else if (!isValidPlannedTime(actionPlanned.time)) {
-        setActionPlannedError('Informe uma hora planejada real (HH:mm) ou limpe o campo.')
-        return
-      } else {
-        setActionPlannedError(null)
-      }
-      // Payload único do plano: os 3 campos EXATOS escolhidos (dia/hora/fuso
-      // literais; hora '' = dia inteiro) no MESMO data do convert — sem fuso
-      // informativo sozinho, sem planned_at/offset/DST e sem segunda gravação.
-      if (actionPlanned.date !== '') {
-        plannedPayload = {
-          planned_date: actionPlanned.date,
-          planned_time: actionPlanned.time,
-          planned_timezone: actionPlanned.timezone,
-        }
-      }
-    }
-    // Validação do vínculo novo ANTES de chamar convert (nada é gravado antes).
-    const linkProblem =
-      target === 'project'
-        ? directLinkProblem(projectResponsibilityId, projectContext)
-        : directLinkProblem(actionDirectResponsibilityId, actionContext)
-    if (linkProblem) {
-      toast({ variant: 'destructive', title: 'Conversão não realizada', description: linkProblem })
-      return
-    }
-    // FATIA 4C2 — coerência da escolha de Estratégia ANTES do envio único
-    // (dados já lidos; backend 84 é autoridade final sobre dono/pai/ativa).
-    // Solto nunca envia estratégia; com pai, escolha precisa pertencer a ele.
-    if (target === 'action') {
-      if (!actionProjectId && actionStrategyId) {
-        toast({
-          variant: 'destructive',
-          title: 'Conversão não realizada',
-          description:
-            'Remova a escolha de Estratégia antes de converter: este avanço será criado solto, sem estratégia.',
-        })
-        return
-      }
-      if (actionProjectId && actionStrategyId && actionStrategyIncompatible) {
-        toast({
-          variant: 'destructive',
-          title: 'Conversão não realizada',
-          description:
-            'A estratégia escolhida pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa deste resultado antes de converter.',
-        })
-        return
-      }
-      if (actionProjectId && actionStrategyId && !actionStrategyChoice) {
-        toast({
-          variant: 'destructive',
-          title: 'Conversão não realizada',
-          description:
-            'Não foi possível confirmar a estratégia escolhida neste resultado. Escolha “Nenhuma” ou outra estratégia ativa antes de converter.',
-        })
-        return
-      }
-    }
-
-    // Trava síncrona dedicada: Enter duplo/clique repetido não chamam convert
-    // duas vezes. Retorno tardio só se aplica à mesma intenção/dono/captura.
-    if (convertingRef.current || isConverting) return
-    convertingRef.current = true
-    setIsConverting(true)
-    const snap = currentOwnerSnapshot()
-    try {
-      // Avanço subordinado: revalidação pontual do pai vigente no confirmar
-      // (dados existentes primeiro). Se contexto/Responsabilidade do pai
-      // mudaram, atualiza SÓ a referência informativa, preserva os campos e
-      // pede revisão antes de enviar — falha de leitura não autoriza novo pai
-      // (segue os dados existentes; backend é autoridade final).
-      if (target === 'action' && actionProjectId) {
-        const presented = availableProjects.find((p) => p.id === actionProjectId)
-        if (presented) {
-          try {
-            const fresh = await projectService.getById(actionProjectId)
-            if (
-              (fresh.responsibility_id || '') !== (presented.responsibility_id || '') ||
-              fresh.context !== presented.context
-            ) {
-              setAvailableProjects((prev) => prev.map((p) => (p.id === fresh.id ? fresh : p)))
-              toast({
-                variant: 'destructive',
-                title: 'Conversão não realizada',
-                description:
-                  'O resultado escolhido mudou de contexto ou de Responsabilidade desde a abertura. Revise a herança exibida e confirme novamente.',
-              })
-              return
-            }
-          } catch {
-            // Revalidação indisponível: não bloqueia nem inventa pai — o
-            // backend valida dono/contexto/ativa na transação única.
-          }
-        }
-      }
-
-      const result = await captureService.convert(
-        selectedCapture.id,
-        target,
-        target === 'project'
-          ? {
-              title: projectTitle.trim(),
-              context: projectContext,
-              aspiration: projectAspiration.trim() || undefined,
-              controllable_delivery: projectControllable.trim() || undefined,
-              completion_condition: projectCompletion.trim() || undefined,
-              // FATIA 3C2B — vínculo NOVO escolhido ou '' (Nenhuma) no MESMO
-              // commit único do backend; nunca update depois da conversão.
-              responsibility_id: projectResponsibilityId,
-            }
-          : {
-              title: actionTitle.trim(),
-              context: actionContext,
-              project_id: actionProjectId ? actionProjectId : undefined,
-              // Subordinado: project_id do pai e responsibility_id='' (herança
-              // é SEMPRE do Resultado, nunca copiada, nunca dois vínculos).
-              // Solto: escolha direta ou '' (Nenhuma).
-              responsibility_id: actionProjectId ? '' : actionDirectResponsibilityId,
-              // FATIA 4C2 — strategy_id no MESMO data do envio único (contrato
-              // 84): com pai, ID nativo escolhido (coerência já validada acima)
-              // ou '' (Nenhuma); solto, sempre ''. Nunca vínculo do pai anterior
-              // e nunca update de actionService/projectService depois. Resposta
-              // do backend traz o vínculo PERSISTIDO; duplicate:true não afirma
-              // a aplicação da escolha desta tentativa.
-              strategy_id: actionProjectId ? actionStrategyId : '',
-              // FATIA 5C2 — planejamento no MESMO data do envio único 91:
-              // sem plano (inclusive remoção explícita) = omitir os 3 campos
-              // (default vazio nativo); com plano = os 3 valores locais exatos.
-              ...plannedPayload,
-            },
-      )
-
-      if (!isSameOwner(snap) || !pageActive.current) return
-
-      // Idempotente: quando a captura já estava convertida (retry após perder
-      // a resposta, duplo clique, chamada concorrente), o backend retorna o
-      // destino REAL que já existia — nunca cria um segundo destino.
-      // BLOCO 2C — o mesmo destino retornado vira link local (sem nova leitura
-      // ao backend, sem inferir ID pelo título). Resposta inconclusiva (sem
-      // target.id) mantém o texto atual, sem inventar destino.
-      const targetType = result.target_type === 'action' ? 'action' : 'project'
-      const targetId = typeof result.target?.id === 'string' ? result.target.id : ''
-      // Código real vem do destino persistido retornado pelo serviço atual —
-      // nunca calculado no frontend; resposta sem número mantém o texto atual.
-      const targetSequenceNumber =
-        result.target && typeof result.target.sequence_number === 'number'
-          ? result.target.sequence_number
-          : null
-      const targetTitle = typeof result.target?.title === 'string' ? result.target.title : ''
-      if (targetId) {
-        setConversionFeedback({
-          captureId: selectedCapture.id,
-          targetType,
-          targetId,
-          duplicate: result.duplicate,
-          targetSequenceNumber,
-          targetTitle,
-        })
-      }
-      if (result.duplicate) {
-        toast({
-          title: 'Captura já estava convertida',
-          description: targetId
-            ? 'Nenhum destino duplicado foi criado. Use o link abaixo para abrir o destino existente.'
-            : 'Nenhum destino duplicado foi criado. O destino não foi confirmado nesta resposta.',
-        })
-      } else {
-        toast({
-          title:
-            target === 'project'
-              ? 'Captura convertida em Resultado com sucesso!'
-              : 'Captura convertida em Avanço pronto!',
-          description: targetId
-            ? undefined
-            : 'O destino não foi retornado pela conversão; confira nas capturas convertidas.',
-        })
-      }
-      setConversionType(null)
-      setSelectedCapture(null)
-      loadCaptures()
-    } catch (err: unknown) {
-      // Falha: erro visível e dados digitados/escolhas preservados (o modal
-      // permanece aberto com o formulário intacto — nada é apagado, nenhum
-      // falso sucesso). Retorno tardio de outra sessão não exibe toast.
-      if (!isSameOwner(snap) || !pageActive.current) return
-      const msg = err instanceof Error ? err.message : 'Erro na conversão'
-      toast({ variant: 'destructive', title: 'Erro na conversão', description: msg })
-    } finally {
-      convertingRef.current = false
-      setIsConverting(false)
-    }
-  }
-
-  // FATIA 5C2 — fuso que um plano novo capturaria: perfil válido ou UTC
-  // explícito (mesma função 89; sem resolvedOptions, sem offset do dispositivo,
-  // sem nova leitura do perfil). Só memória; UTC verdadeiro do perfil não é fallback.
-  const convertProfileTz = plannedTimezoneOrFallback(user?.timezone ?? '')
-
-  const handleActionPlannedDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const el = e.currentTarget
-    const raw = el.value
-    // Entrada parcial/inválida (badInput nativo): mantém a intenção e bloqueia
-    // a confirmação — nunca interpreta '' de badInput como remoção.
-    if (raw === '' && el.validity.badInput) {
-      setActionPlannedPendingInvalid(true)
-      return
-    }
-    setActionPlannedPendingInvalid(false)
-    setActionPlannedError(null)
-    if (raw === '') {
-      // Limpeza EXPLÍCITA da data: remove o GRUPO inteiro em memória.
-      setActionPlanned(EMPTY_PLANNED)
-      setActionPlannedUtcFallback(false)
-      return
-    }
-    if (actionPlanned.timezone === '') {
-      // Primeiro dia válido de um rascunho sem plano: captura o literal do
-      // perfil (ou UTC explícito com aviso) e o mantém até remoção/reinício.
-      const tz = convertProfileTz
-      setActionPlanned({ date: raw, time: '', timezone: tz.timezone })
-      setActionPlannedUtcFallback(tz.usedFallback)
-      return
-    }
-    // Plano em curso: mantém EXATAMENTE o fuso já escolhido; troca posterior
-    // do perfil/contexto/Resultado/etc. não reescreve nem reinterpreta.
-    setActionPlanned((prev) => ({ ...prev, date: raw }))
-  }
-
-  const handleActionPlannedTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const el = e.currentTarget
-    const raw = el.value
-    if (raw === '' && el.validity.badInput) {
-      setActionPlannedPendingInvalid(true)
-      return
-    }
-    setActionPlannedPendingInvalid(false)
-    setActionPlannedError(null)
-    // Limpar só a hora conserva dia/fuso; '' não ganha meia-noite nem horário atual.
-    setActionPlanned((prev) => ({ ...prev, time: raw }))
   }
 
   // BLOCO 2C — destino de captura já convertida: usa o ID gravado
@@ -553,7 +317,7 @@ export const CapturesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Ações de processamento */}
+      {/* Ações de processamento: SOMENTE o menu de processamento e a lixeira. */}
       {item.status === 'pendente' && (
         <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
@@ -586,20 +350,6 @@ export const CapturesPage: React.FC = () => {
         return 'Descartada'
     }
   }
-
-  // NUMERAÇÃO PERMANENTE 2C — identificação do destino no feedback pós-conversão:
-  // código real antes do título (formatter textual; sem título conhecido, só o
-  // código). Sem número confirmado na resposta, nada é afirmado.
-  const feedbackTargetLabel =
-    conversionFeedback && conversionFeedback.targetSequenceNumber !== null
-      ? conversionFeedback.targetTitle !== ''
-        ? formatEntityTitle(
-            conversionFeedback.targetType,
-            conversionFeedback.targetSequenceNumber,
-            conversionFeedback.targetTitle,
-          )
-        : entityNumberCode(conversionFeedback.targetType, conversionFeedback.targetSequenceNumber)
-      : null
 
   const getStatusBadge = (st: CaptureStatus) => {
     switch (st) {
@@ -674,45 +424,6 @@ export const CapturesPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* BLOCO 2C — feedback pós-conversão com link para o destino real */}
-      {conversionFeedback && (
-        <div
-          role="status"
-          className="rounded-xl border border-ginga-success/30 bg-ginga-success-bg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              {conversionFeedback.duplicate
-                ? 'Captura já convertida'
-                : conversionFeedback.targetType === 'project'
-                  ? 'Captura convertida em Resultado'
-                  : 'Captura convertida em Avanço'}
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {conversionFeedback.duplicate
-                ? 'Abrir leva ao destino que já existia — nenhum destino duplicado foi criado.'
-                : 'Abra o destino criado ou continue processando as demais capturas.'}
-            </p>
-            {feedbackTargetLabel && (
-              <p className="mt-1 break-words text-xs text-foreground">{feedbackTargetLabel}</p>
-            )}
-          </div>
-          {conversionFeedback.targetType === 'project' ? (
-            <Button asChild size="sm" className="gap-1.5 shrink-0">
-              <Link to={`/resultados?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
-                Abrir resultado
-              </Link>
-            </Button>
-          ) : (
-            <Button asChild size="sm" className="gap-1.5 shrink-0">
-              <Link to={`/avancos?id=${encodeURIComponent(conversionFeedback.targetId)}`}>
-                Abrir avanço
-              </Link>
-            </Button>
-          )}
-        </div>
-      )}
 
       {/* Input de Captura Rápida */}
       <Card className="bg-card border-border shadow-md">
@@ -841,7 +552,7 @@ export const CapturesPage: React.FC = () => {
                     </div>
                   )}
                   {item.status === 'pendente' && (
-                   <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
                       <Button
                         size="sm"
@@ -861,380 +572,6 @@ export const CapturesPage: React.FC = () => {
           </div>
         )}
       </div>
-
-      {/* Modal: Converter em Projeto */}
-      <Dialog
-        open={conversionType === 'project'}
-        onOpenChange={(open) => {
-          // Durante o envio, fechar/Escape não descarta o formulário.
-          if (!open && !isConverting) setConversionType(null)
-        }}
-      >
-        <DialogContent className="bg-card text-card-foreground max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-              <FolderKanban className="w-5 h-5 text-primary" />
-              Converter Captura em Resultado
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Crie o resultado como rascunho com título e contexto. Você pode preencher o resto
-              depois.
-            </DialogDescription>
-          </DialogHeader>
-
-         <div className="space-y-4 py-2 overflow-y-auto max-h-[60vh]">
-          <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Título do Resultado
-              </Label>
-              <Input
-                value={projectTitle}
-                onChange={(e) => setProjectTitle(e.target.value)}
-                required
-                disabled={isConverting}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Contexto
-              </Label>
-              <Select
-                value={projectContext}
-                onValueChange={(v) => setProjectContext(v as 'vida' | 'trabalho')}
-                disabled={isConverting}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trabalho">Trabalho</SelectItem>
-                  <SelectItem value="vida">Vida</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* FATIA 3C2B — Responsabilidade (opcional) perto do Contexto: toda
-               nova abertura começa Nenhuma; opções ativas do dono no contexto
-               do formulário; sentinel 'none' nunca vai ao banco ('' = Nenhuma). */}
-            <ResponsibilitySelect
-              id={convertIds.projectResponsibility}
-              value={projectResponsibilityId}
-              onChange={setProjectResponsibilityId}
-              context={projectContext}
-              options={convertResponsibilityOptions}
-              disabled={isConverting}
-            />
-
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Aspiração (O que quero alcançar? Opcional)
-              </Label>
-              <Textarea
-                rows={2}
-                value={projectAspiration}
-                onChange={(e) => setProjectAspiration(e.target.value)}
-                placeholder="Ex: Ampliar minha influência estratégica na empresa"
-                className="text-xs"
-                disabled={isConverting}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Entrega Controlável (O que vou entregar? Opcional)
-              </Label>
-              <Textarea
-                rows={2}
-                value={projectControllable}
-                onChange={(e) => setProjectControllable(e.target.value)}
-                placeholder="Ex: Entregar proposta escrita de revisão de processos com 3 reuniões de validação"
-                className="text-xs"
-                disabled={isConverting}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Condição de término (opcional)
-              </Label>
-              <Textarea
-                rows={2}
-                value={projectCompletion}
-                onChange={(e) => setProjectCompletion(e.target.value)}
-                placeholder="Como reconhecerei que a entrega foi concluída?"
-                className="text-xs"
-                disabled={isConverting}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConversionType(null)} disabled={isConverting}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => handleConfirmConvert('project')}
-              disabled={isConverting || !projectTitle.trim()}
-            >
-              {isConverting ? 'Gravando…' : 'Criar Resultado Rascunho'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Converter em Ação */}
-      <Dialog
-        open={conversionType === 'action'}
-        onOpenChange={(open) => {
-          if (!open && !isConverting) setConversionType(null)
-        }}
-      >
-        <DialogContent className="bg-card text-card-foreground max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-primary" />
-              Converter Captura em Avanço
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Crie um avanço executável vinculado ou solto, pronto para a execução.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-           <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                Título do Avanço
-              </Label>
-              <Input
-                value={actionTitle}
-                onChange={(e) => setActionTitle(e.target.value)}
-                required
-                disabled={isConverting}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Contexto
-                </Label>
-                <Select
-                  value={actionContext}
-                  onValueChange={(v) => setActionContext(v as 'vida' | 'trabalho')}
-                  disabled={isConverting}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="trabalho">Trabalho</SelectItem>
-                    <SelectItem value="vida">Vida</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-                  Resultado (Opcional)
-                </Label>
-                <Select
-                  value={actionProjectId}
-                  onValueChange={(v) => handleActionProjectChange(v === 'none' ? '' : v)}
-                  disabled={isConverting}
-                >
-                  <SelectTrigger className="truncate text-xs">
-                    <SelectValue placeholder="Avanço solto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Avanço solto</SelectItem>
-                    {availableProjects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {`${formatEntityTitle('project', p.sequence_number, p.title)} [${p.context}]`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* FATIA 3C2B — solto: escolha DIRETA de Responsabilidade (Nenhuma
-               por abertura; opções ativas do dono/contexto do formulário).
-               Subordinado: herança SOMENTE LEITURA, resolvida pelo
-               responsibility_id do Resultado realmente escolhido (arquivada
-               indicada; "Nenhuma" só com ausência confirmada; erro/carregando
-               NUNCA viram Nenhuma) — texto puro e secundário, nunca seletor
-               desabilitado parecendo editável. */}
-            {actionProjectId ? (
-              <p
-                id={convertIds.actionInheritedResponsibility}
-                className="text-sm text-muted-foreground"
-              >
-                <span className="font-medium text-foreground">
-                  Responsabilidade herdada do resultado:
-                </span>{' '}
-                {inheritedActionRef.status === 'none' ? (
-                  <span className="italic">Nenhuma</span>
-                ) : inheritedActionRef.status === 'ready' ? (
-                  <>
-                    {inheritedActionRef.data.title}
-                    {inheritedActionRef.data.status === 'arquivada' &&
-                      ' (arquivada — vínculo do resultado)'}
-                  </>
-                ) : inheritedActionRef.status === 'error' ? (
-                  <span className="font-medium text-ginga-warning">
-                    Responsabilidade atual indisponível — vínculo do resultado preservado
-                  </span>
-                ) : (
-                  <span className="italic">carregando…</span>
-                )}
-              </p>
-            ) : (
-              <ResponsibilitySelect
-                id={convertIds.actionResponsibility}
-                value={actionDirectResponsibilityId}
-                onChange={setActionDirectResponsibilityId}
-                context={actionContext}
-                options={convertResponsibilityOptions}
-                disabled={isConverting}
-              />
-            )}
-            {/* Transição solto → Resultado com escolha direta provisória: a
-               escolha fica SÓ em memória (voltar a solto a mantém; voltar não
-               copia herança); nada persistido a apagar nesta captura pendente. */}
-            {actionProjectId && actionDirectResponsibilityId && (
-              <p role="alert" className="text-xs font-medium text-ginga-warning">
-                Ao confirmar, este avanço seguirá a Responsabilidade do resultado escolhido; a
-                escolha direta não será usada.
-              </p>
-            )}
-
-            {/* FATIA 4C2 — Estratégia (opcional), LOCAL ao Resultado escolhido.
-               Sem Resultado: sem seletor e sem grupos de outros pais, com
-               orientação discreta (Avanço solto segue utilizável, inclusive com
-               Responsabilidade direta). Escolha nova nunca herda/inferir;
-               sentinel 'none' interno nunca vai à API — vai ID nativo ou ''. */}
-            {actionProjectId && selectedActionProject && (
-              <StrategySelect
-                id={convertIds.actionStrategy}
-                value={actionStrategyId}
-                onChange={handleActionStrategyChange}
-                options={actionStrategies}
-                projectLabel={`[${selectedActionProject.context}] ${formatEntityTitle('project', selectedActionProject.sequence_number, selectedActionProject.title)}`}
-                onOpenCreate={() => {
-                  if (!isConverting) setActionStrategyModalOpen(true)
-                }}
-                incompatible={actionStrategyIncompatible}
-                disabled={isConverting}
-              />
-            )}
-            {actionProjectId && !selectedActionProject && (
-              <p className="text-xs text-muted-foreground">
-                Estratégias ficam disponíveis quando o resultado selecionado é carregado.
-              </p>
-            )}
-            {!actionProjectId && (
-              <p className="text-xs text-muted-foreground">
-                Vincule este avanço a um resultado para escolher uma estratégia.
-              </p>
-            )}
-            {/* Volta a solto com escolha provisória: identificada, nunca enviada
-               nem apagada em silêncio — ajuste explícito antes de confirmar. */}
-            {!actionProjectId && actionStrategyId && (
-              <div
-                role="alert"
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-ginga-warning/30 bg-ginga-warning-bg p-2 text-xs"
-              >
-                <span className="font-medium text-ginga-warning">
-                  Avanço solto não leva estratégia. Remova a escolha antes de converter, ou volte ao
-                  resultado para mantê-la.
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isConverting}
-                  onClick={() => {
-                    setActionStrategyId('')
-                    setActionStrategyChoice(null)
-                    setActionStrategyNotice(null)
-                  }}
-                  className="min-h-11 shrink-0"
-                >
-                  Remover escolha de Estratégia
-                </Button>
-              </div>
-            )}
-            {actionStrategyNotice && (
-              <p role="alert" className="text-xs font-medium text-ginga-warning">
-                {actionStrategyNotice}
-              </p>
-            )}
-
-            {/* FATIA 5C2 — Planejamento (opcional): o MESMO componente 89, com
-               a MESMA fórmula de rascunho/fuso/validação do ActionModal.
-               Recolher/expandir não muda valores; converter é o único commit;
-               cancelar não grava nem aciona IA. Key reinicia a apresentação a
-               cada abertura/dono/captura/tipo, sem tocar o rascunho em uso. */}
-           <PlannedExecutionFields
-              key={`${conversionType ?? 'closed'}-${selectedCapture?.id ?? 'none'}`}
-              draft={actionPlanned}
-              profileTimezone={convertProfileTz.timezone}
-              usingUtcFallback={actionPlannedUtcFallback}
-              keepsSavedTimezone={false}
-              savedTimezoneUnrecognized={false}
-              pristine={false}
-              error={actionPlannedError}
-              disableTime={actionPlanned.date !== '' && !isValidPlannedDate(actionPlanned.date)}
-              disabled={isConverting}
-              onChangeDate={handleActionPlannedDateChange}
-              onChangeTime={handleActionPlannedTimeChange}
-              onRemove={() => {
-                setActionPlanned(EMPTY_PLANNED)
-                setActionPlannedUtcFallback(false)
-                setActionPlannedPendingInvalid(false)
-                setActionPlannedError(null)
-              }}
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setConversionType(null)} disabled={isConverting}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => handleConfirmConvert('action')}
-              disabled={isConverting || !actionTitle.trim()}
-            >
-              {isConverting ? 'Gravando…' : 'Criar Avanço Pronto'}
-            </Button>
-          </DialogFooter>
-
-          {/* FATIA 4C2 — editor de Estratégia REUSADO (4B1) sobre este diálogo,
-             para o Resultado CONFIRMADO do formulário. Duas decisões separadas:
-             Salvar aqui cria SOMENTE o grupo (a conversão é outro clique, pelo
-             contrato 84 — não há transação grupo↔Avanço). Cancelar o editor não
-             grava grupo nem converte a captura; volta ao mesmo rascunho. Durante
-             a conversão, o editor filho fica bloqueado (não abre). */}
-          {actionStrategyModalOpen && selectedActionProject && (
-            <>
-              <p className="sr-only">
-                Salvar cria a estratégia neste resultado. Cancelar a conversão depois não apaga a
-                estratégia.
-              </p>
-              <StrategyModal
-                open
-                strategy={null}
-                projectId={selectedActionProject.id}
-                projectLabel={`[${selectedActionProject.context}] ${formatEntityTitle('project', selectedActionProject.sequence_number, selectedActionProject.title)}`}
-                onOpenChange={(next) => {
-                  if (!next) setActionStrategyModalOpen(false)
-                }}
-                onSaved={handleInlineStrategySaved}
-              />
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

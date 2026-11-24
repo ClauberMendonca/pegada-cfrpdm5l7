@@ -63,7 +63,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
         if (session !== sessionRef.current) return
         live = fresh
         // Projeto atual resolvido por leitura autenticada — nunca assumido ativo.
-        let project: Project | null | undefined
+        let project: Project | null | undefined = fresh.project_id ? undefined : null
         if (fresh.project_id) {
           try {
             project = await projectService.getById(fresh.project_id)
@@ -111,7 +111,7 @@ export const StatusSuggestionStep: React.FC<StatusSuggestionStepProps> = ({
       // Revalidação ANTES de enviar (estado + vínculo atuais).
       const fresh = await actionService.getById(actionId)
       if (session !== sessionRef.current || !pb.authStore.model?.id) return
-      let project: Project | null | undefined
+      let project: Project | null | undefined = fresh.project_id ? undefined : null
       if (fresh.project_id) {
         try {
           project = await projectService.getById(fresh.project_id)

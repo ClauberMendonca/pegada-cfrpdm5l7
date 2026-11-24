@@ -1,23 +1,30 @@
-// Hook de diagnóstico TEMPORÁRIO — probe individual de cada caminho de require
-// da pegada-core. NADA é persistido; nenhuma coleção é tocada. Remover no fim.
-routerAdd('GET', '/backend/v1/diag/require', (e) => {
-  var __hooksStr = __hooks
-  var paths = [
-    __hooksStr + '/pegada-core.pb.js',
-    __hooksStr + '/lib/pegada-core.js',
-    __hooksStr + '/pegada-core.js',
-    __hooksStr + '/pegada-core',
-    __hooksStr + '/lib/pegada-core',
-  ]
+// Cron de diagnóstico TEMPORÁRIO — roda a cada minuto e registra no stream
+// "hooks" o que o ambiente JSVM oferece, sem depender de HTTP:
+//   1. listagem de $os.readDir(pb_hooks)   → quais arquivos existem em disco
+//   2. globalThis.__pegadaCore             → se o global do core atravessa arquivos
+//   3. globalThis.__diagModMin             → idem, módulo mínimo de 2 linhas
+// NADA é persistido; nenhuma coleção é tocada. Remover no fim.
+cronAdd('diag_pegada', '* * * * *', () => {
   var out = {}
-  for (var i = 0; i < paths.length; i++) {
-    try {
-      var m = require(paths[i])
-      out[paths[i]] = 'OK: ' + (m && m.VERSION ? 'VERSION=' + m.VERSION : typeof m)
-    } catch (err) {
-      out[paths[i]] = 'ERRO: ' + err
-    }
+  try {
+    var files = $os.readDir(__hooks)
+    var names = []
+    for (var i = 0; i < files.length; i++) names.push(files[i].name)
+    out.dir = names.join(',')
+  } catch (err) {
+    out.dir = 'ERRO: ' + err
   }
-  out.__hooks = __hooksStr
-  return e.json(200, out)
+  try {
+    out.global_core = typeof globalThis.__pegadaCore
+    if (typeof globalThis.__pegadaCore !== 'undefined')
+      out.core_version = globalThis.__pegadaCore.VERSION
+  } catch (err) {
+    out.global_core = 'ERRO: ' + err
+  }
+  try {
+    out.global_min = typeof globalThis.__diagModMin
+  } catch (err) {
+    out.global_min = 'ERRO: ' + err
+  }
+  console.log('DIAG ' + JSON.stringify(out))
 })

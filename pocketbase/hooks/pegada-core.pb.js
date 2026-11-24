@@ -2279,3 +2279,9 @@ var __pegadaCore = {
 if (typeof module !== 'undefined' && module) {
   module.exports = __pegadaCore
 }
+// Exporta também pelo objeto global: nesta instância o require do JSVM não
+// resolve módulos de pb_hooks (GoError: Invalid module em todas as formas),
+// e cada arquivo .pb.js roda isolado — mas o globalThis é compartilhado.
+if (typeof globalThis !== 'undefined' && globalThis) {
+  globalThis.__pegadaCore = __pegadaCore
+}

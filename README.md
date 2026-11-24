@@ -69,4 +69,9 @@ Depois disso (`.github/workflows/publicar.yml`):
 
 ## Cópias de segurança
 
-O Fly.io tira uma cópia diária do volume (`fly volumes snapshots list`). Para uma cópia fora do Fly, use o painel do PocketBase em Settings → Backups.
+Há duas camadas:
+
+- **Semanal, dentro do app.** Todo domingo às 03:00 de Brasília o servidor gera uma cópia completa e guarda as 8 mais recentes (migration `0021`). Para baixar uma: abra `https://<endereço do app>/_/`, entre com o e-mail e a senha do dono, vá em Settings → Backups e clique no ícone de download. No mesmo lugar dá para criar uma cópia na hora e restaurar.
+- **Diária, do Fly.io.** O Fly tira uma cópia do volume todo dia (`fly volumes snapshots list`); o volume do app oficial é criado guardando 30 dias.
+
+As cópias não vão para o GitHub de propósito: o repositório é público. Vale baixar uma cópia de vez em quando e guardar fora do Fly.io.

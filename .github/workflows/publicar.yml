@@ -83,6 +83,9 @@ jobs:
           echo "::add-mask::$senha"
           echo "PEGADA_TESTE_SENHA=$senha" >> "$GITHUB_ENV"
           PEGADA_TESTE_SENHA="$senha" node scripts/conta-teste.mjs "$PEGADA_URL"
+      - name: Cópia de segurança
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: node scripts/teste-copia.mjs "$PEGADA_URL"
       - name: Sugestões da IA
         if: env.PEGADA_DONO_EMAIL != '' && env.TEM_CHAVE_IA == 'true'
         run: node scripts/teste-ia.mjs "$PEGADA_URL"

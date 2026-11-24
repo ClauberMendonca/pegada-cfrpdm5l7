@@ -20,7 +20,7 @@ fi
 
 if [ "$(flyctl volumes list --app "$APP" --json | grep -c "\"name\": \"$VOLUME\"" || true)" = "0" ]; then
   echo "Criando o volume $VOLUME"
-  flyctl volumes create "$VOLUME" --app "$APP" --region "$REGIAO" --size 1 --yes
+  flyctl volumes create "$VOLUME" --app "$APP" --region "$REGIAO" --size 1 --snapshot-retention 30 --yes
 fi
 
 if [ -n "${ANTHROPIC_API_KEY:-}" ]; then

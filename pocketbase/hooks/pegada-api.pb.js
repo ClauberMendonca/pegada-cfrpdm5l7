@@ -25,6 +25,7 @@
 routerAdd('GET', '/backend/v1/pegada/operacoes', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -52,6 +53,7 @@ routerAdd('GET', '/backend/v1/pegada/operacoes', (e) => {
 routerAdd('POST', '/backend/v1/pegada/op/{nome}', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -76,6 +78,7 @@ routerAdd('POST', '/backend/v1/pegada/op/{nome}', (e) => {
 routerAdd('POST', '/backend/v1/pegada/lote', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -99,6 +102,7 @@ routerAdd('POST', '/backend/v1/pegada/lote', (e) => {
 routerAdd('POST', '/backend/v1/pegada/desfazer/{eventoId}', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -121,6 +125,7 @@ routerAdd('POST', '/backend/v1/pegada/desfazer/{eventoId}', (e) => {
 routerAdd('POST', '/backend/v1/pegada/desfazer-lote/{loteId}', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -143,6 +148,7 @@ routerAdd('POST', '/backend/v1/pegada/desfazer-lote/{loteId}', (e) => {
 routerAdd('POST', '/backend/v1/pegada/propostas/{id}/confirmar', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -165,6 +171,7 @@ routerAdd('POST', '/backend/v1/pegada/propostas/{id}/confirmar', (e) => {
 routerAdd('POST', '/backend/v1/pegada/propostas/{id}/recusar', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -187,6 +194,7 @@ routerAdd('POST', '/backend/v1/pegada/propostas/{id}/recusar', (e) => {
 routerAdd('POST', '/backend/v1/pegada/agentes', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -209,6 +217,7 @@ routerAdd('POST', '/backend/v1/pegada/agentes', (e) => {
 routerAdd('POST', '/backend/v1/pegada/agentes/{id}/revogar', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -236,6 +245,7 @@ routerAdd('POST', '/backend/v1/pegada/agentes/{id}/revogar', (e) => {
 routerAdd('POST', '/backend/v1/pegada/mcp', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -286,6 +296,7 @@ routerAdd('POST', '/backend/v1/pegada/mcp', (e) => {
 routerAdd('POST', '/backend/v1/pegada/mcp/{token}', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',
@@ -339,6 +350,7 @@ routerAdd('GET', '/backend/v1/pegada/mcp/{token}', (e) =>
 routerAdd('POST', '/backend/v1/pegada/ia/sugerir', (e) => {
   const core = (function () {
     var ps = [
+      __hooks + '/pegada-core.pb.js',
       __hooks + '/lib/pegada-core.js',
       __hooks + '/pegada-core.js',
       __hooks + '/lib/pegada-core',

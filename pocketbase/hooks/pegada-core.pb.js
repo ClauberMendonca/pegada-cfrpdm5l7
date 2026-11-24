@@ -19,10 +19,6 @@
  *
  * Uso: const core = require(__hooks + '/lib/pegada-core.js') DENTRO do
  * callback (a JSVM não compartilha declarações de topo entre callbacks).
- *
- * CÓPIPLANA: este arquivo é a cópia em nível de pb_hooks/ de lib/pegada-core.js
- * (o Skip Cloud só implanta arquivos .js/.json na raiz de pb_hooks/). Mantenha
- * as duas cópias idênticas.
  */
 
 'use strict'
@@ -2261,7 +2257,7 @@ function mcpHandle(app, actor, msg) {
   return fail(-32601, 'Método não suportado: ' + method)
 }
 
-module.exports = {
+var __pegadaCore = {
   VERSION: VERSION,
   OPS: OPS,
   SCOPES: SCOPES,
@@ -2278,4 +2274,8 @@ module.exports = {
   mcpHandle: mcpHandle,
   meterAgent: meterAgent,
   errMessage: errMessage,
+}
+
+if (typeof module !== 'undefined' && module) {
+  module.exports = __pegadaCore
 }

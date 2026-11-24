@@ -29,6 +29,7 @@ import {
 } from '@/components/ViewToggle'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { formatEntityTitle } from '@/lib/entityNumber'
+import { GuidedReview } from '@/components/GuidedReview'
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -140,6 +141,9 @@ export const ReviewPage: React.FC = () => {
           </Badge>
         )}
       </div>
+
+      {/* PEGADA — Revisão guiada, passo a passo, sobre ver_resumo_semana */}
+      <GuidedReview onChanged={retry} />
 
       {/* BLOCO 3(a) — carregando */}
       {isLoading && (

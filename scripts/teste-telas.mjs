@@ -362,6 +362,32 @@ await passo('mapa e revisão', async () => {
   await foto('revisao')
 })
 
+// 14b. Revisão guiada: percorre os passos e toma uma decisão com Desfazer
+await passo('revisão guiada', async () => {
+  await ir('/revisao')
+  const guia = page.locator('section[aria-label="Revisão guiada"]')
+  await guia.locator('[data-passo="Espelho"]').waitFor()
+  const espelho = await guia.innerText()
+  confere('Revisão guiada: o espelho mostra o que foi concluído', espelho.includes(nomes.acao) && espelho.includes(nomes.resultado), espelho.slice(0, 200))
+  await botao('Próximo passo', guia).click()
+  confere('Revisão guiada: o balanço aparece', /Construir/.test(await guia.innerText()))
+  await botao('Próximo passo', guia).click()
+  await guia.locator('[data-passo="Resultados parados"]').waitFor()
+  await botao('Próximo passo', guia).click()
+  const aposta = guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).first()
+  confere('Revisão guiada: a aposta aparece para teste', (await aposta.count()) === 1)
+  await botao(/Trocar de aposta/, aposta).click()
+  await page.waitForTimeout(1500)
+  confere('Revisão guiada: trocar de aposta arquiva a estratégia', (await guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).count()) === 0)
+  await page.getByRole('button', { name: 'Desfazer' }).first().click()
+  await page.waitForTimeout(1500)
+  confere('Revisão guiada: Desfazer traz a aposta de volta', (await guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).count()) === 1)
+  await botao('Próximo passo', guia).click()
+  await botao('Próximo passo', guia).click()
+  confere('Revisão guiada: fecha na caixa de entrada', /captura/i.test(await guia.innerText()))
+  await foto('revisao-guiada')
+})
+
 // 15. Nenhuma tela pode ficar mais larga que o aparelho
 await passo('largura das telas', async () => {
   const largas = []

@@ -54,6 +54,55 @@ jobs:
         if: env.FLY_API_TOKEN != ''
         run: scripts/fly-publicar.sh fly.previa.toml
 
+  # Depois de publicar a prévia, usa o app de verdade numa conta só de teste
+  # (teste-telas@pegada.teste, senha nova a cada vez): IA embutida e roteiro
+  # pelas telas no celular e no computador. A conta do dono não é tocada.
+  uso-na-previa:
+    needs: previa
+    runs-on: ubuntu-latest
+    environment: previa
+    env:
+      PEGADA_URL: https://pegada-cfrpdm5l7-previa.fly.dev
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
+      TEM_CHAVE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      PEGADA_TESTE_EMAIL: teste-telas@pegada.teste
+      PLAYWRIGHT_MODULE: /tmp/pw/node_modules/playwright/index.mjs
+    steps:
+      - uses: actions/checkout@v4
+        if: env.PEGADA_DONO_EMAIL != ''
+      - uses: actions/setup-node@v4
+        if: env.PEGADA_DONO_EMAIL != ''
+        with:
+          node-version: 22
+      - name: Preparar a conta de teste
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: |
+          senha="T-$(openssl rand -hex 12)"
+          echo "::add-mask::$senha"
+          echo "PEGADA_TESTE_SENHA=$senha" >> "$GITHUB_ENV"
+          PEGADA_TESTE_SENHA="$senha" node scripts/conta-teste.mjs "$PEGADA_URL"
+      - name: Sugestões da IA
+        if: env.PEGADA_DONO_EMAIL != '' && env.TEM_CHAVE_IA == 'true'
+        run: node scripts/teste-ia.mjs "$PEGADA_URL"
+      - name: Instalar o navegador de teste
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: |
+          mkdir -p /tmp/pw && cd /tmp/pw && npm init -y >/dev/null && npm i --silent playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Uso pelas telas no celular
+        if: env.PEGADA_DONO_EMAIL != ''
+        run: PEGADA_TESTE_TELA=celular PEGADA_TESTE_FOTOS=fotos/celular node scripts/teste-telas.mjs
+      - name: Uso pelas telas no computador
+        if: always() && env.PEGADA_DONO_EMAIL != ''
+        run: PEGADA_TESTE_TELA=computador PEGADA_TESTE_FOTOS=fotos/computador node scripts/teste-telas.mjs
+      - uses: actions/upload-artifact@v4
+        if: always() && env.PEGADA_DONO_EMAIL != ''
+        with:
+          name: fotos-das-telas
+          path: fotos/
+          if-no-files-found: ignore
+
   publicado:
     needs: testes
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.alvo == 'publicado'

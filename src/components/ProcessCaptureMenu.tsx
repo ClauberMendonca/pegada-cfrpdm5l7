@@ -19,7 +19,7 @@ import { projectService } from '@/services/projectService'
 import { ACTION_KIND_LABEL, ActionKind, CaptureItem, Project } from '@/types/execution'
 
 // PEGADA — processar captura em um toque, sempre pela operação do método.
-// Espera fica de fora do toque único porque exige "aguardando": use "Virar Avanço".
+// Espera fica de fora do toque único porque exige "aguardando": ela se cria em Novo Avanço.
 const TIPOS_UM_TOQUE: ActionKind[] = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia']
 
 interface Props {

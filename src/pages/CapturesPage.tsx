@@ -1,48 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef, useId } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
-import { CaptureItem, CaptureStatus, Project, Strategy } from '@/types/execution'
+import { CaptureItem, CaptureStatus } from '@/types/execution'
 import { captureService } from '@/services/captureService'
-import { projectService } from '@/services/projectService'
-import { StrategySelect } from '@/components/StrategySelect'
-import { StrategyModal } from '@/components/StrategyModal'
-import { useProjectStrategies } from '@/hooks/use-project-strategies'
-import {
-  ResponsibilityOptionsState,
-  ResponsibilitySelect,
-  useResponsibilityOptions,
-} from '@/components/ResponsibilitySelect'
-import {
-  ResponsibilityRefState,
-  useResponsibilityReference,
-} from '@/hooks/use-responsibility-reference'
-import { useGlobalFilter } from '@/contexts/FilterContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Inbox, Plus, FolderKanban, CheckSquare, Trash2, Lightbulb, Bot } from 'lucide-react'
+import { Inbox, Plus, FolderKanban, CheckSquare, Trash2, Lightbulb } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { CopilotPanel } from '@/components/CopilotPanel'
-import { prepareProposalConversion } from '@/lib/skipAi/proposalService'
-import type { AiRequestRecord } from '@/lib/skipAi/types'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   ListRow,
@@ -53,7 +19,7 @@ import {
 } from '@/components/ViewToggle'
 import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
 import { useCaptureDraft } from '@/hooks/use-capture-draft'
-import { EntityNumberKind, entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
+import { EntityNumberKind, formatEntityTitle } from '@/lib/entityNumber'
 import {
   collectTargetIds,
   emptyTargetMaps,
@@ -61,19 +27,10 @@ import {
   TargetMaps,
 } from '@/lib/captureTargets'
 import { currentOwnerSnapshot, isSameOwner } from '@/lib/ownerScope'
-import { PlannedExecutionFields } from '@/components/PlannedExecutionFields'
-import {
-  EMPTY_PLANNED,
-  isValidPlannedDate,
-  isValidPlannedTime,
-  plannedTimezoneOrFallback,
-  type PlannedExecution,
-} from '@/lib/plannedExecution'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 export const CapturesPage: React.FC = () => {
   const { toast } = useToast()
-  const { contextFilter } = useGlobalFilter()
   const { user } = useAuth()
 
   const [captures, setCaptures] = useState<CaptureItem[]>([])
@@ -134,184 +91,7 @@ export const CapturesPage: React.FC = () => {
     [ownerTz],
   )
 
-  // Conversion Modals
-  const [selectedCapture, setSelectedCapture] = useState<CaptureItem | null>(null)
-  const [conversionType, setConversionType] = useState<'project' | 'action' | null>(null)
-  // FATIA 3C2B — trava SÍNCRONA dedicada à conversão (não reutiliza a trava da
-  // entrada rápida): uma confirmação chama captureService.convert UMA vez.
-  const convertingRef = useRef(false)
 
-  // FATIA M1B1 — Painel do Copiloto (estado SEPARADO da conversão manual)
-  const [copilotCapture, setCopilotCapture] = useState<CaptureItem | null>(null)
-  const [copilotOpen, setCopilotOpen] = useState(false)
-  const copilotSession = useRef(0)
-  const pageActive = useRef(true)
-  const [conversionFromCopilot, setConversionFromCopilot] = useState(false)
-
-  // BLOCO 2C — feedback local pós-conversão: link para o destino REAL retornado
-  // pela conversão (ou já existente em duplicate:true). Estado só de UI —
-  // nenhum registro é gravado no banco; disponível mesmo depois de a captura
-  // sair da lista Pendentes. Limpo ao trocar de captura/desmontar a página.
-  const [conversionFeedback, setConversionFeedback] = useState<{
-    captureId: string
-    targetType: 'project' | 'action'
-    targetId: string
-    duplicate: boolean
-    // NUMERAÇÃO PERMANENTE 2C — código real do destino retornado pela conversão
-    // (target.sequence_number do hook transacional). duplicate:true traz o
-    // MESMO destino/código já existentes, sem nova alocação.
-    targetSequenceNumber: number | null
-    targetTitle: string
-  } | null>(null)
-
-  useEffect(() => {
-    pageActive.current = true
-    return () => {
-      pageActive.current = false
-      ++copilotSession.current
-      setConversionFeedback(null)
-    }
-  }, [])
-
-  // Convert to Project form state
-  const [projectTitle, setProjectTitle] = useState('')
-  const [projectContext, setProjectContext] = useState<'vida' | 'trabalho'>('trabalho')
-  const [projectAspiration, setProjectAspiration] = useState('')
-  const [projectControllable, setProjectControllable] = useState('')
-  const [projectCompletion, setProjectCompletion] = useState('')
-
-  // Convert to Action form state
-  const [actionTitle, setActionTitle] = useState('')
-  const [actionContext, setActionContext] = useState<'vida' | 'trabalho'>('trabalho')
-  const [actionProjectId, setActionProjectId] = useState<string>('')
-  const [availableProjects, setAvailableProjects] = useState<Project[]>([])
-
-  // FATIA 4C2 — Estratégia (opcional) na conversão em Avanço: escolha SÓ em
-  // memória do formulário; '' = Nenhuma. Toda abertura NOVA (manual ou proposta
-  // local do Copiloto) começa Nenhuma — nunca inferida da captura, propósito,
-  // filtro ou proposta. A captura pendente não tem vínculo original persistido:
-  // nunca há Estratégia arquivada a liberar nesta conversão. Lista = hook82
-  // reusado (uma leitura completa do Resultado EFETIVAMENTE escolhido; sem IN
-  // SQL, sem consulta por opção, sem listagem global, sem polling).
-  const [actionStrategyId, setActionStrategyId] = useState('')
-  // Registro da escolha provisória (para identificar incompatibilidade ao
-  // trocar de pai sem nova consulta — dados já lidos, sem fonte nova).
-  const [actionStrategyChoice, setActionStrategyChoice] = useState<Strategy | null>(null)
-  const [actionStrategyNotice, setActionStrategyNotice] = useState<string | null>(null)
-  // Criação inline: reusa o StrategyModal REAL 4B1 sobre este diálogo.
-  const [actionStrategyModalOpen, setActionStrategyModalOpen] = useState(false)
-  const actionStrategies = useProjectStrategies(
-    conversionType === 'action' && actionProjectId ? actionProjectId : '',
-  )
-
-  // FATIA 5C2 — Planejamento (opcional) do NOVO Avanço no diálogo Converter em
-  // Avanço: MESMA tupla/rascunho do formulário 89 (PlannedExecutionFields +
-  // validação literal), montada APÓS vínculos e ANTES da confirmação. Intenção
-  // LOCAL ao diálogo: toda abertura NOVA (manual ou proposta local) inicia
-  // recolhida e VAZIA — nunca inferida de captura/raw_text/created, prazo,
-  // Resultado, Responsabilidade, Estratégia, filtro ou última conversão; a
-  // captura pendente NUNCA é lida como Avanço já salvo e duplicata não é
-  // consultada. Sem localStorage (o rascunho da entrada rápida é outra coisa).
-  const [actionPlanned, setActionPlanned] = useState<PlannedExecution>(EMPTY_PLANNED)
-  const [actionPlannedUtcFallback, setActionPlannedUtcFallback] = useState(false)
-  const [actionPlannedPendingInvalid, setActionPlannedPendingInvalid] = useState(false)
-  const [actionPlannedError, setActionPlannedError] = useState<string | null>(null)
-
-  // FATIA 3C2B — Responsabilidade nos dois diálogos de conversão.
-  // IDs estáveis por instância (useId no topo, antes de qualquer retorno).
-  const uid = useId()
-  const convertIds = React.useMemo(
-    () => ({
-      projectResponsibility: `${uid}-convert-project-responsibility`,
-      actionResponsibility: `${uid}-convert-action-responsibility`,
-      actionInheritedResponsibility: `${uid}-convert-action-inherited-responsibility`,
-      actionStrategy: `${uid}-convert-action-strategy`,
-    }),
-    [uid],
-  )
-  // Vínculo NOVO escolhido em cada formulário; '' = Nenhuma. Toda nova
-  // abertura (manual e proposta local) começa Nenhuma — nunca inferida de
-  // propósito, filtro, texto, captura anterior ou proposta Manus. A escolha
-  // direta do Avanço permanece SÓ em memória enquanto um Resultado está
-  // selecionado (não é copiada da herança); nova abertura zera a conversão
-  // anterior.
-  const [projectResponsibilityId, setProjectResponsibilityId] = useState('')
-  const [actionDirectResponsibilityId, setActionDirectResponsibilityId] = useState('')
-  // Um único read por abertura (qualquer dos dois diálogos) — lista completa do
-  // dono, com loading/erro/retry reais do seletor.
-  const convertResponsibilityOptions: ResponsibilityOptionsState = useResponsibilityOptions(
-    conversionType !== null,
-  )
-  // HERANÇA EM LEITURA do Resultado realmente escolhido: hook existente no
-  // topo, incondicional. Pai ainda não carregado (null) NUNCA é 'Nenhuma';
-  // '' do pai confirma ausência ('none'); erro preserva 'error'. A herança
-  // JAMAIS é copiada para o payload do Avanço (envia responsibility_id='').
-  const selectedActionProject = actionProjectId
-    ? (availableProjects.find((p) => p.id === actionProjectId) ?? null)
-    : null
-  const inheritedActionRef: ResponsibilityRefState = useResponsibilityReference(
-    selectedActionProject ? (selectedActionProject.responsibility_id ?? null) : null,
-  )
-
-  // FATIA 4C2 — incompatibilidade da escolha provisória com o pai ATUAL do
-  // formulário (troca de Resultado): identificada pelos dados já lidos; nunca
-  // tratada como opção válida nem enviada ao backend.
-  const actionStrategyIncompatible =
-    Boolean(actionStrategyId) &&
-    Boolean(actionProjectId) &&
-    actionStrategyChoice !== null &&
-    actionStrategyChoice.project_id !== actionProjectId
-
-  // FATIA 4C2 — troca de pai no diálogo de Avanço: a escolha de Estratégia é só
-  // memória; transições identificam (aviso) e nunca enviam grupo do pai
-  // anterior nem limpam silenciosamente. Sem escolha anterior, troca simples.
-  const handleActionProjectChange = (nextProjectId: string) => {
-    setActionProjectId(nextProjectId)
-    if (!nextProjectId) {
-      if (actionStrategyId) {
-        setActionStrategyNotice(
-          'Este avanço será criado solto, sem estratégia. Use “Remover escolha de Estratégia” para confirmar, ou volte ao resultado para mantê-la.',
-        )
-      }
-      return
-    }
-    if (!actionStrategyId) return
-    const chosen = actionStrategyChoice
-    if (chosen && chosen.project_id === nextProjectId) {
-      setActionStrategyNotice(null)
-      return
-    }
-    setActionStrategyNotice(
-      'A estratégia escolhida pertence a outro resultado. Escolha “Nenhuma” ou uma estratégia ativa do novo resultado antes de converter.',
-    )
-  }
-
-  // FATIA 4C2 — seleção direta no seletor: ID nativo ('' = Nenhuma); escolha
-  // registrada com o registro já lido; aviso de transição limpo.
-  const handleActionStrategyChange = (nextId: string) => {
-    setActionStrategyId(nextId)
-    setActionStrategyChoice(
-      nextId ? (actionStrategies.items.find((s) => s.id === nextId) ?? actionStrategyChoice) : null,
-    )
-    setActionStrategyNotice(null)
-  }
-
-  // FATIA 4C2 — criação INLINE de Estratégia: o StrategyModal REAL 4B1 salva
-  // via strategyService.create UMA vez (dentro dele); incluir o grupo confirmado
-  // nas opções é local ao hook82 (upsert). NÃO converte a captura, não fecha o
-  // diálogo-pai, não promove Hoje: são duas decisões independentes. Dono/pai/
-  // abertura do snapshot que iniciou a criação devem corresponder — retorno
-  // tardio não seleciona. Nunca apaga grupo como compensação.
-  const handleInlineStrategySaved = (saved: Strategy, created: boolean) => {
-    if (!created) return
-    if (conversionType !== 'action' || !actionProjectId) return
-    if (saved.project_id !== actionProjectId) return
-    if (!isSameOwner(currentOwnerSnapshot())) return
-    actionStrategies.upsert(saved)
-    setActionStrategyId(saved.id)
-    setActionStrategyChoice(saved)
-    setActionStrategyNotice(null)
-  }
 
   const loadCaptures = useCallback(async () => {
     setIsLoading(true)
@@ -362,17 +142,6 @@ export const CapturesPage: React.FC = () => {
     }
   }, [captures, user?.id])
 
-  useEffect(() => {
-    projectService
-      .list()
-      .then((list) => {
-        setAvailableProjects(list.filter((p) => p.status === 'ativo' || p.status === 'rascunho'))
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Falha ao carregar projetos para vínculo.'
-        toast({ variant: 'destructive', title: 'Erro', description: msg })
-      })
-  }, [toast])
 
   // Envio único compartilhado por teclado e botão (captureService.create).
   const submitCapture = useCallback(async () => {
@@ -413,7 +182,7 @@ export const CapturesPage: React.FC = () => {
       const field = quickAddRef.current
       if (field && current) field.focus()
     }
-  }, [beginSend, isCurrent, settleSuccess, isSubmitting, loadCaptures, toast])
+  }, [newCaptureText, beginSend, isCurrent, settleSuccess, isSubmitting, loadCaptures, toast])
 
   const quickAddRef = useRef<HTMLTextAreaElement>(null)
 
@@ -440,106 +209,8 @@ export const CapturesPage: React.FC = () => {
     }
   }
 
-  const openConvertToProject = (capture: CaptureItem) => {
-    setConversionFromCopilot(false)
-    setConversionFeedback(null)
-    setSelectedCapture(capture)
-    setProjectTitle(capture.raw_text.split('\n')[0].slice(0, 80))
-    setProjectContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
-    setProjectAspiration('')
-    setProjectControllable('')
-    setProjectCompletion('')
-    setProjectResponsibilityId('')
-    setConversionType('project')
-  }
 
-  const openConvertToAction = (capture: CaptureItem) => {
-    setConversionFromCopilot(false)
-    setConversionFeedback(null)
-    setSelectedCapture(capture)
-    setActionTitle(capture.raw_text.slice(0, 100))
-    setActionContext(contextFilter === 'vida' ? 'vida' : 'trabalho')
-    setActionProjectId('')
-    setActionDirectResponsibilityId('')
-    // FATIA 4C2 — toda abertura nova começa Nenhuma; sem editor filho aberto.
-    setActionStrategyId('')
-    setActionStrategyChoice(null)
-    setActionStrategyNotice(null)
-    setActionStrategyModalOpen(false)
-    // FATIA 5C2 — abertura NOVA inicia recolhida e sem plano (dia/hora/fuso
-    // vazios); sem herdar valores da abertura anterior.
-    setActionPlanned(EMPTY_PLANNED)
-    setActionPlannedUtcFallback(false)
-    setActionPlannedPendingInvalid(false)
-    setActionPlannedError(null)
-    setConversionType('action')
-  }
 
-  const useCopilotProposal = async (request: AiRequestRecord) => {
-    if (!copilotOpen || !copilotCapture) throw new Error('Abra a captura para revisar a proposta.')
-    const session = copilotSession.current
-    const prepared = await prepareProposalConversion(request, copilotCapture)
-    if (!pageActive.current || session !== copilotSession.current) {
-      throw new Error('O painel mudou; a proposta não foi levada ao formulário.')
-    }
-    const { capture, proposal } = prepared
-    ++copilotSession.current
-    setCopilotOpen(false)
-    setCopilotCapture(null)
-    setConversionFeedback(null)
-    setSelectedCapture(capture)
-    setConversionFromCopilot(true)
-    setCaptures((list) => list.map((item) => (item.id === capture.id ? capture : item)))
-    if (proposal.kind === 'projeto') {
-      setProjectTitle(proposal.title)
-      setProjectContext(proposal.context)
-      setProjectAspiration(proposal.aspiration ?? '')
-      setProjectControllable(proposal.controllable_delivery ?? '')
-      setProjectCompletion(proposal.completion_condition ?? '')
-      // Proposta local NÃO inventa Responsabilidade: vínculo começa Nenhuma.
-      setProjectResponsibilityId('')
-      setConversionType('project')
-    } else {
-      setActionTitle(proposal.title)
-      setActionContext(proposal.context)
-      setActionProjectId('')
-      setActionDirectResponsibilityId('')
-      // FATIA 4C2 — proposta local NÃO inventa Estratégia: começa Nenhuma.
-      setActionStrategyId('')
-      setActionStrategyChoice(null)
-      setActionStrategyNotice(null)
-      setActionStrategyModalOpen(false)
-      // FATIA 5C2 — proposta LOCAL não inventa planejamento: recolhida e vazia.
-      setActionPlanned(EMPTY_PLANNED)
-      setActionPlannedUtcFallback(false)
-      setActionPlannedPendingInvalid(false)
-      setActionPlannedError(null)
-      setConversionType('action')
-    }
-  }
-
-  const [isConverting, setIsConverting] = useState(false)
-
-  // FATIA 3C2B — validação do vínculo NOVO antes do envio único, pelos dados já
-  // carregados do seletor. Na conversão TODO vínculo explícito é novo: não há
-  // vínculo persistido a liberar grupo arquivado. Valor fora da lista (raro)
-  // segue para o backend, autoridade final.
-  const directLinkProblem = (chosenId: string, ctx: 'vida' | 'trabalho'): string | null => {
-    if (!chosenId) return null
-    const known = convertResponsibilityOptions.list.find((r) => r.id === chosenId) ?? null
-    if (!known) return null
-    if (known.context !== ctx) {
-      return `A responsabilidade escolhida é de contexto ${
-        known.context === 'trabalho' ? 'Trabalho' : 'Vida'
-      }, mas o formulário é de ${ctx === 'trabalho' ? 'Trabalho' : 'Vida'}. Escolha “Nenhuma” ou outra compatível antes de converter.`
-    }
-    if (known.status !== 'ativa') {
-      return 'A responsabilidade escolhida não está ativa. Escolha “Nenhuma” ou outra ativa antes de converter um vínculo novo.'
-    }
-    return null
-  }
-
-  const handleConfirmConvert = async (target: 'project' | 'action') => {
     if (!selectedCapture) return
     if (target === 'project' && !projectTitle.trim()) return
     if (target === 'action' && !actionTitle.trim()) return
@@ -886,44 +557,6 @@ export const CapturesPage: React.FC = () => {
       {item.status === 'pendente' && (
         <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
           <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openConvertToAction(item)}
-            className="text-xs gap-1.5"
-          >
-            <CheckSquare className="w-3.5 h-3.5 text-primary" />
-            Virar Avanço
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openConvertToProject(item)}
-            className="text-xs gap-1.5"
-          >
-            <FolderKanban className="w-3.5 h-3.5 text-primary" />
-            Virar Resultado
-          </Button>
-
-          {/* BLOCO 9 — Copiloto é opcional: ênfase secundária/neutra; a conversão
-              manual (Virar Avanço/Resultado) continua o caminho principal. Abrir o
-              painel não envia nada ao Manus. Rótulo pode quebrar no celular
-              sem reduzir a área de toque (whitespace-normal + min-h). */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              ++copilotSession.current
-              setCopilotCapture(item)
-              setCopilotOpen(true)
-            }}
-            className="min-h-[36px] gap-1.5 whitespace-normal px-2.5 text-xs text-muted-foreground hover:text-foreground"
-            title="Ver pedidos e comandos explícitos do copiloto (opcional)"
-          >
-            <Bot className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-            <span className="text-left leading-tight">Copiloto · Opcional</span>
-          </Button>
 
           <Button
             size="sm"
@@ -1208,44 +841,8 @@ export const CapturesPage: React.FC = () => {
                     </div>
                   )}
                   {item.status === 'pendente' && (
-                    <div className="flex flex-wrap items-center gap-2">
+                   <div className="flex flex-wrap items-center gap-2">
                       <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openConvertToAction(item)}
-                        className="text-xs gap-1.5"
-                      >
-                        <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                        Virar Avanço
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openConvertToProject(item)}
-                        className="text-xs gap-1.5"
-                      >
-                        <FolderKanban className="w-3.5 h-3.5 text-primary" />
-                        Virar Resultado
-                      </Button>
-
-                      {/* BLOCO 9 — rótulo opcional com ênfase neutra (ver Cards) */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          ++copilotSession.current
-                          setCopilotCapture(item)
-                          setCopilotOpen(true)
-                        }}
-                        className="min-h-[36px] gap-1.5 whitespace-normal px-2.5 text-xs text-muted-foreground hover:text-foreground"
-                        title="Ver pedidos e comandos explícitos do copiloto (opcional)"
-                      >
-                        <Bot className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span className="text-left leading-tight">Copiloto · Opcional</span>
-                      </Button>
-
                       <Button
                         size="sm"
                         variant="ghost"
@@ -1285,19 +882,8 @@ export const CapturesPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2 overflow-y-auto max-h-[60vh]">
-            {conversionFromCopilot && selectedCapture && (
-              <div className="rounded-md border border-border bg-accent p-3 text-xs space-y-2">
-                <p className="text-foreground">
-                  Proposta sugerida pelo Manus. Revise os campos; nada será criado antes de
-                  confirmar.
-                </p>
-                <p className="whitespace-pre-wrap break-words text-muted-foreground">
-                  {selectedCapture.raw_text}
-                </p>
-              </div>
-            )}
-            <div className="space-y-1.5">
+         <div className="space-y-4 py-2 overflow-y-auto max-h-[60vh]">
+          <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Título do Resultado
               </Label>
@@ -1415,18 +1001,7 @@ export const CapturesPage: React.FC = () => {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {conversionFromCopilot && selectedCapture && (
-              <div className="rounded-md border border-border bg-accent p-3 text-xs space-y-2">
-                <p className="text-foreground">
-                  Proposta sugerida pelo Manus. Revise o título e contexto; confirmar cria somente
-                  esta ação.
-                </p>
-                <p className="whitespace-pre-wrap break-words text-muted-foreground">
-                  {selectedCapture.raw_text}
-                </p>
-              </div>
-            )}
-            <div className="space-y-1.5">
+           <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wider text-muted-foreground">
                 Título do Avanço
               </Label>
@@ -1600,8 +1175,8 @@ export const CapturesPage: React.FC = () => {
                Recolher/expandir não muda valores; converter é o único commit;
                cancelar não grava nem aciona IA. Key reinicia a apresentação a
                cada abertura/dono/captura/tipo, sem tocar o rascunho em uso. */}
-            <PlannedExecutionFields
-              key={`${conversionType ?? 'closed'}-${selectedCapture?.id ?? 'none'}-${conversionFromCopilot ? 'copilot' : 'manual'}`}
+           <PlannedExecutionFields
+              key={`${conversionType ?? 'closed'}-${selectedCapture?.id ?? 'none'}`}
               draft={actionPlanned}
               profileTimezone={convertProfileTz.timezone}
               usingUtcFallback={actionPlannedUtcFallback}
@@ -1660,18 +1235,6 @@ export const CapturesPage: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* FATIA M1B1 — Painel do Copiloto (somente leitura, integração desligada) */}
-      <CopilotPanel
-        capture={copilotCapture}
-        open={copilotOpen}
-        onUseProposal={useCopilotProposal}
-        onOpenChange={(o) => {
-          if (!o) ++copilotSession.current
-          setCopilotOpen(o)
-          if (!o) setCopilotCapture(null)
-        }}
-      />
     </div>
   )
 }

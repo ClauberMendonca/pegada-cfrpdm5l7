@@ -249,6 +249,130 @@ await passo('capturar na tela de Capturas', async () => {
   await foto('capturas')
 })
 
+const cartao = (titulo) => page.locator('div.group.relative').filter({ hasText: titulo }).first()
+const item = (nome) => page.getByRole('menuitem', { name: nome }).first()
+
+// 8. Processar capturas: uma vira avanço, a outra é descartada e depois volta
+await passo('processar captura em avanço', async () => {
+  await ir('/capturas')
+  const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura }).first()
+  await botao('Processar', linha).click()
+  await item(/^Ação$/).click()
+  await page.waitForTimeout(1500)
+  await ir('/avancos')
+  confere('captura processada vira avanço em Avanços', (await texto('main')).includes(nomes.captura))
+})
+
+await passo('descartar captura', async () => {
+  await ir('/capturas')
+  const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).first()
+  await botao('Processar', linha).click()
+  await item('Descartar').click()
+  await page.waitForTimeout(1500)
+  await ir('/capturas')
+  const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
+  confere('captura descartada sai das pendentes', pendente === 0)
+})
+
+// 9. Atividade: o histórico mostra o que foi feito e desfaz o último passo
+await passo('atividade e desfazer', async () => {
+  await ir('/atividade')
+  const t = await texto('main')
+  confere('Atividade registra o que foi feito', /captura/i.test(t), t.slice(0, 200))
+  await botao('Desfazer', page.locator('main')).click()
+  await page.waitForTimeout(1500)
+  await ir('/capturas')
+  const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
+  confere('Desfazer devolve a captura descartada', pendente === 1)
+})
+
+// 10. Concluir avanços: a Ação direto, o Estudo deixando rastro
+await passo('concluir a Ação em Hoje', async () => {
+  await ir('/')
+  await cartao(nomes.acao).getByRole('button', { name: 'Marcar como concluído' }).click()
+  await page.waitForTimeout(1500)
+  if (await page.locator('[role=dialog]').count()) {
+    await dialogo().locator('textarea').fill(T('Corri no parque'))
+    await botao('Concluir', dialogo()).click()
+    await esperaSumir()
+  }
+  await ir('/avancos')
+  const feito = await cartao(nomes.acao).getByRole('button', { name: 'Reabrir como pronto' }).count()
+  confere('Ação concluída fica marcada como feita', feito === 1)
+})
+
+await passo('concluir o Estudo com rastro', async () => {
+  await ir('/')
+  await cartao(nomes.estudo).getByRole('button', { name: 'Marcar como concluído' }).click()
+  await dialogo().locator('textarea').fill(T('Aprendi a montar a planilha'))
+  await botao('Concluir', dialogo()).click()
+  await esperaSumir()
+  await ir('/avancos')
+  const feito = await cartao(nomes.estudo).getByRole('button', { name: 'Reabrir como pronto' }).count()
+  confere('Estudo só conclui deixando rastro, e fica feito', feito === 1)
+})
+
+// 11. Avanços: editar e cancelar o avanço que veio da captura
+await passo('editar e cancelar avanço', async () => {
+  await ir('/avancos')
+  await cartao(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  await item(/Editar/).click()
+  const d = dialogo()
+  await d.locator('input[id$=action-title]').fill(nomes.captura + ' (editado)')
+  await botao(/Atualizar|Salvar/, d).click()
+  await esperaSumir()
+  confere('editar o título de um avanço', (await texto('main')).includes(nomes.captura + ' (editado)'))
+  await cartao(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  await item('Cancelar avanço').click()
+  await page.waitForTimeout(1500)
+  confere('cancelar um avanço', /Cancelad/i.test(await cartao(nomes.captura).innerText()))
+})
+
+// 12. Resultado: pausar e reativar
+await passo('pausar e reativar resultado', async () => {
+  await abrirResultado()
+  await botao('Pausar').click()
+  await botao('Ativar').waitFor()
+  confere('pausar o resultado', true)
+  await botao('Ativar').click()
+  await botao('Pausar').waitFor()
+  confere('reativar o resultado', true)
+})
+
+// 13. Responsabilidade: arquivar e reativar
+await passo('arquivar e reativar responsabilidade', async () => {
+  await ir('/responsabilidades')
+  await page.getByText(nomes.resp2).first().click()
+  await botao('Arquivar').click()
+  await botao('Arquivar', dialogo()).click()
+  await botao('Reativar').waitFor()
+  confere('arquivar a responsabilidade', true)
+  await botao('Reativar').click()
+  await botao('Arquivar').waitFor()
+  confere('reativar a responsabilidade', true)
+})
+
+// 14. Mapa e Revisão
+await passo('mapa e revisão', async () => {
+  await ir('/mapa')
+  const m = await texto('main')
+  confere('Mapa liga responsabilidade e resultado', m.includes(nomes.resp) && m.includes(nomes.resultado), m.slice(0, 200))
+  await ir('/revisao')
+  confere('Revisão abre', /Revis/i.test(await texto('main')))
+  await foto('revisao')
+})
+
+// 15. Nenhuma tela pode ficar mais larga que o aparelho
+await passo('largura das telas', async () => {
+  const largas = []
+  for (const rota of ['/', '/avancos', '/capturas', '/resultados', '/responsabilidades', '/mapa', '/atividade', '/revisao', '/configuracoes']) {
+    await ir(rota)
+    const [sw, cw] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])
+    if (sw > cw + 1) largas.push(`${rota} (${sw} em ${cw})`)
+  }
+  confere('nenhuma tela passa da largura do aparelho', largas.length === 0, largas.join(', '))
+})
+
 console.log(`\n${total - falhas} de ${total} verificações passaram.`)
 if (erros.length) {
   console.log('\nErros de JavaScript nas telas:')

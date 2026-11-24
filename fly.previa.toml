@@ -1,6 +1,6 @@
 # Prévia do Pegada: app separado, com a própria base de testes.
 # Desliga sozinha quando ninguém usa e liga no primeiro acesso.
-app = "pegada-previa"
+app = "pegada-cfrpdm5l7-previa"
 primary_region = "gru" # São Paulo
 
 [build]

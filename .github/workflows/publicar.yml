@@ -1,13 +1,17 @@
 # Publicação no Fly.io.
-#  - Cada mudança no main, com os testes verdes, vai para a PRÉVIA.
+#  - Cada mudança no main (e, durante a migração, no ramo migracao/fora-do-skip),
+#    com os testes verdes, vai para a PRÉVIA.
 #  - O app PUBLICADO só muda quando alguém roda este fluxo à mão
 #    (Actions → publicar → Run workflow → alvo: publicado) e o dono aprova
 #    no ambiente "producao" do GitHub.
+# Segredos do repositório: FLY_API_TOKEN (obrigatório para publicar),
+# PEGADA_DONO_EMAIL e PEGADA_DONO_SENHA (criam o dono na primeira vez).
+# Sem FLY_API_TOKEN, os passos de publicação são pulados.
 name: publicar
 
 on:
   push:
-    branches: [main]
+    branches: [main, migracao/fora-do-skip]
   workflow_dispatch:
     inputs:
       alvo:
@@ -33,21 +37,32 @@ jobs:
     if: github.event_name == 'push' || github.event.inputs.alvo == 'previa'
     runs-on: ubuntu-latest
     environment: previa
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
     steps:
       - uses: actions/checkout@v4
+      - name: Sem FLY_API_TOKEN, nada a publicar
+        if: env.FLY_API_TOKEN == ''
+        run: echo "::notice::Crie o segredo FLY_API_TOKEN para publicar a prévia."
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --config fly.previa.toml
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        if: env.FLY_API_TOKEN != ''
+      - name: Publicar a prévia
+        if: env.FLY_API_TOKEN != ''
+        run: scripts/fly-publicar.sh fly.previa.toml
 
   publicado:
     needs: testes
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.alvo == 'publicado'
     runs-on: ubuntu-latest
     environment: producao # configure no GitHub: exige aprovação do dono
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
+      PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only --config fly.toml
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Publicar o app oficial
+        run: scripts/fly-publicar.sh fly.toml

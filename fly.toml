@@ -1,6 +1,6 @@
 # App publicado do Pegada no Fly.io. Publicação: veja .github/workflows/publicar.yml
-# Troque o nome do app se "pegada-app" já estiver em uso no Fly.io.
-app = "pegada-app"
+# O nome do app precisa ser único em todo o Fly.io.
+app = "pegada-cfrpdm5l7"
 primary_region = "gru" # São Paulo
 
 [build]

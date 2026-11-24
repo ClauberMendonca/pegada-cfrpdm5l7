@@ -51,13 +51,13 @@ A rota `POST /backend/v1/pegada/ia/sugerir` chama o Claude pela API da Anthropic
 Uma vez, no Fly.io (com `flyctl` instalado e logado):
 
 ```bash
-fly apps create pegada-app && fly apps create pegada-previa
-fly volumes create pegada_dados --app pegada-app --region gru --size 1
-fly volumes create pegada_previa_dados --app pegada-previa --region gru --size 1
-fly secrets set ANTHROPIC_API_KEY=sk-ant-... --app pegada-app
-fly secrets set ANTHROPIC_API_KEY=sk-ant-... --app pegada-previa
+fly apps create pegada-cfrpdm5l7 && fly apps create pegada-cfrpdm5l7-previa
+fly volumes create pegada_dados --app pegada-cfrpdm5l7 --region gru --size 1
+fly volumes create pegada_previa_dados --app pegada-cfrpdm5l7-previa --region gru --size 1
+fly secrets set ANTHROPIC_API_KEY=sk-ant-... --app pegada-cfrpdm5l7
+fly secrets set ANTHROPIC_API_KEY=sk-ant-... --app pegada-cfrpdm5l7-previa
 fly deploy --config fly.toml && fly deploy --config fly.previa.toml
-fly ssh console --app pegada-app -C "/pb/pocketbase superuser upsert voce@exemplo.com SUA-SENHA --dir=/pb_data"
+fly ssh console --app pegada-cfrpdm5l7 -C "/pb/pocketbase superuser upsert voce@exemplo.com SUA-SENHA --dir=/pb_data"
 ```
 
 No GitHub: crie o segredo `FLY_API_TOKEN` (`fly tokens create deploy`) e os ambientes `previa` e `producao`, este com o dono como aprovador obrigatório.

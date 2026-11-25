@@ -12,7 +12,7 @@ name: publicar
 
 on:
   push:
-    branches: [main, privacidade/ia]
+    branches: [main]
   workflow_dispatch:
     inputs:
       alvo:

@@ -20,7 +20,7 @@ import { useGlobalFilter } from '@/contexts/FilterContext'
 import { useTimer } from '@/contexts/TimeContext'
 import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
-import { PegadaSimbolo } from '@/components/PegadaSimbolo'
+import { PegadaNome, PegadaSimbolo } from '@/components/PegadaSimbolo'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
 import { AvisoIAHost } from '@/components/AvisoIAHost'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
@@ -242,7 +242,7 @@ export default function Layout() {
       <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-card lg:px-4 lg:py-6">
         <div className="flex items-center gap-2.5 px-2">
           <PegadaSimbolo className="h-9 w-9 shrink-0 text-foreground" />
-          <span className="text-xl font-semibold tracking-tight text-foreground">pegada</span>
+          <PegadaNome className="h-7 w-auto text-foreground" />
         </div>
 
         <button
@@ -305,7 +305,7 @@ export default function Layout() {
           <header className="flex h-14 items-center justify-between gap-3 px-5 lg:hidden">
             <div className="flex items-center gap-2">
               <PegadaSimbolo className="h-8 w-8 shrink-0 text-foreground" />
-              <span className="text-lg font-semibold tracking-tight text-foreground">pegada</span>
+              <PegadaNome className="h-6 w-auto text-foreground" />
             </div>
             <div className="flex items-center gap-2">
               <BotaoBusca />

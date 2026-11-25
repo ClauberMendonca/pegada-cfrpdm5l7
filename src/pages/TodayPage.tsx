@@ -419,7 +419,7 @@ export const TodayPage: React.FC = () => {
           to={proposito ? '/mapa' : '/mapa/proposito'}
           className="flex min-h-11 items-center gap-2.5 text-sm leading-snug text-muted-foreground hover:text-foreground"
         >
-          <PegadaSimbolo className="h-[18px] w-[18px] shrink-0 text-foreground" />
+          <PegadaSimbolo pequeno className="h-[18px] w-[18px] shrink-0 text-foreground" />
           <span className="min-w-0 break-words">
             {proposito || 'Escreva o seu propósito: é dele que nasce cada porquê.'}
           </span>

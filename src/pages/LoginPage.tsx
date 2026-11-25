@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react'
-import { PegadaSimbolo } from '@/components/PegadaSimbolo'
+import { PegadaNome, PegadaSimbolo } from '@/components/PegadaSimbolo'
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth()
@@ -41,7 +41,9 @@ export const LoginPage: React.FC = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <PegadaSimbolo className="mx-auto mb-3 h-14 w-14 text-foreground" />
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Pegada</h1>
+          <h1 className="flex justify-center text-foreground">
+            <PegadaNome className="h-9 w-auto" />
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">Cada passo com o seu porquê</p>
         </div>
 

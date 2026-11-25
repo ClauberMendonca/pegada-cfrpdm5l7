@@ -1,3 +1,5 @@
+import { Dica } from '@/components/Dica'
+import { ExemploVivo } from '@/components/ExemploVivo'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -452,6 +454,11 @@ export const TodayPage: React.FC = () => {
         </div>
       )}
 
+      <ExemploVivo onCriado={() => void loadData()} />
+      <Dica id="hoje-fio">
+        Cada avanço carrega o seu porquê: “Faço isto, para alcançar aquilo, porque…”. Se a frase soar errada,
+        algo está no lugar errado.
+      </Dica>
       <AvancoPrincipalCard
         reavaliar={reevaluateCount}
         onReavaliar={() => {

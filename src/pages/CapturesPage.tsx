@@ -1,3 +1,4 @@
+import { Dica } from '@/components/Dica'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
@@ -486,6 +487,9 @@ export const CapturesPage: React.FC = () => {
         </div>
       </div>
 
+      <Dica id="capturas">
+        Capture do jeito que pensa, sem classificar na hora. Depois você decide o que cada captura vira.
+      </Dica>
       {/* Input de Captura Rápida */}
       <Card className="bg-card border-border shadow-md">
         <CardContent className="pt-4 space-y-3">

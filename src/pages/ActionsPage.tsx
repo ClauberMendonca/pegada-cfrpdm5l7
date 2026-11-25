@@ -1,3 +1,4 @@
+import { Dica } from '@/components/Dica'
 import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -728,6 +729,10 @@ export const ActionsPage: React.FC = () => {
         </div>
       )}
 
+      <Dica id="avancos-tipos">
+        Avanço não é só tarefa: estudar, refletir e esperar também aproximam do resultado. Estudo, Reflexão e
+        Ideia só se concluem deixando um rastro.
+      </Dica>
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Estado dos avanços">
         {ORDEM_GRUPOS.map((g) => (
           <button

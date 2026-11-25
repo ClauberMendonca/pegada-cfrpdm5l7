@@ -1,3 +1,4 @@
+import { Dica } from '@/components/Dica'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, ChevronRight, Loader2 } from 'lucide-react'
@@ -344,6 +345,11 @@ export function MapPage() {
           : 'O que você escolheu sustentar, e os resultados de cada responsabilidade.'}
       </p>
 
+      <div className="mt-4">
+        <Dica id="mapa-escada">
+          O mapa é uma escada: perguntar “para quê?” sobe um degrau, e perguntar “como?” desce um.
+        </Dica>
+      </div>
       <section
         aria-label="Propósito"
         className="mt-6 rounded-[20px] p-5"

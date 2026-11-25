@@ -3047,6 +3047,18 @@ function pegadaRota(e) {
     var tipo = String(body.tipo || '')
     var texto = String(body.texto || '').slice(0, 2000)
     if (!texto) throw new BadRequestError('Envie o texto.')
+    // A chave da IA é uma só, paga por quem mantém o servidor: cada pessoa tem
+    // um limite de sugestões por dia (PEGADA_IA_LIMITE_DIA, padrão 80).
+    var limiteDia = parseInt($os.getenv('PEGADA_IA_LIMITE_DIA') || '80', 10) || 80
+    var hojeIA = new Date().toISOString().slice(0, 10)
+    var usadas = dono.getString('ai_day') === hojeIA ? dono.getInt('ai_count') : 0
+    if (usadas >= limiteDia)
+      return e.json(429, {
+        message: 'Você chegou ao limite de sugestões da IA por hoje. Amanhã ela volta.',
+      })
+    dono.set('ai_day', hojeIA)
+    dono.set('ai_count', usadas + 1)
+    e.app.save(dono)
     var guide = {
       resultado:
         'Reescreva como RESULTADO do método Pegada: um estado alcançado, verificável, com prazo AAAA-MM-DD se o texto der pista. Responda JSON {"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}.',
@@ -3162,10 +3174,16 @@ function pegadaRota(e) {
     return e.json(200, core.decideProposal(e.app, ator, p[1], true))
   if (p[0] === 'propostas' && p.length === 3 && p[2] === 'recusar')
     return e.json(200, core.decideProposal(e.app, ator, p[1], false))
-  if (p[0] === 'agentes' && p.length === 1)
-    return e.json(200, core.createAgent(e.app, ator, corpo()))
-  if (p[0] === 'agentes' && p.length === 3 && p[2] === 'revogar')
-    return e.json(200, core.revokeAgent(e.app, ator, p[1]))
+  if (p[0] === 'agentes' && p.length === 1) {
+    var criado = core.createAgent(e.app, ator, corpo())
+    require(__hooks + '/lib/contas.js').registrar(e.app, e, ator.userId, 'agente_criado', criado.agente.nome)
+    return e.json(200, criado)
+  }
+  if (p[0] === 'agentes' && p.length === 3 && p[2] === 'revogar') {
+    var revogado = core.revokeAgent(e.app, ator, p[1])
+    require(__hooks + '/lib/contas.js').registrar(e.app, e, ator.userId, 'agente_revogado', '')
+    return e.json(200, revogado)
+  }
   throw new NotFoundError('Rota do Pegada não encontrada.')
 }
 

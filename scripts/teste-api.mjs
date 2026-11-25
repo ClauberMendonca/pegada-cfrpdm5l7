@@ -53,6 +53,123 @@ function acharId(resultado) {
 
 const emDias = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
 
+// Contas por convite, Minha conta e registro de acesso.
+async function contas({ t, suToken, donoId, login2 }) {
+  const U = '/api/collections/users'
+  const C = '/backend/v1/pegada/conta'
+  const cfg = await http('GET', C + '/config')
+  confere('conta: config pública diz se há e-mail', cfg.status === 200 && typeof cfg.json?.email === 'boolean', cfg)
+  const cadastroAberto = await http('POST', U + '/records', {
+    body: { email: 'aberto-' + Date.now() + '@pegada.teste', password: 'uma-senha-bem-longa', passwordConfirm: 'uma-senha-bem-longa' },
+  })
+  confere('conta: cadastro público continua fechado', cadastroAberto.status >= 400, cadastroAberto)
+  const semAdmin = await http('POST', C + '/convites', { token: t, body: { email: 'x@pegada.teste' } })
+  confere('conta: quem não administra não convida', semAdmin.status === 403, semAdmin)
+  // O superusuário do servidor de teste promove o dono de teste a administrador.
+  const promove = await http('PATCH', U + '/records/' + donoId, { token: suToken, body: { role: 'admin' } })
+  confere('conta: superusuário define quem administra', promove.status === 200 && promove.json?.role === 'admin', promove)
+  const autoPromove = await http('PATCH', U + '/records/' + login2.json?.record?.id, {
+    token: login2.json?.token,
+    body: { role: 'admin' },
+  })
+  confere('conta: ninguém se promove a administrador', autoPromove.status >= 400, autoPromove)
+
+  const emailConv = 'convidada-' + Date.now() + '@pegada.teste'
+  const conv = await http('POST', C + '/convites', { token: t, body: { email: emailConv } })
+  const linkConv = conv.json?.link || ''
+  const tokenConv = linkConv.split('/convite/')[1] || ''
+  confere('conta: admin cria convite e recebe o link uma vez', conv.status === 200 && tokenConv.length === 40, conv)
+  const lista = await http('GET', C + '/convites', { token: t })
+  const naLista = (lista.json?.convites || []).find((c) => c.email === emailConv)
+  confere('conta: lista de convites não expõe o token', lista.status === 200 && naLista?.situacao === 'pendente' && !JSON.stringify(lista.json).includes(tokenConv), lista)
+  const verConv = await http('GET', C + '/convite/' + tokenConv)
+  confere('conta: convite válido mostra o e-mail convidado', verConv.status === 200 && verConv.json?.valido === true && verConv.json?.email === emailConv, verConv)
+  const convFalso = await http('GET', C + '/convite/' + 'A'.repeat(40))
+  confere('conta: token inventado não vale', convFalso.status === 200 && convFalso.json?.valido === false, convFalso)
+  const senhaCurta = await http('POST', C + '/convite/' + tokenConv + '/aceitar', { body: { nome: 'Convidada', senha: 'curta', aceito_aviso: true } })
+  confere('conta: senha curta é recusada', senhaCurta.status === 400, senhaCurta)
+  const senhaComum = await http('POST', C + '/convite/' + tokenConv + '/aceitar', { body: { nome: 'Convidada', senha: '1234567890', aceito_aviso: true } })
+  confere('conta: senha comum é recusada', senhaComum.status === 400, senhaComum)
+  const semAviso = await http('POST', C + '/convite/' + tokenConv + '/aceitar', { body: { nome: 'Convidada', senha: 'cavalo-bateria-grampo' } })
+  confere('conta: sem aceitar o aviso de privacidade não cria', semAviso.status === 400, semAviso)
+  const senhaConv = 'cavalo-bateria-grampo'
+  const aceita = await http('POST', C + '/convite/' + tokenConv + '/aceitar', {
+    body: { nome: 'Convidada de Teste', senha: senhaConv, fuso: 'America/Sao_Paulo', aceito_aviso: true },
+  })
+  confere('conta: convite aceito cria a conta', aceita.status === 200 && aceita.json?.ok === true, aceita)
+  const reuso = await http('POST', C + '/convite/' + tokenConv + '/aceitar', { body: { nome: 'Outra', senha: 'cavalo-bateria-grampo', aceito_aviso: true } })
+  confere('conta: convite só vale uma vez', reuso.status === 400, reuso)
+  const entra = await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: senhaConv } })
+  const tc = entra.json?.token
+  const idConv = entra.json?.record?.id
+  confere('conta: a pessoa convidada entra com a senha que escolheu', entra.status === 200 && !!tc && entra.json?.record?.verified === true, entra)
+  const vazio = await http('GET', '/api/collections/projects/records', { token: tc })
+  confere('conta: conta nova começa vazia', vazio.status === 200 && (vazio.json?.items || []).length === 0, vazio)
+  const capNova = await http('POST', '/backend/v1/pegada/op/capturar', { token: tc, body: { texto: 'Primeira captura da convidada' } })
+  confere('conta: conta nova já usa o método', capNova.status === 200, capNova)
+
+  // Minha conta
+  const novoNome = await http('PATCH', U + '/records/' + idConv, { token: tc, body: { name: 'Convidada Renomeada' } })
+  confere('minha conta: a pessoa troca o próprio nome', novoNome.status === 200 && novoNome.json?.name === 'Convidada Renomeada', novoNome)
+  const trocaEmail = await http('PATCH', U + '/records/' + idConv, { token: tc, body: { email: 'trocado@pegada.teste' } })
+  confere('minha conta: e-mail não muda sem confirmação', trocaEmail.status >= 400, trocaEmail)
+  const semAtual = await http('PATCH', U + '/records/' + idConv, { token: tc, body: { password: 'outra-senha-bem-longa', passwordConfirm: 'outra-senha-bem-longa' } })
+  confere('minha conta: trocar senha exige a senha atual', semAtual.status >= 400, semAtual)
+  const fracaNova = await http('PATCH', U + '/records/' + idConv, { token: tc, body: { oldPassword: senhaConv, password: 'qwertyuiop', passwordConfirm: 'qwertyuiop' } })
+  confere('minha conta: senha nova comum é recusada', fracaNova.status === 400, fracaNova)
+  const senhaNova = 'girassol-martelo-vento'
+  const troca = await http('PATCH', U + '/records/' + idConv, { token: tc, body: { oldPassword: senhaConv, password: senhaNova, passwordConfirm: senhaNova } })
+  confere('minha conta: a pessoa troca a própria senha', troca.status === 200, troca)
+  const tokenVelho = await http('GET', U + '/records/' + idConv, { token: tc })
+  confere('minha conta: trocar a senha encerra a sessão antiga', tokenVelho.status >= 400, tokenVelho)
+  const entra2 = await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: senhaNova } })
+  const tc2 = entra2.json?.token
+  confere('minha conta: a senha nova entra', entra2.status === 200 && !!tc2, entra2)
+  const sair = await http('POST', C + '/sair-de-todos', { token: tc2 })
+  const tc3 = sair.json?.token
+  confere('minha conta: sair de todos devolve uma sessão nova', sair.status === 200 && !!tc3 && tc3 !== tc2, sair)
+  const velho2 = await http('GET', U + '/records/' + idConv, { token: tc2 })
+  const novo3 = await http('GET', U + '/records/' + idConv, { token: tc3 })
+  confere('minha conta: as outras sessões caem e a atual continua', velho2.status >= 400 && novo3.status === 200, { velho: velho2.status, novo: novo3.status })
+
+  // Registro de acesso
+  await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: 'senha-errada-de-teste' } })
+  const meus = await http('GET', '/api/collections/access_events/records?sort=-created&perPage=50', { token: tc3 })
+  const tipos = (meus.json?.items || []).map((x) => x.kind)
+  confere(
+    'acesso: a pessoa vê as próprias entradas, falhas e trocas',
+    ['conta_criada', 'entrada', 'senha_trocada', 'sessoes_encerradas', 'falha_entrada'].every((k) => tipos.includes(k)),
+    tipos,
+  )
+  confere('acesso: o registro não guarda senha nem token', !JSON.stringify(meus.json).includes(senhaNova) && !JSON.stringify(meus.json).includes(tc3), null)
+  const alheios = await http('GET', '/api/collections/access_events/records?perPage=200', { token: login2.json?.token })
+  confere('acesso: ninguém lê o registro de outra pessoa', alheios.status === 200 && (alheios.json?.items || []).every((x) => x.user_id === login2.json?.record?.id), alheios)
+  const todosNegado = await http('GET', C + '/acessos', { token: tc3 })
+  const todos = await http('GET', C + '/acessos', { token: t })
+  confere('acesso: só quem administra vê o registro de todos', todosNegado.status === 403 && todos.status === 200 && (todos.json?.acessos || []).length > 0, { negado: todosNegado.status, todos: todos.status })
+
+  // Desativar e reativar
+  const pessoas = await http('GET', C + '/pessoas', { token: t })
+  confere('conta: admin lista as pessoas sem conteúdo do método', pessoas.status === 200 && (pessoas.json?.pessoas || []).some((x) => x.id === idConv), pessoas)
+  const desliga = await http('POST', C + '/pessoas/' + idConv + '/desativar', { token: t })
+  const barrada = await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: senhaNova } })
+  const sessaoCaiu = await http('GET', U + '/records/' + idConv, { token: tc3 })
+  confere('conta: conta desativada não entra e perde a sessão', desliga.status === 200 && barrada.status >= 400 && sessaoCaiu.status >= 400, { desliga: desliga.status, barrada: barrada.status, sessao: sessaoCaiu.status })
+  const religa = await http('POST', C + '/pessoas/' + idConv + '/reativar', { token: t })
+  const volta = await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: senhaNova } })
+  confere('conta: conta reativada volta a entrar com os dados guardados', religa.status === 200 && volta.status === 200, { religa: religa.status, volta: volta.status })
+  const propria = await http('POST', C + '/pessoas/' + donoId + '/desativar', { token: t })
+  confere('conta: admin não desativa a própria conta', propria.status === 400, propria)
+
+  // Cabeçalhos de segurança
+  const cab = await fetch(BASE + '/')
+  confere(
+    'servidor: telas saem com cabeçalhos de segurança',
+    (cab.headers.get('content-security-policy') || '').includes("frame-ancestors 'none'") && cab.headers.get('x-content-type-options') === 'nosniff',
+    { csp: cab.headers.get('content-security-policy') },
+  )
+}
+
 async function main() {
   console.log('Pegada: teste da API em ' + BASE)
 
@@ -356,6 +473,8 @@ async function main() {
   confere('outra pessoa não edita o resultado do dono', alheio.status >= 400, alheio)
   const leituraAlheia = await http('GET', '/api/collections/projects/records', { token: login2.json?.token })
   confere('outra pessoa não lê os registros do dono', leituraAlheia.status === 200 && (leituraAlheia.json?.items || []).length === 0, leituraAlheia)
+
+  await contas({ t, suToken, donoId: login.json?.record?.id, login2 })
 
   console.log(`\n${total - falhas} de ${total} verificações passaram.`)
   process.exit(falhas ? 1 : 0)

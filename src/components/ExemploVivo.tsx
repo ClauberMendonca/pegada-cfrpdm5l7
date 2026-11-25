@@ -1,6 +1,7 @@
-// PEGADA — Começar por um exemplo vivo: no primeiro uso, a pessoa vê um fio
-// completo já preenchido e o edita, em vez de encarar uma tela vazia.
-// Nada é gravado antes do toque em "Criar o meu primeiro fio".
+// PEGADA — o primeiro uso, em três passos curtos, cada um pulável: uma frase
+// de propósito, um resultado e um avanço para hoje. Cada passo já vem com um
+// exemplo para editar. Nada é gravado antes do último toque, e a pessoa
+// termina em Hoje com o primeiro avanço principal escolhido.
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,12 +28,12 @@ export function ExemploVivo({ onCriado }: { onCriado?: () => void }) {
   const [mostrar, setMostrar] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState<string | null>(null)
+  const [passo, setPasso] = useState(0)
+  const [pulou, setPulou] = useState({ proposito: false, resultado: false })
   const [f, setF] = useState({
     proposito: 'Eu existo para simplificar a vida de quem empreende, para que mais pessoas realizem o que escolheram.',
-    responsabilidade: 'Cuidar da saúde do meu negócio',
     resultado: 'Empresa funcionando duas semanas sem mim',
     prazo: daquiATresMeses(),
-    estrategia: 'Por meio de um gerente contratado e treinado',
     avanco: 'Escrever a descrição da vaga de gerente',
   })
 
@@ -65,32 +66,32 @@ export function ExemploVivo({ onCriado }: { onCriado?: () => void }) {
     setMostrar(false)
   }
 
-  const criar = async () => {
+  const criar = async (comAvanco: boolean) => {
     setOcupado(true)
     setErro(null)
     try {
       const id = (r: { resultado?: unknown }, k: string) => String((r.resultado as Record<string, string>)?.[k] || '')
-      await op('definir_proposito', { texto: f.proposito.trim() })
-      const resp = await op('criar_responsabilidade', { titulo: f.responsabilidade.trim(), contexto: 'trabalho' })
-      const res = await op('criar_resultado', {
-        titulo: f.resultado.trim(),
-        prazo: f.prazo,
-        responsabilidade_id: id(resp, 'responsabilidade_id'),
-      })
-      const est = await op('criar_estrategia', { resultado_id: id(res, 'resultado_id'), titulo: f.estrategia.trim() })
-      await op('criar_avanco', {
-        titulo: f.avanco.trim(),
-        tipo: 'acao',
-        resultado_id: id(res, 'resultado_id'),
-        estrategia_id: id(est, 'estrategia_id'),
-        para_hoje: true,
-        principal: true,
-      })
+      const temProposito = !pulou.proposito && Boolean(f.proposito.trim())
+      if (temProposito) await op('definir_proposito', { texto: f.proposito.trim() })
+      let resultadoId = ''
+      if (!pulou.resultado && f.resultado.trim()) {
+        const res = await op('criar_resultado', { titulo: f.resultado.trim(), prazo: f.prazo })
+        resultadoId = id(res, 'resultado_id')
+      }
+      if (comAvanco && f.avanco.trim()) {
+        await op('criar_avanco', {
+          titulo: f.avanco.trim(),
+          tipo: 'acao',
+          ...(resultadoId ? { resultado_id: resultadoId } : {}),
+          para_hoje: true,
+          principal: true,
+        })
+      }
       dispensar()
       notificarMudanca()
       onCriado?.()
       // O propósito novo vive no perfil: recarrega para a tela inteira passar a mostrá-lo.
-      window.location.reload()
+      if (temProposito) window.location.reload()
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível criar. Tente de novo.')
     } finally {
@@ -114,38 +115,76 @@ export function ExemploVivo({ onCriado }: { onCriado?: () => void }) {
     </div>
   )
 
+  const BOTAO = 'h-[52px] rounded-full px-6 text-[17px] font-semibold'
+  const ultimo = passo === 2
+  const podeSeguir =
+    passo === 0 ? Boolean(f.proposito.trim()) : passo === 1 ? Boolean(f.resultado.trim() && f.prazo) : Boolean(f.avanco.trim())
+
   return (
-    <section aria-label="Comece por um exemplo" className="space-y-4 rounded-[20px] border border-border bg-card p-5" data-exemplo-vivo>
+    <section aria-label="Primeiros passos" className="space-y-4 rounded-[20px] border border-border bg-card p-5" data-exemplo-vivo>
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Comece por um exemplo</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Este é um fio completo. Troque as palavras pelas suas e crie o seu primeiro.
+        <p className="text-[13px] text-muted-foreground" data-passo-do-comeco>
+          Passo {passo + 1} de 3
         </p>
+        <h2 className="mt-0.5 text-xl font-semibold text-foreground">
+          {passo === 0 ? 'Para quê?' : passo === 1 ? 'Onde quer chegar?' : 'O que você faz hoje?'}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">O campo já vem com um exemplo. Troque pelas suas palavras.</p>
       </div>
-      <p className="rounded-2xl px-4 py-3 text-[15px] leading-relaxed" style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' }}>
-        Faço isto: <strong>{f.avanco || '…'}</strong>, para alcançar: <strong>{f.resultado || '…'}</strong>, porque{' '}
-        {f.proposito ? f.proposito.charAt(0).toLowerCase() + f.proposito.slice(1) : '…'}
-      </p>
-      {campo('proposito', 'Propósito', 'Para quê você vive e trabalha? “Eu existo para…”')}
-      {campo('responsabilidade', 'Responsabilidade', 'Pelo que você responde hoje? “Cuidar de…”, “Zelar por…”')}
-      {campo('resultado', 'Resultado', 'Onde quer chegar? Escreva como algo já pronto.')}
-      {campo('prazo', 'Até quando?', 'No prazo, dá para responder “alcancei ou não?”.')}
-      {campo('estrategia', 'Estratégia', 'Como vai chegar lá? Uma aposta: “Por meio de…”')}
-      {campo('avanco', 'Avanço de hoje', 'O que te move agora? Comece por um verbo.')}
+      {passo === 0 && campo('proposito', 'Propósito', 'Para quê você vive e trabalha? “Eu existo para…”')}
+      {passo === 1 && (
+        <>
+          {campo('resultado', 'Resultado', 'Escreva como algo já pronto.')}
+          {campo('prazo', 'Até quando?', 'No prazo, dá para responder “alcancei ou não?”.')}
+        </>
+      )}
+      {passo === 2 && (
+        <>
+          {campo('avanco', 'Avanço de hoje', 'O que te move agora? Comece por um verbo.')}
+          <p className="rounded-2xl px-4 py-3 text-[15px] leading-relaxed" style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' }}>
+            Faço isto: <strong>{f.avanco || '…'}</strong>
+            {!pulou.resultado && (
+              <>
+                , para alcançar: <strong>{f.resultado || '…'}</strong>
+              </>
+            )}
+            {!pulou.proposito && f.proposito && <>, porque {f.proposito.charAt(0).toLowerCase() + f.proposito.slice(1)}</>}
+          </p>
+        </>
+      )}
       {erro && <p className="text-sm text-destructive">{erro}</p>}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
-          disabled={ocupado || !f.proposito.trim() || !f.responsabilidade.trim() || !f.resultado.trim() || !f.prazo || !f.estrategia.trim() || !f.avanco.trim()}
-          onClick={() => void criar()}
-          className="h-[52px] gap-2 rounded-full px-6 text-[17px] font-semibold"
+          disabled={ocupado || !podeSeguir}
+          onClick={() => {
+            if (ultimo) return void criar(true)
+            setPulou((v) => (passo === 0 ? { ...v, proposito: false } : { ...v, resultado: false }))
+            setPasso(passo + 1)
+          }}
+          className={`${BOTAO} gap-2`}
         >
           {ocupado && <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />}
-          Criar o meu primeiro fio
+          {ultimo ? 'Começar o dia' : 'Continuar'}
         </Button>
-        <Button type="button" variant="ghost" disabled={ocupado} onClick={dispensar} className="h-[52px] rounded-full">
-          Começar do zero
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={ocupado}
+          onClick={() => {
+            if (ultimo) return void (pulou.proposito && pulou.resultado ? dispensar() : criar(false))
+            setPulou((v) => (passo === 0 ? { ...v, proposito: true } : { ...v, resultado: true }))
+            setPasso(passo + 1)
+          }}
+          className="h-[52px] rounded-full"
+        >
+          Depois
         </Button>
+        {passo > 0 && (
+          <Button type="button" variant="ghost" disabled={ocupado} onClick={() => setPasso(passo - 1)} className="h-[52px] rounded-full">
+            Voltar
+          </Button>
+        )}
       </div>
     </section>
   )

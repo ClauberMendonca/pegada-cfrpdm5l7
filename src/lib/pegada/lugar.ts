@@ -12,11 +12,6 @@ export interface Lugar {
 const LUGARES: { prefixo: string; lugar: Lugar }[] = [
   { prefixo: '/mapa/proposito', lugar: { destino: 'mapa', titulo: 'Propósito' } },
   { prefixo: '/mapa', lugar: { destino: 'mapa', titulo: 'Mapa' } },
-  { prefixo: '/resultados', lugar: { destino: 'mapa', titulo: 'Resultados' } },
-  { prefixo: '/projetos', lugar: { destino: 'mapa', titulo: 'Resultados' } },
-  { prefixo: '/responsabilidades', lugar: { destino: 'mapa', titulo: 'Responsabilidades' } },
-  { prefixo: '/avancos', lugar: { destino: 'mapa', titulo: 'Avanços' } },
-  { prefixo: '/acoes', lugar: { destino: 'mapa', titulo: 'Avanços' } },
   { prefixo: '/caixa', lugar: { destino: 'caixa', titulo: 'Caixa' } },
   { prefixo: '/revisao', lugar: { destino: 'revisao', titulo: 'Revisão' } },
   { prefixo: '/historico', lugar: { destino: 'conta', titulo: 'Histórico' } },

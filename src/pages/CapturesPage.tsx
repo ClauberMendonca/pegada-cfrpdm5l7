@@ -295,8 +295,8 @@ export const CapturesPage: React.FC = () => {
     const target = isProject ? targetMaps.projects.get(targetId) : targetMaps.actions.get(targetId)
     const label = target ? formatEntityTitle(kind, target.sequence_number, target.title) : null
     const to = isProject
-      ? `/resultados?id=${encodeURIComponent(targetId)}`
-      : `/avancos?id=${encodeURIComponent(targetId)}`
+      ? `/mapa/resultado/${encodeURIComponent(targetId)}`
+      : `/mapa/avanco/${encodeURIComponent(targetId)}`
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {label && (

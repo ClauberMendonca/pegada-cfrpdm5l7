@@ -65,20 +65,20 @@ async function carregarTudo(): Promise<Grupos> {
       id: r.id,
       titulo: r.titulo,
       fio: r.contexto === 'vida' ? 'Vida' : 'Trabalho',
-      to: `/responsabilidades?id=${encodeURIComponent(r.id)}`,
+      to: `/mapa/responsabilidade/${encodeURIComponent(r.id)}`,
     })),
     resultados: (mapa?.resultados ?? []).map((r) => ({
       id: r.id,
       titulo: r.titulo,
       fio: (r.responsabilidade_id && respPorId.get(r.responsabilidade_id)) || 'Do seu propósito',
-      to: `/resultados?id=${encodeURIComponent(r.id)}`,
+      to: `/mapa/resultado/${encodeURIComponent(r.id)}`,
     })),
     estrategias: (mapa?.resultados ?? []).flatMap((r) =>
       r.estrategias.map((s) => ({
         id: s.id,
         titulo: s.titulo,
         fio: r.titulo,
-        to: `/resultados?id=${encodeURIComponent(r.id)}`,
+        to: `/mapa/resultado/${encodeURIComponent(r.id)}#estrategia-${s.id}`,
       })),
     ),
     avancos: avancos
@@ -91,7 +91,7 @@ async function carregarTudo(): Promise<Grupos> {
           (a.project_id && resultadoPorId.get(a.project_id)) ||
           (a.responsibility_id && respPorId.get(a.responsibility_id)) ||
           'Avanço livre',
-        to: `/avancos?id=${encodeURIComponent(a.id)}`,
+        to: `/mapa/avanco/${encodeURIComponent(a.id)}`,
       })),
     capturas: capturas.map((c) => ({ id: c.id, titulo: c.texto, fio: 'Para decidir', to: '/caixa' })),
   }

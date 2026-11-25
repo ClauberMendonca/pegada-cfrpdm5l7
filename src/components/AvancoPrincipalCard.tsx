@@ -102,7 +102,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
             {[...dados.compromissos, ...dados.vencendo].map((a) => (
               <li key={a.id}>
                 <Link
-                  to={`/avancos?id=${encodeURIComponent(a.id)}`}
+                  to={`/mapa/avanco/${encodeURIComponent(a.id)}`}
                   className="flex min-h-11 items-center justify-between gap-3 text-base text-foreground"
                 >
                   <span className="min-w-0 break-words">{a.titulo}</span>
@@ -205,7 +205,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
                   className="underline underline-offset-4"
                   style={{ color: 'var(--pegada-on-ink)' }}
                 >
-                  Escolher em Avanços
+                  Escolher no Mapa
                 </Link>
               </p>
             )}
@@ -228,7 +228,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
             <p className="px-1 text-sm text-muted-foreground" data-dica-do-dia>
               Complete com poucos outros, até 3 a 5 no dia.{' '}
               <Link to="/avancos" className="font-medium text-foreground underline underline-offset-4">
-                Escolher em Avanços
+                Escolher no Mapa
               </Link>
             </p>
           )

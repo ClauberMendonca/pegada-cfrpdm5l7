@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -8,9 +8,10 @@ import { TimeProvider } from '@/contexts/TimeContext'
 import Layout from '@/components/Layout'
 import { TodayPage } from '@/pages/TodayPage'
 import { CapturesPage } from '@/pages/CapturesPage'
-import { ActionsPage } from '@/pages/ActionsPage'
-import { ProjectsPage } from '@/pages/ProjectsPage'
-import { ResponsibilitiesPage } from '@/pages/ResponsibilitiesPage'
+import { FichaAvancoPage } from '@/pages/FichaAvancoPage'
+import { FichaResultadoPage } from '@/pages/FichaResultadoPage'
+import { FichaResponsabilidadePage } from '@/pages/FichaResponsabilidadePage'
+import { fichaDe, type Degrau } from '@/lib/pegada/enderecos'
 import { MapPage } from '@/pages/MapPage'
 import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
@@ -23,6 +24,13 @@ import NotFound from '@/pages/NotFound'
 const Redireciona = ({ para }: { para: string }) => {
   const { search } = useLocation()
   return <Navigate to={para + search} replace />
+}
+
+// Um link antigo de catálogo com "?id=" abre a ficha do item; sem id, abre o Mapa.
+const RedirecionaFicha = ({ degrau }: { degrau: Degrau }) => {
+  const [params] = useSearchParams()
+  const id = params.get('id')?.trim()
+  return <Navigate to={id ? fichaDe(degrau, id) : '/mapa'} replace />
 }
 
 const ProtectedRoutes = () => {
@@ -52,21 +60,22 @@ const ProtectedRoutes = () => {
             {/* A Caixa recebe o que foi capturado e espera decisão. */}
             <Route path="/caixa" element={<CapturesPage />} />
             <Route path="/capturas" element={<Redireciona para="/caixa" />} />
-            {/* ENTREGA 1B — caminhos canônicos novos; /acoes e /projetos
-                permanecem como aliases legados (nenhum redirect). */}
-            <Route path="/avancos" element={<ActionsPage />} />
-            <Route path="/resultados" element={<ProjectsPage />} />
-            <Route path="/acoes" element={<ActionsPage />} />
-            <Route path="/projetos" element={<ProjectsPage />} />
-            {/* ENTREGA 3B — catálogo e ficha de Responsabilidades (mesmos
-                providers/Layout; ficha retomável via ?id=). */}
-            <Route path="/responsabilidades" element={<ResponsibilitiesPage />} />
-            {/* PEGADA — histórico com desfazer, propostas de agentes e agentes. */}
+            {/* Histórico com desfazer e o cadastro de agentes. */}
             <Route path="/historico" element={<ActivityPage />} />
             <Route path="/atividade" element={<Redireciona para="/historico" />} />
-            <Route path="/mapa" element={<MapPage />} />
-            {/* O Propósito é o topo do Mapa, e não uma configuração da conta. */}
-            <Route path="/mapa/proposito" element={<PropositoPage />} />
+            {/* O Mapa é a casa dos cinco elementos: toda ficha mora embaixo dele. */}
+            <Route path="/mapa" element={<MapPage />}>
+              <Route path="proposito" element={<PropositoPage />} />
+              <Route path="responsabilidade/:id" element={<FichaResponsabilidadePage />} />
+              <Route path="resultado/:id" element={<FichaResultadoPage />} />
+              <Route path="avanco/:id" element={<FichaAvancoPage />} />
+            </Route>
+            {/* Os catálogos antigos saíram: os endereços levam ao Mapa ou à ficha. */}
+            <Route path="/resultados" element={<RedirecionaFicha degrau="resultado" />} />
+            <Route path="/projetos" element={<RedirecionaFicha degrau="resultado" />} />
+            <Route path="/responsabilidades" element={<RedirecionaFicha degrau="responsabilidade" />} />
+            <Route path="/avancos" element={<RedirecionaFicha degrau="avanco" />} />
+            <Route path="/acoes" element={<RedirecionaFicha degrau="avanco" />} />
             <Route path="/revisao" element={<ReviewPage />} />
             {/* Configurações da conta: perfil, fuso e privacidade da IA. */}
             <Route path="/configuracoes" element={<SettingsPage />} />

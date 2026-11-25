@@ -136,49 +136,65 @@ await passo('propósito', async () => {
   confere('propósito salvo aparece no Mapa', (await texto()).includes(nomes.proposito))
 })
 
-// 3. Responsabilidades
+// Mapa: o campo "Adicionar" embaixo de cada item cria o filho do tipo certo.
+const adicionarEm = async (raiz, em, { tipo, especie, prazo, texto: titulo, contexto }) => {
+  const aberto = raiz.locator('form[data-adicionar-aberto]').filter({ has: page.getByLabel(new RegExp(` em ${em}$`)) })
+  if (!(await aberto.count())) await raiz.getByRole('button', { name: `Adicionar em ${em}`, exact: true }).last().click()
+  const form = raiz.locator('form[data-adicionar-aberto]').last()
+  if (tipo) await form.getByRole('group', { name: 'O que adicionar' }).getByRole('button', { name: tipo, exact: true }).click()
+  if (especie) await form.getByLabel('Tipo de avanço').selectOption({ label: especie })
+  if (prazo) await form.getByLabel('Prazo do resultado').fill(prazo)
+  if (contexto && (await form.getByRole('group', { name: 'Vida ou Trabalho' }).count()))
+    await form.getByRole('group', { name: 'Vida ou Trabalho' }).getByRole('button', { name: contexto, exact: true }).click()
+  await form.locator('input[type=text]').fill(titulo)
+  await form.locator('input[type=text]').press('Enter')
+  await raiz.getByText(titulo).first().waitFor()
+  await page.waitForTimeout(400)
+  return form
+}
+const arvore = () => page.locator('[data-mapa]')
+const noDoMapa = (tipo, titulo) => arvore().locator(`[data-${tipo}]`).filter({ hasText: titulo }).last()
+const ficha = () => page.locator('[data-ficha]')
+
+// 3. Responsabilidades: nascem no ramo Sustentar do Mapa
 await passo('responsabilidades', async () => {
-  for (const [nome, contexto] of [
-    [nomes.resp, 'Vida'],
-    [nomes.resp2, 'Vida'],
-  ]) {
-    await ir('/responsabilidades')
-    await botao('Nova responsabilidade').click()
-    await dialogo().locator('input').first().fill(nome)
-    await dialogo().locator('button', { hasText: new RegExp(`^\\s*${contexto}\\s*$`) }).first().click()
-    await botao('Criar responsabilidade', dialogo()).click()
-    await esperaSumir()
-  }
+  await ir('/mapa')
+  const ramo = arvore().locator('[data-ramo="sustentar"]')
+  for (const nome of [nomes.resp, nomes.resp2]) await adicionarEm(ramo, 'Sustentar', { texto: nome, contexto: 'vida' })
   const t = await texto('main')
-  confere('criar duas responsabilidades', t.includes(nomes.resp) && t.includes(nomes.resp2))
-  await foto('responsabilidades')
+  confere('criar duas responsabilidades sem sair do Mapa', t.includes(nomes.resp) && t.includes(nomes.resp2))
+  await foto('mapa-responsabilidades')
 })
 
-// 4. Resultado
+// 4. Resultado: nasce embaixo da responsabilidade que ele sustenta
 await passo('resultado', async () => {
-  await ir('/resultados')
-  await botao('Novo resultado').click()
-  const d = dialogo()
-  await d.locator('input[id$=project-title]').fill(nomes.resultado)
-  await escolher(d.locator('[id$=project-status]'), 'Ativo')
-  await escolher(d.locator('[id$=project-responsibility]'), nomes.resp)
-  await d.locator('input[id$=project-deadline]').fill('2027-03-31')
-  await d.locator('input[id$=completion-condition]').fill('Termino a prova oficial')
-  await botao('Criar Resultado', d).click()
-  await esperaSumir()
-  confere('criar resultado ativo com prazo e responsabilidade', (await texto('main')).includes(nomes.resultado))
+  await ir('/mapa')
+  const form = await adicionarEm(noDoMapa('responsabilidade', nomes.resp), nomes.resp, { prazo: '2027-03-31', texto: nomes.resultado })
+  confere('o campo do resultado já começa a frase', (await form.innerText()).includes('Até'))
+  confere('criar resultado com prazo, embaixo da responsabilidade', (await noDoMapa('responsabilidade', nomes.resp).innerText()).includes(nomes.resultado))
 })
 
+let enderecoDoResultado = ''
 const abrirResultado = async () => {
-  await ir('/resultados')
-  await page.getByText(nomes.resultado).first().click()
-  await botao('Nova estratégia').waitFor()
+  if (enderecoDoResultado) await ir(enderecoDoResultado)
+  else {
+    await ir('/mapa')
+    await arvore().getByRole('link', { name: new RegExp(nomes.resultado) }).first().click()
+    await page.waitForURL(/\/mapa\/resultado\//)
+    enderecoDoResultado = new URL(page.url()).pathname
+  }
+  await ficha().locator('[data-zona="item"]').waitFor()
+  await page.waitForTimeout(500)
 }
 
-// 5. Ficha do resultado: editar, estratégia, avanço, registro de progresso
+// 5. Ficha do resultado: três zonas, editar, estratégia, avanço, nota
 await passo('editar resultado', async () => {
   await abrirResultado()
-  await botao('Editar Ficha').click()
+  const zonas = await ficha().locator('[data-zona]').evaluateAll((els) => els.map((e) => e.getAttribute('data-zona')).join(','))
+  confere('a ficha tem três zonas: para quê, item e como', zonas === 'para-que,item,como', zonas)
+  confere('a zona de cima diz a que o resultado serve', (await ficha().locator('[data-zona="para-que"]').innerText()).includes(nomes.resp))
+  confere('a aba do navegador mostra o nome do item', (await page.title()) === `${nomes.resultado} · Pegada`, await page.title())
+  await ficha().getByRole('button', { name: 'Editar', exact: true }).first().click()
   const d = dialogo()
   const prazo = await d.locator('input[id$=project-deadline]').inputValue()
   confere('ficha abre com o prazo gravado', prazo === '2027-03-31', prazo)
@@ -190,53 +206,45 @@ await passo('editar resultado', async () => {
 
 await passo('estratégia', async () => {
   await abrirResultado()
-  await botao('Nova estratégia').click()
-  const comeco = await dialogo().locator('input').first().inputValue()
-  confere('o campo da estratégia já começa a frase', comeco.startsWith('Por meio de'), comeco)
-  await dialogo().locator('input').first().fill(nomes.estrategia)
-  await botao('Salvar', dialogo()).click()
-  await esperaSumir()
-  confere('criar estratégia na ficha do resultado', (await texto('main')).includes(nomes.estrategia))
+  const form = await adicionarEm(ficha(), nomes.resultado, { tipo: 'Estratégia', texto: nomes.estrategia })
+  confere('o campo da estratégia já começa a frase', (await form.innerText()).includes('Por meio de'))
+  confere('criar estratégia na ficha do resultado', (await ficha().innerText()).includes(nomes.estrategia))
 })
 
-await passo('avanço na ficha', async () => {
-  await abrirResultado()
-  await botao('Adicionar Avanço').click()
-  const d = dialogo()
-  await d.locator('input[id$=action-title]').fill(nomes.estudo)
-  await d.getByRole('group', { name: 'Tipo de avanço' }).getByRole('button', { name: 'Estudo', exact: true }).click()
-  await paraHoje(d)
-  await maisDetalhes(d)
-  await escolher(d.locator('[id$=action-strategy]'), nomes.estrategia)
-  await botao('Salvar avanço', d).click()
-  await esperaSumir()
-  confere('criar Estudo ligado à estratégia, para hoje', (await texto('main')).includes(nomes.estudo))
+await passo('avanço embaixo da estratégia', async () => {
+  await ir('/mapa')
+  await adicionarEm(noDoMapa('estrategia', nomes.estrategia), nomes.estrategia, { especie: 'Estudo', texto: nomes.estudo })
+  confere('criar Estudo embaixo da estratégia, no Mapa', (await noDoMapa('estrategia', nomes.estrategia).innerText()).includes(nomes.estudo))
+  await arvore().getByRole('button', { name: `Fazer hoje: ${nomes.estudo}` }).click()
+  await arvore().getByRole('button', { name: `Tirar de Hoje: ${nomes.estudo}` }).waitFor()
+  confere('o ponto ao lado do avanço escolhe para hoje', true)
 })
 
-await passo('registro de progresso', async () => {
+await passo('nota no resultado', async () => {
   await abrirResultado()
-  await botao('Novo Registro de Progresso').click()
+  await ficha().locator('summary', { hasText: 'Notas' }).click()
+  await botao('Nova nota', ficha()).click()
   const d = dialogo()
   await d.locator('label', { hasText: 'Executei' }).first().click()
   await d.locator('#logText').fill(T('Corri 5 km sem parar'))
   await botao('Salvar registro', d).click()
   await esperaSumir()
-  confere('registrar progresso no resultado', (await texto('main')).includes(T('Corri 5 km sem parar')))
+  confere('guardar uma nota no resultado', (await texto('main')).includes(T('Corri 5 km sem parar')))
   await foto('ficha-resultado')
 })
 
-// 6. Hoje: novo avanço, principal, concluir
+// 6. Hoje: o avanço nasce no Mapa, embaixo do resultado, e vai para hoje com um toque
 await passo('novo avanço para hoje', async () => {
-  await ir('/avancos')
-  await botao('Novo avanço').click()
-  const d = dialogo()
-  await d.locator('input[id$=action-title]').fill(nomes.acao)
-  await escolher(d.locator('[id$=action-project]'), new RegExp(nomes.resultado))
-  const fio = await d.locator('[data-fio]').innerText()
-  confere('Novo avanço mostra o fio enquanto a pessoa preenche', fio.toLowerCase().includes(nomes.resultado.toLowerCase()), fio)
-  await paraHoje(d)
-  await botao('Salvar avanço', d).click()
-  await esperaSumir()
+  await ir('/mapa')
+  await adicionarEm(noDoMapa('resultado', nomes.resultado), nomes.resultado, { texto: nomes.acao })
+  await arvore().getByRole('button', { name: `Fazer hoje: ${nomes.acao}` }).click()
+  await arvore().getByRole('button', { name: `Tirar de Hoje: ${nomes.acao}` }).waitFor()
+  await arvore().getByRole('link', { name: new RegExp(nomes.acao) }).first().click()
+  await page.waitForURL(/\/mapa\/avanco\//)
+  const fio = await ficha().locator('[data-zona="para-que"]').innerText()
+  confere('a ficha do avanço mostra o fio em cima', fio.toLowerCase().includes(nomes.resultado.toLowerCase()), fio)
+  const trilha = await ficha().locator('[data-trilha] a').count()
+  confere('a trilha do avanço leva de volta ao degrau de cima', trilha >= 1)
   await ir('/')
   const t = await texto('main')
   confere('avanço criado aparece em Hoje', t.includes(nomes.acao), t.slice(0, 200))
@@ -265,19 +273,6 @@ await passo('capturar na tela de Capturas', async () => {
   await foto('capturas')
 })
 
-const cartao = (titulo) => page.locator('div.group.relative').filter({ hasText: titulo }).first()
-// Avanços: lista por estado; a linha abre os comandos completos ao tocar no título.
-const verGrupo = async (nome) => {
-  await ir('/avancos')
-  await page.getByRole('group', { name: 'Estado dos avanços' }).getByRole('button', { name: new RegExp('^' + nome) }).click()
-  await page.waitForTimeout(400)
-}
-const linhaAvanco = (titulo) => page.locator('li[data-avanco]').filter({ hasText: titulo }).first()
-const abrirLinha = async (titulo) => {
-  const b = linhaAvanco(titulo).locator('button[aria-expanded]').first()
-  if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click()
-  await page.waitForTimeout(300)
-}
 // Hoje: o avanço está no cartão principal ou na lista "Também hoje".
 async function concluirEmHoje(titulo) {
   await ir('/')
@@ -299,8 +294,8 @@ await passo('processar captura em avanço', async () => {
   await botao('Processar', linha).click()
   await item(/^Ação$/).click()
   await page.waitForTimeout(1500)
-  await verGrupo('Prontos')
-  confere('captura processada vira avanço em Avanços', (await texto('main')).includes(nomes.captura))
+  await ir('/mapa')
+  confere('captura processada vira avanço livre, no Mapa', (await arvore().locator('[data-ramo="livres"]').innerText()).includes(nomes.captura))
 })
 
 await passo('descartar captura', async () => {
@@ -334,9 +329,10 @@ await passo('concluir a Ação em Hoje', async () => {
     await botao('Concluir', dialogo()).click()
     await esperaSumir()
   }
-  await verGrupo('Feitos')
-  const feito = await page.getByRole('button', { name: `Reabrir: ${nomes.acao}` }).count()
-  confere('Ação concluída fica marcada como feita', feito === 1)
+  await ir('/mapa')
+  const aberta = await arvore().getByRole('button', { name: `Concluir: ${nomes.acao}` }).count()
+  await abrirResultado()
+  confere('Ação concluída sai dos abertos e fica guardada na ficha do resultado', aberta === 0 && (await ficha().innerText()).includes(nomes.acao))
 })
 
 await passo('concluir o Estudo com rastro', async () => {
@@ -344,9 +340,9 @@ await passo('concluir o Estudo com rastro', async () => {
   await dialogo().locator('textarea').fill(T('Aprendi a montar a planilha'))
   await botao('Concluir', dialogo()).click()
   await esperaSumir()
-  await verGrupo('Feitos')
-  const feito = await page.getByRole('button', { name: `Reabrir: ${nomes.estudo}` }).count()
-  confere('Estudo só conclui deixando rastro, e fica feito', feito === 1)
+  await ir('/mapa')
+  const aberto = await arvore().getByRole('button', { name: `Concluir: ${nomes.estudo}` }).count()
+  confere('Estudo só conclui deixando rastro, e sai dos abertos', aberto === 0)
 })
 
 // 10b. Método: a conclusão do Estudo vira nota no resultado; anexos leves; a escada
@@ -362,9 +358,10 @@ await passo('material de referência e escada', async () => {
   await botao('Guardar anexo', refs).click()
   await refs.getByText(T('Planilha de treino')).waitFor()
   confere('anexar um link ao resultado', (await refs.innerText()).includes('https://exemplo.com/planilha'))
-  await page.locator('[data-escada]').first().getByRole('link', { name: 'Para quê?' }).click()
-  await page.waitForTimeout(1200)
-  confere('"Para quê?" sobe do resultado para a responsabilidade', page.url().includes('/responsabilidades?id=') && (await texto('main')).includes(nomes.resp))
+  await ficha().locator('[data-zona="para-que"] a').click()
+  await page.waitForURL(/\/mapa\/responsabilidade\//)
+  await ficha().locator('[data-zona="item"]').getByText(nomes.resp).first().waitFor()
+  confere('o "para quê" sobe do resultado para a responsabilidade', (await ficha().locator('[data-zona="item"]').innerText()).includes(nomes.resp))
 })
 
 // 10c. Método: guia do propósito
@@ -388,9 +385,6 @@ await passo('navegação: onde estou', async () => {
   for (const [rota, destino, titulo] of [
     ['/', 'Hoje', 'Hoje'],
     ['/mapa', 'Mapa', 'Mapa'],
-    ['/resultados', 'Mapa', 'Resultados'],
-    ['/responsabilidades', 'Mapa', 'Responsabilidades'],
-    ['/avancos', 'Mapa', 'Avanços'],
     ['/mapa/proposito', 'Mapa', 'Propósito'],
     ['/caixa', 'Caixa', 'Caixa'],
     ['/revisao', 'Revisão', 'Revisão'],
@@ -399,6 +393,14 @@ await passo('navegação: onde estou', async () => {
     confere(`${rota} acende ${destino} no menu`, String(await aceso()).startsWith(destino), String(await aceso()))
     confere(`${rota} põe "${titulo}" na aba`, (await page.title()) === `${titulo} · Pegada`, await page.title())
   }
+  await abrirResultado()
+  confere('a ficha de um item acende Mapa no menu', String(await aceso()).startsWith('Mapa'), String(await aceso()))
+  for (const antigo of ['/resultados', '/responsabilidades', '/avancos']) {
+    await ir(antigo)
+    confere(`o catálogo antigo ${antigo} leva ao Mapa`, new URL(page.url()).pathname === '/mapa', page.url())
+  }
+  await ir('/resultados?id=' + enderecoDoResultado.split('/').pop())
+  confere('um link antigo de resultado abre a ficha dele', new URL(page.url()).pathname === enderecoDoResultado, page.url())
   await ir('/capturas')
   confere('o endereço antigo /capturas leva à Caixa', new URL(page.url()).pathname === '/caixa', page.url())
   await ir('/atividade')
@@ -414,31 +416,30 @@ await passo('busca global', async () => {
   await achado.waitFor()
   confere('a busca acha o resultado pelo nome, a partir de Hoje', true)
   await achado.click()
-  await page.waitForURL(/\/resultados\?id=/)
+  await page.waitForURL(/\/mapa\/resultado\//)
   confere('escolher na busca abre a ficha do resultado', true)
   const trilha = page.locator('[data-trilha]')
   await trilha.waitFor()
   confere('a ficha mostra a trilha do fio, com o Mapa acima', (await trilha.innerText()).includes('Mapa') || (await trilha.locator('a').count()) > 0)
 })
 
-// 11. Avanços: editar e cancelar o avanço que veio da captura
+// 11. Ficha do avanço: editar e cancelar o avanço livre que veio da captura
 await passo('editar e cancelar avanço', async () => {
-  await verGrupo('Prontos')
-  await abrirLinha(nomes.captura)
-  await linhaAvanco(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  await ir('/mapa')
+  await arvore().locator('[data-ramo="livres"]').getByRole('link', { name: new RegExp(nomes.captura) }).first().click()
+  await page.waitForURL(/\/mapa\/avanco\//)
+  confere('avanço livre diz que é livre, sem tom de erro', /Avanço livre/.test(await ficha().locator('[data-zona="para-que"]').innerText()))
+  await ficha().getByRole('button', { name: 'Mais comandos do avanço' }).click()
   await item(/Editar/).click()
   const d = dialogo()
   await d.locator('input[id$=action-title]').fill(nomes.captura + ' (editado)')
   await botao(/Atualizar|Salvar/, d).click()
   await esperaSumir()
-  confere('editar o título de um avanço', (await texto('main')).includes(nomes.captura + ' (editado)'))
-  await abrirLinha(nomes.captura)
-  await linhaAvanco(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  confere('editar o título de um avanço', (await ficha().innerText()).includes(nomes.captura + ' (editado)'))
+  await ficha().getByRole('button', { name: 'Mais comandos do avanço' }).click()
   await item('Cancelar avanço').click()
   await page.waitForTimeout(1500)
-  await verGrupo('Feitos')
-  await abrirLinha(nomes.captura)
-  confere('cancelar um avanço', /Cancelad/i.test(await linhaAvanco(nomes.captura).innerText()))
+  confere('cancelar um avanço', /Cancelad/i.test(await ficha().innerText()))
 })
 
 // 12. Resultado: pausar e reativar
@@ -454,31 +455,43 @@ await passo('pausar e reativar resultado', async () => {
 
 // 13. Responsabilidade: arquivar e reativar
 await passo('arquivar e reativar responsabilidade', async () => {
-  await ir('/responsabilidades')
-  await page.getByText(nomes.resp2).first().click()
-  await botao('Arquivar').click()
+  await ir('/mapa')
+  await arvore().getByRole('link', { name: new RegExp(nomes.resp2) }).first().click()
+  await page.waitForURL(/\/mapa\/responsabilidade\//)
+  await botao('Arquivar', ficha()).click()
   await botao('Arquivar', dialogo()).click()
   await botao('Reativar').waitFor()
   confere('arquivar a responsabilidade', true)
-  await botao('Reativar').click()
-  await botao('Arquivar').waitFor()
+  await ir('/mapa')
+  await arvore().getByRole('button', { name: 'Encerrados' }).click()
+  await arvore().locator('[data-ramo="encerrados"]').getByText(nomes.resp2).waitFor()
+  confere('o que foi arquivado fica guardado em Encerrados, no Mapa', true)
+  await arvore().locator('[data-ramo="encerrados"]').getByRole('link', { name: new RegExp(nomes.resp2) }).click()
+  await botao('Reativar', ficha()).click()
+  await botao('Arquivar', ficha()).waitFor()
   confere('reativar a responsabilidade', true)
 })
 
 // 14. Mapa e Revisão
 await passo('mapa e revisão', async () => {
   await ir('/mapa')
-  const m = await texto('main')
-  confere('Mapa mostra o resultado e quantos avanços já andaram', m.includes(nomes.resultado) && /\d+ de \d+ avanços/.test(m), m.slice(0, 200))
-  const no = page.locator('[data-resultado]').filter({ hasText: nomes.resultado }).first()
-  const abre = no.locator('button[aria-expanded]').last()
-  if ((await abre.getAttribute('aria-expanded')) !== 'true') await abre.click()
-  await page.waitForTimeout(400)
-  const aberto = await no.innerText()
-  confere('Mapa abre a estratégia dentro do resultado', aberto.includes(nomes.estrategia), aberto.slice(0, 200))
-  await page.getByRole('group', { name: 'Visão do mapa' }).getByRole('button', { name: 'Sustentar' }).click()
-  await page.waitForTimeout(400)
-  confere('Mapa em Sustentar mostra as responsabilidades', (await texto('main')).includes(nomes.resp))
+  const m = await arvore().innerText()
+  confere('Mapa tem os três ramos sob o Propósito', /Construir/i.test(m) && /Sustentar/i.test(m) && /Avanços livres/i.test(m), m.slice(0, 200))
+  const no = noDoMapa('responsabilidade', nomes.resp)
+  const dentro = await no.innerText()
+  confere('Mapa mostra a escada inteira: responsabilidade, resultado e estratégia', dentro.includes(nomes.resultado) && dentro.includes(nomes.estrategia), dentro.slice(0, 200))
+  const fecha = no.getByRole('button', { name: `Recolher ${nomes.resp}`, exact: true })
+  await fecha.click()
+  confere('recolher um degrau esconde o que está embaixo dele', !(await no.innerText()).includes(nomes.resultado))
+  await ir('/mapa')
+  confere('o Mapa lembra o que ficou recolhido', !(await noDoMapa('responsabilidade', nomes.resp).innerText()).includes(nomes.resultado))
+  await noDoMapa('responsabilidade', nomes.resp).getByRole('button', { name: `Abrir ${nomes.resp}`, exact: true }).click()
+  if (TELA === 'computador') {
+    await arvore().getByRole('link', { name: new RegExp(nomes.resultado) }).first().click()
+    await ficha().locator('[data-zona="item"]').waitFor()
+    confere('no computador, a ficha abre ao lado e o Mapa continua à vista', await arvore().isVisible())
+  }
+  await foto('mapa')
   await ir('/revisao')
   confere('Revisão abre', /Revis/i.test(await texto('main')))
   await foto('revisao')
@@ -558,14 +571,25 @@ if (process.env.PEGADA_TESTE_IA) {
     }
     return false
   }
+  // O formulário completo do avanço abre pela ficha dele.
+  const avancoDaIA = T('Avanço para a IA reescrever')
+  const abrirEdicaoDeUmAvanco = async () => {
+    await ir('/mapa')
+    const livres = arvore().locator('[data-ramo="livres"]')
+    if (!(await livres.getByText(avancoDaIA).count())) await adicionarEm(livres, 'Avanços livres', { texto: avancoDaIA, contexto: 'vida' })
+    await livres.getByRole('link', { name: new RegExp(avancoDaIA) }).first().click()
+    await page.waitForURL(/\/mapa\/avanco\//)
+    await ficha().getByRole('button', { name: 'Mais comandos do avanço' }).click()
+    await item(/Editar/).click()
+    await dialogo().locator('input[id$=action-title]').waitFor()
+  }
   await passo('privacidade da IA', async () => {
     await ir('/configuracoes')
     const chave = page.locator('#ia-ligada')
     await chave.waitFor()
     if ((await chave.getAttribute('aria-checked')) === 'true') await chave.click()
     await page.waitForTimeout(800)
-    await ir('/avancos')
-    await botao('Novo avanço').click()
+    await abrirEdicaoDeUmAvanco()
     await dialogo().locator('input[id$=action-title]').fill('texto qualquer para a IA')
     await botao('Sugerir com IA', dialogo()).click()
     await dialogo().getByText('A IA está desligada em Configurações.').waitFor()
@@ -621,21 +645,19 @@ if (process.env.PEGADA_TESTE_IA) {
     confere('desdobrar: a sugestão escolhida vira estratégia', (await texto('main')).includes(sugestao), sugestao)
   })
   await passo('correção gentil', async () => {
-    await ir('/resultados')
-    await botao('Novo resultado').click()
-    const d = dialogo()
-    await d.locator('input[id$=project-title]').fill('Ser um bom pai para as minhas filhas')
-    await d.locator('input[id$=completion-condition]').click()
-    await d.locator('[data-correcao]').waitFor({ timeout: 45000 }).catch(() => {})
-    const n = await d.locator('[data-correcao]').count()
+    await ir('/mapa')
+    const ramo = arvore().locator('[data-ramo="construir"]')
+    await ramo.getByRole('button', { name: 'Adicionar em Construir', exact: true }).click()
+    const form = ramo.locator('form[data-adicionar-aberto]')
+    await form.locator('input[type=text]').fill('Ser um bom pai para as minhas filhas')
+    await form.locator('[data-correcao]').waitFor({ timeout: 45000 }).catch(() => {})
+    const n = await form.locator('[data-correcao]').count()
     confere('correção gentil: o Pegada avisa quando o resultado não tem linha de chegada', n === 1)
-    if (n) await botao('Dispensar', d).click()
-    await page.keyboard.press('Escape')
-    await esperaSumir()
+    if (n) await botao('Dispensar', form).click()
+    await botao('Fechar', form).click()
   })
   await passo('IA no Novo Avanço', async () => {
-    await ir('/avancos')
-    await botao('Novo avanço').click()
+    await abrirEdicaoDeUmAvanco()
     const d = dialogo()
     await d.locator('input[id$=action-title]').fill('planilha de treino, olhar')
     await botao('Sugerir com IA', d).click()
@@ -650,7 +672,7 @@ if (process.env.PEGADA_TESTE_IA) {
 // 15. Nenhuma tela pode ficar mais larga que o aparelho
 await passo('largura das telas', async () => {
   const largas = []
-  for (const rota of ['/', '/avancos', '/caixa', '/resultados', '/responsabilidades', '/mapa', '/mapa/proposito', '/historico', '/revisao', '/configuracoes']) {
+  for (const rota of ['/', '/caixa', '/mapa', '/mapa/proposito', enderecoDoResultado || '/mapa', '/historico', '/revisao', '/configuracoes']) {
     await ir(rota)
     const [sw, cw] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])
     if (sw > cw + 1) largas.push(`${rota} (${sw} em ${cw})`)

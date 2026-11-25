@@ -512,7 +512,7 @@ export const TodayPage: React.FC = () => {
                       </span>
                     </button>
                     <Link
-                      to={`/avancos?id=${encodeURIComponent(action.id)}`}
+                      to={`/mapa/avanco/${encodeURIComponent(action.id)}`}
                       className="flex min-w-0 flex-1 flex-col gap-0.5"
                     >
                       <span
@@ -534,8 +534,8 @@ export const TodayPage: React.FC = () => {
           ) : (
             <p className="rounded-[20px] border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
               Nada mais escolhido para hoje.{' '}
-              <Link to="/avancos" className="font-medium text-foreground underline underline-offset-4">
-                Escolher em Avanços
+              <Link to="/mapa" className="font-medium text-foreground underline underline-offset-4">
+                Escolher no Mapa
               </Link>
             </p>
           )}
@@ -769,7 +769,7 @@ export const TodayPage: React.FC = () => {
                            (equivalente ao /acoes?id= da v0.0.45/v0.0.46). Não
                            libera foco, status ou qualquer gravação. */}
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
-                          <Link to={`/avancos?id=${encodeURIComponent(action.id)}`}>
+                          <Link to={`/mapa/avanco/${encodeURIComponent(action.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
                             Abrir avanço
                           </Link>
@@ -808,7 +808,7 @@ export const TodayPage: React.FC = () => {
                           (equivalente ao /projetos?id=). Não pausa/ativa projeto
                           nem altera estado. */}
                         <Button asChild size="sm" variant="outline" className="text-xs gap-1.5">
-                          <Link to={`/resultados?id=${encodeURIComponent(p.id)}`}>
+                          <Link to={`/mapa/resultado/${encodeURIComponent(p.id)}`}>
                             <ExternalLink className="w-3.5 h-3.5" />
                             Abrir resultado
                           </Link>

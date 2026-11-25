@@ -166,6 +166,12 @@ async function main() {
   // --- Leituras ---
   const mapa = await op('ver_mapa')
   confere('ver mapa', mapa.status === 200 && JSON.stringify(mapa.json).includes('Saúde da família'), mapa)
+  confere(
+    'mapa traz avanços livres e os que sustentam cada responsabilidade',
+    Array.isArray(mapa.json?.resultado?.avancos_livres) &&
+      (mapa.json?.resultado?.responsabilidades || []).every((r) => Array.isArray(r.avancos)),
+    mapa,
+  )
   const semana = await op('ver_resumo_semana', { dias: 7 })
   confere('ver resumo da semana', semana.status === 200, semana)
   const listAv = await op('listar_avancos', { resultado_id: resId })

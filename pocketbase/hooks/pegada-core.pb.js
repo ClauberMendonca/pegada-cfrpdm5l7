@@ -477,7 +477,7 @@ function pegadaRota(e) {
       write: false,
       title: 'Ver o mapa do sentido',
       description:
-        'Devolve a estrutura inteira: Propósito, Responsabilidades ativas, Resultados (ativos e futuros) com suas Estratégias e a contagem de avanços abertos. Use para entender onde encaixar algo novo.',
+        'Devolve a estrutura inteira: Propósito, Responsabilidades ativas (com os avanços e rotinas que as sustentam), Resultados (ativos e futuros) com suas Estratégias e avanços abertos, e os avanços livres. Use para entender onde encaixar algo novo.',
       schema: { type: 'object', properties: {} },
       run: function (ctx) {
         var app = ctx.app
@@ -537,16 +537,30 @@ function pegadaRota(e) {
         }
         var openByStrategy = {}
         var openLoose = {}
+        // Avanços sem resultado: os que sustentam uma responsabilidade (rotinas
+        // e avulsos) e os livres, que não têm ligação nenhuma e são legítimos.
+        var openByResp = {}
+        var openFree = []
         for (var o = 0; o < openActions.length; o++) {
+          var oa = openActions[o]
           var item = {
-            id: openActions[o].id,
-            titulo: openActions[o].getString('title'),
-            tipo: openActions[o].getString('kind') || 'acao',
+            id: oa.id,
+            titulo: oa.getString('title'),
+            tipo: oa.getString('kind') || 'acao',
+            status: oa.getString('status'),
+            contexto: oa.getString('context'),
+            hoje: oa.getBool('is_today_selected') || oa.getBool('is_next_step'),
+            principal: oa.getBool('is_next_step'),
+            rotina: !!oa.getString('recurrence_series_id'),
+            prazo: oa.getString('deadline'),
           }
-          var sid = openActions[o].getString('strategy_id')
-          var opid = openActions[o].getString('project_id')
+          var sid = oa.getString('strategy_id')
+          var opid = oa.getString('project_id')
+          var orid = oa.getString('responsibility_id')
           if (sid) (openByStrategy[sid] = openByStrategy[sid] || []).push(item)
           else if (opid) (openLoose[opid] = openLoose[opid] || []).push(item)
+          else if (orid) (openByResp[orid] = openByResp[orid] || []).push(item)
+          else openFree.push(item)
         }
         var resultsOut = results.map(function (r) {
           var v = resultView(r)
@@ -576,9 +590,11 @@ function pegadaRota(e) {
               titulo: r.getString('title'),
               contexto: r.getString('context'),
               escolhida_por: r.getString('chosen_by') || null,
+              avancos: openByResp[r.id] || [],
             }
           }),
           resultados: resultsOut,
+          avancos_livres: openFree,
           avancos_sem_fio: semFio,
           resultados_sem_forma_minima: results
             .filter(function (r) {

@@ -826,19 +826,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
-            {!actionToEdit && (
-              <AiSuggest
-                tipo="avanco"
-                texto={title}
-                descrever={(s) =>
-                  `${s.tipo in ACTION_KIND_LABEL ? ACTION_KIND_LABEL[s.tipo as ActionKind] : 'Avanço'}: ${s.titulo}`
-                }
-                onUsar={(s) => {
-                  if (s.titulo) setTitle(s.titulo)
-                  if (s.tipo in ACTION_KIND_LABEL && s.tipo !== 'espera') setKind(s.tipo as ActionKind)
-                }}
-              />
-            )}
+            <AiSuggest
+              tipo="avanco"
+              texto={title}
+              descrever={(s) =>
+                `${s.tipo in ACTION_KIND_LABEL ? ACTION_KIND_LABEL[s.tipo as ActionKind] : 'Avanço'}: ${s.titulo}`
+              }
+              onUsar={(s) => {
+                if (s.titulo) setTitle(s.titulo)
+                if (s.tipo in ACTION_KIND_LABEL && s.tipo !== 'espera') setKind(s.tipo as ActionKind)
+              }}
+            />
             {/* NUMERAÇÃO PERMANENTE — número da ação FORA do input: selo de
                leitura na edição; na criação, nota discreta (nunca P-0/A-0 ou
                número previsto). O título digitado continua puro. */}

@@ -168,10 +168,6 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
             Caminhos escolhidos para buscar este resultado. Avanços podem ficar sem estratégia.
           </p>
         </div>
-        <Button size="sm" onClick={openNew} className="min-h-11 gap-1.5 text-xs sm:min-h-9">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Nova estratégia
-        </Button>
       </div>
 
       <Desdobrar
@@ -225,7 +221,8 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
             return (
               <li
                 key={strategy.id}
-                className="rounded-xl border border-border bg-muted/40 p-3 space-y-2"
+                id={`estrategia-${strategy.id}`}
+                className="scroll-mt-24 rounded-xl border border-border bg-muted/40 p-3 space-y-2"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">

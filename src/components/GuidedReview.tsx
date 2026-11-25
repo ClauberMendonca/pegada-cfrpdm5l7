@@ -465,7 +465,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                           </p>
                         </div>
                         <Button size="sm" variant="outline" asChild className="rounded-full">
-                          <Link to={`/avancos?id=${encodeURIComponent(e.id)}`} onClick={sair}>
+                          <Link to={`/mapa/avanco/${encodeURIComponent(e.id)}`} onClick={sair}>
                             Abrir avanço
                           </Link>
                         </Button>
@@ -582,11 +582,11 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                       </div>
                     ))}
                     <Link
-                      to="/responsabilidades"
+                      to="/mapa"
                       onClick={sair}
                       className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
                     >
-                      Chegou uma nova: criar responsabilidade
+                      Chegou uma nova: criar no Mapa
                     </Link>
                   </>
                 )}
@@ -614,8 +614,8 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         {dias >= 90 ? 'Feche escolhendo os próximos avanços.' : 'Defina os próximos avanços.'}
                       </p>
                       <Button size="sm" variant="outline" asChild className="rounded-full">
-                        <Link to="/avancos" onClick={sair}>
-                          Ver avanços
+                        <Link to="/mapa" onClick={sair}>
+                          Abrir o Mapa
                         </Link>
                       </Button>
                     </div>
@@ -625,7 +625,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         {ajustar.map((r) => (
                           <Link
                             key={r.id}
-                            to={`/resultados?id=${encodeURIComponent(r.id)}`}
+                            to={`/mapa/resultado/${encodeURIComponent(r.id)}`}
                             onClick={sair}
                             className="block break-words text-sm text-foreground underline underline-offset-4"
                           >

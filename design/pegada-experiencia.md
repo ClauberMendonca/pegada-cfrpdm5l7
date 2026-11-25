@@ -13,6 +13,31 @@ O sistema visual (`pegada-tokens.css`) diz como as coisas se parecem. Este docum
 
 Capturar fica no centro, em todas as telas. O avatar guarda só o que é da conta: Configurações, Histórico e Sair. Toda tela pertence a um dos quatro lugares (`src/lib/pegada/lugar.ts`), e o menu fica sempre aceso.
 
+## O Mapa e as fichas
+
+O Mapa é uma lista só, que abre e fecha (`src/components/mapa/ArvoreDoMapa.tsx`). Do Propósito saem três ramos:
+
+| Ramo | O que mora nele |
+| --- | --- |
+| Construir | Resultados que nascem direto do Propósito, com as estratégias e os avanços de cada um |
+| Sustentar | Responsabilidades, com os resultados e os avanços (rotinas) que as mantêm de pé |
+| Avanços livres | O que não está ligado a nada. É legítimo, e aparece sem tom de erro |
+
+Resultados sem prazo ou guardados para depois ficam recolhidos em "Depois". O que foi concluído ou arquivado fica em "Encerrados", no fim do Mapa.
+
+Toda ficha mora embaixo do Mapa e tem endereço próprio (`src/lib/pegada/enderecos.ts`):
+
+| Ficha | Endereço |
+| --- | --- |
+| Propósito | `/mapa/proposito` |
+| Responsabilidade | `/mapa/responsabilidade/:id` |
+| Resultado | `/mapa/resultado/:id` (a estratégia é uma parte dele: `#estrategia-:id`) |
+| Avanço | `/mapa/avanco/:id` |
+
+A ficha (`src/components/Ficha.tsx`) tem sempre três zonas, na ordem da escada: "Para quê" em cima, o item no meio e "Como" embaixo. No celular ela ocupa a tela, com a seta de voltar. No computador ela abre ao lado, e o Mapa continua à vista. Os catálogos antigos (`/resultados`, `/responsabilidades`, `/avancos`) não existem mais: os endereços levam ao Mapa ou à ficha do item.
+
+Criar o que já tem lugar é sempre pelo "Adicionar" embaixo do item (`AdicionarNoLugar.tsx`). O tipo vem do degrau. No Mapa, o ponto ao lado de cada avanço escolhe o dia: laranja quer dizer que está em Hoje.
+
 ## As onze regras
 
 1. **Cada coisa mora em um lugar só.** Um item existe no Mapa. Hoje, Caixa e Revisão são vistas dele, nunca cópias.

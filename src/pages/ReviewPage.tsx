@@ -124,7 +124,7 @@ export const ReviewPage: React.FC = () => {
     (id: string) => {
       // BLOCO 2A — mesmo contrato de URL do catálogo (/projetos?id=<ID>) com a
       // origem declarada; a ficha usa esse estado para retornar a /revisao.
-      navigate(`/resultados?id=${encodeURIComponent(id)}`, {
+      navigate(`/mapa/resultado/${encodeURIComponent(id)}`, {
         state: { from: "review" },
       });
     },
@@ -209,13 +209,13 @@ export const ReviewPage: React.FC = () => {
             </CardTitle>
             <CardDescription className="text-muted-foreground max-w-xl mx-auto text-sm">
               O diagnóstico desta área aparece quando existem resultados. Comece
-              criando sua primeira ficha em Resultados.
+              criando o seu primeiro resultado no Mapa.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pt-2">
             <Button asChild variant="outline" className="gap-2">
-              <Link to="/resultados">
-                <span>Ir para Resultados</span>
+              <Link to="/mapa">
+                <span>Abrir o Mapa</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
             </Button>
@@ -433,8 +433,8 @@ export const ReviewPage: React.FC = () => {
 
               <div className="flex justify-center pt-2">
                 <Button asChild variant="outline" className="gap-2">
-                  <Link to="/resultados">
-                    <span>Ir para Resultados e Calibrar Fichas</span>
+                  <Link to="/mapa">
+                    <span>Abrir o Mapa e ajustar os resultados</span>
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                 </Button>

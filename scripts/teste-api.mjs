@@ -250,7 +250,8 @@ async function compartilhado({ suToken }) {
       token: suToken,
       body: { email, name: nome, password: senha, passwordConfirm: senha, verified: true, timezone: 'America/Sao_Paulo' },
     })
-    const l = await http('POST', '/api/collections/users/auth-with-password', { body: { identity: email, password: senha } })
+    // Sessão dada pelo superusuário de teste: não gasta o limite de tentativas de entrada.
+    const l = await http('POST', '/api/collections/users/impersonate/' + c.json?.id, { token: suToken, body: { duration: 600 } })
     const token = l.json?.token
     return {
       id: c.json?.id,

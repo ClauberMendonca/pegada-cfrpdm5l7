@@ -2644,7 +2644,9 @@ function pegadaRota(e) {
       for (k = 0; k < linhas.length; k++) {
         var c = linhas[k].c
         var row = linhas[k].row
-        if (row.user_id !== ctx.userId) throw new ForbiddenError('Este item não é seu.')
+        // Notas e tempo de quem já participou do resultado voltam junto com ele.
+        if (row.user_id !== ctx.userId && c !== 'progress_logs' && c !== 'time_entries')
+          throw new ForbiddenError('Este item não é seu.')
         if (safeFind(ctx.app, c, row.id)) continue
         var pais = PAIS[c] || {}
         for (var campo in pais) {

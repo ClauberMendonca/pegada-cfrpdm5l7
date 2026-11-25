@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
 import { useAuth } from '@/contexts/AuthContext'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { ActionItem, ActionStatus, Project } from '@/types/execution'
@@ -34,8 +35,9 @@ import {
   SearchX,
   Loader2,
   ArrowRight,
+  Check,
 } from 'lucide-react'
-import { ownerTimezone, todayInZone } from '@/lib/datetime'
+import { formatCalendarDay, ownerTimezone, todayInZone } from '@/lib/datetime'
 import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { useToast } from '@/hooks/use-toast'
@@ -82,6 +84,15 @@ const STATUS_OPTIONS: { value: ActionStatus | 'todos'; label: string }[] = [
   { value: 'cancelada', label: 'Cancelado' },
 ]
 
+type Grupo = 'prontos' | 'fazendo' | 'esperando' | 'feitos'
+const ORDEM_GRUPOS: Grupo[] = ['prontos', 'fazendo', 'esperando', 'feitos']
+const GRUPOS: Record<Grupo, { nome: string; estados: ActionStatus[]; conta: boolean }> = {
+  prontos: { nome: 'Prontos', estados: ['pronta'], conta: true },
+  fazendo: { nome: 'Fazendo', estados: ['em_andamento'], conta: true },
+  esperando: { nome: 'Esperando', estados: ['aguardando', 'bloqueada'], conta: true },
+  feitos: { nome: 'Feitos', estados: ['feita', 'cancelada'], conta: false },
+}
+
 const LINK_OPTIONS: { value: 'todas' | 'sem_projeto' | 'com_projeto'; label: string }[] = [
   { value: 'todas', label: 'Todas' },
   { value: 'sem_projeto', label: 'Sem resultado' },
@@ -113,15 +124,13 @@ export const ActionsPage: React.FC = () => {
 
   // Filtros locais do catálogo (não mexem no filtro global nem no recorte do Hoje).
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<ActionStatus | 'todos'>('todos')
-  const [linkFilter, setLinkFilter] = useState<'todas' | 'sem_projeto' | 'com_projeto'>('todas')
+  const [grupo, setGrupo] = useState<Grupo>('prontos')
+  const [buscaAberta, setBuscaAberta] = useState(false)
 
   // FATIA 3 — gravação em andamento (impede submissão duplicada por controle).
   const [savingActionId, setSavingActionId] = useState<string | null>(null)
 
   // Catálogo de Ações — apresentação Cards/Lista (preferência por dono nesta área).
-  const [view, setView] = useViewPreference('acoes', user?.id)
-  const [showSummary, setShowSummary] = useSummaryPreference('acoes', user?.id)
   const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
 
   // BLOCO 2B — destino retomável por URL: /acoes?id=<ID> abre/destaca a ação
@@ -130,7 +139,7 @@ export const ActionsPage: React.FC = () => {
   const urlActionId = searchParams.get('id')?.trim() || null
   const [dest, setDest] = useState<DestResolution | null>(null)
   const [destRetryTick, setDestRetryTick] = useState(0)
-  const destElRef = useRef<HTMLDivElement | null>(null)
+  const destElRef = useRef<HTMLElement | null>(null)
 
   // Modals state
   const [isActionModalOpen, setIsActionModalOpen] = useState(false)
@@ -295,7 +304,7 @@ export const ActionsPage: React.FC = () => {
   // inventado. Código/número é match INTEGRAL (exato): "3" acha o avanço 3 e
   // nunca o 13; "AV-1" não localiza o AV-12 por substring. Aceita o código novo
   // (AV-12) e o legado (A-12) para o próprio avanço, e R-N/P-N para o vínculo.
-  const filteredActions = useMemo(() => {
+  const searchedActions = useMemo(() => {
     const query = search.trim().toLowerCase()
     return actions.filter((a) => {
       if (query) {
@@ -319,15 +328,40 @@ export const ActionsPage: React.FC = () => {
         if (!inTitle && !inDescription && !inProject && !inCode && !inProjectCode && !inNumber)
           return false
       }
-      if (statusFilter !== 'todos' && a.status !== statusFilter) return false
-      if (linkFilter === 'sem_projeto' && a.project_id) return false
-      if (linkFilter === 'com_projeto' && !a.project_id) return false
       return true
     })
-  }, [actions, resolveProject, search, statusFilter, linkFilter])
+  }, [actions, resolveProject, search])
 
-  const hasActiveLocalFilters =
-    search.trim() !== '' || statusFilter !== 'todos' || linkFilter !== 'todas'
+  // Chips de estado do desenho: cada um reúne os estados que a pessoa lê como um só.
+  const filteredActions = useMemo(
+    () => searchedActions.filter((a) => GRUPOS[grupo].estados.includes(a.status)),
+    [searchedActions, grupo],
+  )
+  const contagem = useMemo(() => {
+    const c = { prontos: 0, fazendo: 0, esperando: 0, feitos: 0 } as Record<Grupo, number>
+    for (const a of searchedActions)
+      for (const g of ORDEM_GRUPOS) if (GRUPOS[g].estados.includes(a.status)) c[g]++
+    return c
+  }, [searchedActions])
+
+  // Lista agrupada por resultado, na ordem em que os resultados aparecem;
+  // os avanços sem resultado ficam no fim.
+  const porResultado = useMemo(() => {
+    const mapa = new Map<string, { project: Project | null; itens: ActionItem[] }>()
+    for (const a of filteredActions) {
+      const project = resolveProject(a) ?? null
+      const chave = project?.id ?? ''
+      if (!mapa.has(chave)) mapa.set(chave, { project, itens: [] })
+      mapa.get(chave)!.itens.push(a)
+    }
+    const grupos = [...mapa.entries()]
+    return [
+      ...grupos.filter(([k]) => k !== '').map(([, g]) => g),
+      ...grupos.filter(([k]) => k === '').map(([, g]) => g),
+    ]
+  }, [filteredActions, resolveProject])
+
+  const hasActiveLocalFilters = search.trim() !== ''
 
   // BLOCO 2B — o que fazer com o destino resolvido: se está no recorte visível,
   // abre/destaca na própria listagem; se está fora (filtros locais ou recorte
@@ -348,8 +382,7 @@ export const ActionsPage: React.FC = () => {
 
   const clearLocalFilters = () => {
     setSearch('')
-    setStatusFilter('todos')
-    setLinkFilter('todas')
+    setBuscaAberta(false)
   }
 
   // BLOCO 2B(5) — fechar o destino remove o id da URL sem empilhar histórico
@@ -382,7 +415,7 @@ export const ActionsPage: React.FC = () => {
   useEffect(() => {
     if (!destReady || !destInFiltered) return
     destElRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [destReady, destInFiltered, view])
+  }, [destReady, destInFiltered])
 
   // FATIA 2 + FATIA 3 — seleção de foco com a MESMA regra compartilhada do Hoje;
   // estado pendente; sucesso só após confirmação real do backend.
@@ -478,6 +511,22 @@ export const ActionsPage: React.FC = () => {
     void loadData()
   }
 
+  // Segunda linha de cada avanço: tipo e o que mais importa saber dele.
+  const metaDaLinha = (action: ActionItem): string => {
+    const partes = [ACTION_KIND_LABEL[(action.kind || 'acao') as ActionKind]]
+    if (action.status === 'cancelada') partes.push('cancelado')
+    else if (action.status === 'bloqueada') partes.push('bloqueado')
+    if (action.waiting_for && ['aguardando', 'bloqueada'].includes(action.status))
+      partes.push(action.waiting_for)
+    if (action.deadline && action.status !== 'feita' && action.status !== 'cancelada')
+      partes.push(
+        action.deadline < todayStr
+          ? `atrasado desde ${formatCalendarDay(action.deadline)}`
+          : `até ${formatCalendarDay(action.deadline)}`,
+      )
+    return partes.join(' · ')
+  }
+
   const renderActionRow = (action: ActionItem, isDest = false) => {
     const project = resolveProject(action)
     const linkLabel = project ? project.title : action.project_id ? 'vínculo indisponível' : null
@@ -550,43 +599,33 @@ export const ActionsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-ginga-info-bg text-ginga-info border border-ginga-info/30">
-              <ListChecks className="w-4 h-4" />
-            </div>
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">Avanços</h2>
-            {contextFilter !== 'todos' && (
-              <Badge
-                variant="outline"
-                className="text-xs uppercase font-medium border-border text-foreground bg-muted"
-              >
-                Filtro: {contextFilter}
-              </Badge>
-            )}
-          </div>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Catálogo completo de todos os seus avanços, com ou sem resultado, independentemente da
-            seleção para Hoje. Hoje continua sendo um recorte deliberado, não o catálogo.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <ViewToggle view={view} onChange={setView} />
-          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
-          <Button
+      {/* Cabeçalho do desenho: título, busca e novo avanço. */}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
+          Avanços
+        </h1>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Buscar avanços"
+            aria-expanded={buscaAberta}
+            onClick={() => setBuscaAberta((v) => !v)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-input bg-card text-foreground"
+          >
+            <Search className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setEditingAction(null)
               setIsActionModalOpen(true)
             }}
             disabled={savingActionId !== null}
-            className="gap-1.5 shadow-sm"
+            className="flex h-11 items-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-medium text-background disabled:opacity-60"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
             Novo avanço
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -669,55 +708,44 @@ export const ActionsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Busca + filtros locais */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+      {(buscaAberta || search.trim() !== '') && (
+        <div className="relative">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
             type="search"
+            autoFocus
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por título, descrição, código (AV-12/A-12) ou resultado…"
-            aria-label="Buscar avanços por título, descrição, código (novo AV-N ou legado A-N) ou resultado vinculado"
-            className="min-h-11 border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
+            placeholder="Buscar por título, código ou resultado"
+            aria-label="Buscar avanços por título, descrição, código ou resultado"
+            className="min-h-11 rounded-full border-input bg-card pl-9 text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring"
           />
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(val) => setStatusFilter(val as ActionStatus | 'todos')}
-        >
-          <SelectTrigger
-            aria-label="Filtrar por status"
-            className="min-h-11 w-full border-input bg-card text-base text-foreground sm:w-44 sm:text-sm"
+      )}
+
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Estado dos avanços">
+        {ORDEM_GRUPOS.map((g) => (
+          <button
+            key={g}
+            type="button"
+            aria-pressed={grupo === g}
+            onClick={() => setGrupo(g)}
+            className={cn(
+              'flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors',
+              grupo === g
+                ? 'bg-foreground text-background'
+                : 'border border-input text-foreground hover:bg-secondary',
+            )}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-popover text-popover-foreground">
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                Status: {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={linkFilter} onValueChange={(val) => setLinkFilter(val as typeof linkFilter)}>
-          <SelectTrigger
-            aria-label="Filtrar por vínculo de resultado"
-            className="min-h-11 w-full border-input bg-card text-base text-foreground sm:w-40 sm:text-sm"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="border-border bg-popover text-popover-foreground">
-            {LINK_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                Vínculo: {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            {GRUPOS[g].nome}
+            {GRUPOS[g].conta && contagem[g] > 0 && (
+              <span className="font-normal opacity-75">{contagem[g]}</span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* BLOCO 2B(3) — destino fora do recorte visível: agrupamento contextual
@@ -794,64 +822,90 @@ export const ActionsPage: React.FC = () => {
             </>
           )}
         </div>
-      ) : view === 'cards' ? (
-        <div className="grid gap-3 [&>*]:min-w-0">
-          {filteredActions.map((action) => {
-            const isDest = urlActionId === action.id
-            return (
-              <div key={action.id} ref={isDest ? destElRef : undefined}>
-                {renderActionRow(action, isDest)}
-              </div>
-            )
-          })}
-        </div>
       ) : (
-        /* Lista: apenas o título em cada linha; abrir expande a apresentação
-           completa existente (descrição, comandos, tempo) — recolher só altera
-           a visualização, sem encerrar cronômetro nem gravar nada. O destino
-           da URL abre automaticamente, com selo "Destino", pelo mesmo contrato. */
-        <div className="grid gap-2">
-          {filteredActions.map((action) => {
-            const isDest = urlActionId === action.id
-            return (
-              <div key={action.id} ref={isDest ? destElRef : undefined}>
-                <ListRow
-                  title={action.title}
-                  numberKind="action"
-                  numberValue={action.sequence_number}
-                  numberEntityId={action.id}
-                  open={Boolean(openRows[action.id]) || isDest}
-                  hint={
-                    isDest ? (
-                      <Badge
-                        variant="outline"
-                        className="gap-1 border-primary/40 text-primary text-[10px]"
-                      >
-                        <Link2 className="h-3 w-3" aria-hidden="true" />
-                        Destino
-                      </Badge>
-                    ) : undefined
-                  }
-                  onToggle={() => handleRowToggle(action.id)}
-                  summary={
-                    showSummary
-                      ? actionSummaryLine(action, {
-                          projectTitle:
-                            formatEntityTitle(
-                              'project',
-                              resolveProject(action)?.sequence_number,
-                              resolveProject(action)?.title ?? '',
-                            ) || null,
-                          today: todayStr,
-                        })
-                      : undefined
-                  }
-                >
-                  {renderActionRow(action, isDest)}
-                </ListRow>
+        /* Lista do desenho: agrupada por resultado, uma linha por avanço. Tocar
+           no título abre a apresentação completa (comandos, tempo, edição);
+           abrir e recolher só mudam a visualização. */
+        <div className="space-y-4">
+          {porResultado.map(({ project, itens }) => (
+            <section key={project?.id ?? 'sem-resultado'} className="space-y-1.5">
+              <div className="flex items-center gap-2 px-1">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'h-2 w-2 shrink-0 rounded-full',
+                    project ? 'bg-primary' : 'border-2 border-muted-foreground',
+                  )}
+                />
+                <h2 className="min-w-0 truncate text-sm font-semibold text-foreground">
+                  {project ? (
+                    <Link to={`/resultados?id=${encodeURIComponent(project.id)}`}>{project.title}</Link>
+                  ) : (
+                    'Sem resultado'
+                  )}
+                </h2>
               </div>
-            )
-          })}
+              <ul className="overflow-hidden rounded-[20px] border border-border bg-card">
+                {itens.map((action, i) => {
+                  const isDest = urlActionId === action.id
+                  const aberto = Boolean(openRows[action.id]) || isDest
+                  const feito = action.status === 'feita'
+                  return (
+                    <li
+                      key={action.id}
+                      ref={isDest ? (destElRef as React.RefObject<HTMLLIElement | null>) : undefined}
+                      className={cn(i > 0 && 'border-t border-border')}
+                      data-avanco={action.id}
+                    >
+                      <div className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+                        <button
+                          type="button"
+                          disabled={savingActionId !== null}
+                          aria-label={`${feito ? 'Reabrir' : 'Concluir'}: ${action.title}`}
+                          onClick={() => handleStatusChange(action.id, feito ? 'pronta' : 'feita')}
+                          className="-mx-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                        >
+                          <span
+                            className={cn(
+                              'flex h-7 w-7 items-center justify-center rounded-full',
+                              feito
+                                ? 'bg-foreground text-background'
+                                : 'border-2 border-muted-foreground',
+                            )}
+                          >
+                            {feito && <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-expanded={aberto}
+                          onClick={() => handleRowToggle(action.id)}
+                          className="flex min-w-0 flex-1 flex-col gap-0.5 text-left"
+                        >
+                          <span
+                            className={cn(
+                              'break-words text-base font-medium leading-tight text-foreground',
+                              (feito || action.status === 'cancelada') &&
+                                'text-muted-foreground line-through',
+                            )}
+                          >
+                            {action.title}
+                          </span>
+                          <span className="text-[13px] text-muted-foreground">{metaDaLinha(action)}</span>
+                        </button>
+                        {(action.is_next_step || action.is_today_selected) && !feito && (
+                          <span className="shrink-0 rounded-[10px] bg-foreground px-2 py-0.5 text-xs font-semibold text-background">
+                            hoje
+                          </span>
+                        )}
+                      </div>
+                      {aberto && <div className="border-t border-border p-2">{renderActionRow(action, isDest)}</div>}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          ))}
         </div>
       )}
 

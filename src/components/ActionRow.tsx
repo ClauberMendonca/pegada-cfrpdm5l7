@@ -90,7 +90,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
         return (
           <Badge
             variant="outline"
-            className="rounded-full border-ginga-info/30 bg-ginga-info-bg px-2.5 text-[13px] font-medium text-ginga-info"
+            className="rounded-full border-pegada-info/30 bg-pegada-info-bg px-2.5 text-[13px] font-medium text-pegada-info"
           >
             Em andamento
           </Badge>
@@ -99,7 +99,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
         return (
           <Badge
             variant="outline"
-            className="rounded-full border-ginga-warning/30 bg-ginga-warning-bg px-2.5 text-[13px] font-medium text-ginga-warning"
+            className="rounded-full border-pegada-warning/30 bg-pegada-warning-bg px-2.5 text-[13px] font-medium text-pegada-warning"
           >
             Aguardando
           </Badge>
@@ -108,7 +108,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
         return (
           <Badge
             variant="outline"
-            className="rounded-full border-destructive/30 bg-ginga-danger-bg px-2.5 text-[13px] font-medium text-destructive"
+            className="rounded-full border-destructive/30 bg-pegada-danger-bg px-2.5 text-[13px] font-medium text-destructive"
           >
             Bloqueado
           </Badge>
@@ -296,7 +296,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
           </div>
 
           {action.waiting_for && (
-            <p className="mt-2 inline-block rounded-md border border-ginga-warning/30 bg-ginga-warning-bg px-2 py-1 text-sm text-ginga-warning">
+            <p className="mt-2 inline-block rounded-md border border-pegada-warning/30 bg-pegada-warning-bg px-2 py-1 text-sm text-pegada-warning">
               Motivo: {action.waiting_for}
             </p>
           )}
@@ -362,7 +362,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
               aria-pressed={action.is_next_step}
               className={cn(
                 touchButton,
-                action.is_next_step && 'text-ginga-warning hover:text-ginga-warning',
+                action.is_next_step && 'text-pegada-warning hover:text-pegada-warning',
                 saving && 'cursor-wait',
               )}
             >
@@ -421,12 +421,12 @@ export const ActionRow: React.FC<ActionRowProps> = ({
                 >
                   {action.is_next_step ? (
                     <>
-                      <StarOff className="h-4 w-4 text-ginga-warning" />
+                      <StarOff className="h-4 w-4 text-pegada-warning" />
                       <span>Remover do próximo avanço</span>
                     </>
                   ) : (
                     <>
-                      <Star className="h-4 w-4 text-ginga-warning" />
+                      <Star className="h-4 w-4 text-pegada-warning" />
                       <span>Definir como próximo avanço</span>
                     </>
                   )}
@@ -498,7 +498,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
       {showReasonInput && (
         <div className="mt-3 space-y-2 rounded-xl border border-border bg-background p-3">
           <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-            <AlertTriangle className="h-4 w-4 text-ginga-warning" aria-hidden="true" />
+            <AlertTriangle className="h-4 w-4 text-pegada-warning" aria-hidden="true" />
             Descreva o que está impedindo ou pelo que está aguardando:
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">

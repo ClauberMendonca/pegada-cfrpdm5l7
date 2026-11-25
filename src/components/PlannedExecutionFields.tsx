@@ -153,7 +153,7 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
             Fuso deste planejamento: {hasDraft ? draft.timezone : profileTimezone}
           </p>
           {usingUtcFallback && (
-            <p role="alert" className="break-words text-xs font-medium text-ginga-warning">
+            <p role="alert" className="break-words text-xs font-medium text-pegada-warning">
               {UTC_FALLBACK_NOTICE}
             </p>
           )}
@@ -161,7 +161,7 @@ export const PlannedExecutionFields: React.FC<PlannedExecutionFieldsProps> = ({
             <p className="break-words text-xs text-muted-foreground">{SAVED_TZ_NOTE}</p>
           )}
           {savedTimezoneUnrecognized && (
-            <p role="alert" className="break-words text-xs font-medium text-ginga-warning">
+            <p role="alert" className="break-words text-xs font-medium text-pegada-warning">
               O fuso salvo neste planejamento não é reconhecido por este navegador; o valor salvo
               será mantido.
             </p>

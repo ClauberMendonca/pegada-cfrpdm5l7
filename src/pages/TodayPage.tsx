@@ -425,7 +425,7 @@ export const TodayPage: React.FC = () => {
       </div>
 
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">Falha ao carregar dados do Hoje.</p>
@@ -438,7 +438,7 @@ export const TodayPage: React.FC = () => {
       )}
 
       {timeError && (
-        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
             <p className="text-sm font-medium text-destructive">
@@ -539,11 +539,11 @@ export const TodayPage: React.FC = () => {
       {todayDeadlineActions.length > 0 && (
         <section className="space-y-3 pt-2 border-t border-border">
           <div className="flex items-center gap-2">
-            <div className="p-1 rounded bg-ginga-info-bg text-ginga-info">
+            <div className="p-1 rounded bg-pegada-info-bg text-pegada-info">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-ginga-info">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-pegada-info">
                 Prazos Fatuais de Hoje ({todayDeadlineActions.length})
               </h3>
               <p className="text-xs text-muted-foreground">
@@ -600,7 +600,7 @@ export const TodayPage: React.FC = () => {
         <Collapsible open={isReevaluateOpen} onOpenChange={setIsReevaluateOpen}>
           <div className="flex items-center justify-between bg-muted border border-border rounded-xl p-3.5 px-4">
             <div className="flex items-center gap-2.5">
-              <div className="p-1.5 rounded-md bg-ginga-warning-bg text-ginga-warning">
+              <div className="p-1.5 rounded-md bg-pegada-warning-bg text-pegada-warning">
                 <RotateCcw className="w-4 h-4" />
               </div>
               <div>
@@ -682,7 +682,7 @@ export const TodayPage: React.FC = () => {
             {/* Ações Aguardando ou Bloqueadas */}
             {blockedOrWaitingActions.length > 0 && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold text-ginga-warning uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-xs font-semibold text-pegada-warning uppercase tracking-wider">
                   <Clock className="w-3.5 h-3.5" />
                   <span>Aguardando ou Bloqueados ({blockedOrWaitingActions.length})</span>
                 </div>
@@ -756,7 +756,7 @@ export const TodayPage: React.FC = () => {
                         <span className="truncate">{action.title}</span>
                       </span>
                       <span className="flex flex-wrap items-center gap-2 min-w-0">
-                        <span className="text-ginga-warning">
+                        <span className="text-pegada-warning">
                           Motivo: {ineligibilityLabel(action, resolveProject)}
                         </span>
                         {/* BLOCO 2C — atalho que SOMENTE navega: /avancos?id=<ID>

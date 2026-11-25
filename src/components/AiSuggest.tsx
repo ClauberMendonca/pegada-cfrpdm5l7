@@ -75,7 +75,7 @@ export function AiSuggest({ tipo, texto, descrever, onUsar, impedimento }: Props
           {sugestao.por_que && (
             <p className="break-words text-xs text-muted-foreground">{sugestao.por_que}</p>
           )}
-          {motivo && <p className="text-xs text-ginga-warning">{motivo}</p>}
+          {motivo && <p className="text-xs text-pegada-warning">{motivo}</p>}
           <div className="flex flex-wrap gap-2">
             {!motivo && (
               <Button type="button" size="sm" disabled={ocupado} onClick={() => void usar()} className="text-xs">

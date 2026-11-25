@@ -160,8 +160,8 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
                   className={cn(
                     'gap-1',
                     responsibility.context === 'trabalho'
-                      ? 'border-ginga-info/30 bg-ginga-info-bg text-ginga-info'
-                      : 'border-ginga-warning/30 bg-ginga-warning-bg text-ginga-warning',
+                      ? 'border-pegada-info/30 bg-pegada-info-bg text-pegada-info'
+                      : 'border-pegada-warning/30 bg-pegada-warning-bg text-pegada-warning',
                   )}
                 >
                   <ContextIcon className="h-3 w-3" aria-hidden="true" />
@@ -172,7 +172,7 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
                   className={cn(
                     archived
                       ? 'text-muted-foreground border-border line-through'
-                      : 'border-ginga-success/30 bg-ginga-success-bg text-ginga-success',
+                      : 'border-pegada-success/30 bg-pegada-success-bg text-pegada-success',
                   )}
                 >
                   {archived ? 'Arquivada' : 'Ativa'}
@@ -209,12 +209,12 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
           </div>
         </div>
         {outOfScope && (
-          <div className="rounded-xl border border-ginga-warning/30 bg-ginga-warning-bg p-3 flex items-start gap-2">
+          <div className="rounded-xl border border-pegada-warning/30 bg-pegada-warning-bg p-3 flex items-start gap-2">
             <AlertCircle
-              className="w-4 h-4 text-ginga-warning mt-0.5 shrink-0"
+              className="w-4 h-4 text-pegada-warning mt-0.5 shrink-0"
               aria-hidden="true"
             />
-            <p className="text-xs text-ginga-warning">
+            <p className="text-xs text-pegada-warning">
               Esta responsabilidade é de {contextLabel} e está fora do recorte atual (
               {globalContext === 'trabalho' ? 'Trabalho' : 'Vida'}). Seus filtros não foram
               alterados.
@@ -243,7 +243,7 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
             Carregando itens vinculados…
           </div>
         ) : hierarchyError ? (
-          <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-2">
+          <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden="true" />
             <div className="flex-1">
               <p className="text-sm text-destructive">{hierarchyError}</p>

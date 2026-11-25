@@ -542,7 +542,7 @@ export const ActionsPage: React.FC = () => {
           {/* Vínculo: título do projeto carregado, ou indisponível sem inventar projeto. */}
           {linkLabel && (
             <span
-              className={cn('inline-flex min-w-0 max-w-full items-center gap-1', !project && 'text-ginga-warning')}
+              className={cn('inline-flex min-w-0 max-w-full items-center gap-1', !project && 'text-pegada-warning')}
             >
               {project ? (
                 <span className="truncate">Resultado: {project.title}</span>
@@ -568,7 +568,7 @@ export const ActionsPage: React.FC = () => {
             </span>
           )}
           {action.is_next_step && (
-            <span className="inline-flex items-center gap-1 text-ginga-warning">
+            <span className="inline-flex items-center gap-1 text-pegada-warning">
               <Star className="h-3 w-3 fill-current" aria-hidden="true" />
               Próximo avanço
             </span>
@@ -630,7 +630,7 @@ export const ActionsPage: React.FC = () => {
       </div>
 
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">Falha ao carregar o catálogo.</p>
@@ -643,7 +643,7 @@ export const ActionsPage: React.FC = () => {
       )}
 
       {timeError && (
-        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
           <div className="flex-1">
             <p className="text-sm font-medium text-destructive">
@@ -667,7 +667,7 @@ export const ActionsPage: React.FC = () => {
       )}
 
       {dest && dest.id === urlActionId && dest.state === 'notfound' && (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <SearchX className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">Avanço não encontrado.</p>
@@ -689,7 +689,7 @@ export const ActionsPage: React.FC = () => {
       )}
 
       {dest && dest.id === urlActionId && dest.state === 'error' && (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">
@@ -756,7 +756,7 @@ export const ActionsPage: React.FC = () => {
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {destContextMismatch ? (
-                <span className="text-ginga-warning">
+                <span className="text-pegada-warning">
                   Este avanço é de {destDisplayAction.context === 'trabalho' ? 'Trabalho' : 'Vida'}{' '}
                   e está fora do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}
                   ). O filtro foi preservado.

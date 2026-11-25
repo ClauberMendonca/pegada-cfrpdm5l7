@@ -1022,7 +1022,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             <p id={ids.descriptionHelp} className="text-sm text-muted-foreground">
               O que você precisa saber antes de agir?
               {description.length > 18000 && (
-                <span className="ml-1 font-medium text-ginga-warning">
+                <span className="ml-1 font-medium text-pegada-warning">
                   {description.length}/20000 caracteres (limite)
                 </span>
               )}
@@ -1159,14 +1159,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </p>
           )}
           {strategyNotice && (
-            <p role="alert" className="text-xs font-medium text-ginga-warning">
+            <p role="alert" className="text-xs font-medium text-pegada-warning">
               {strategyNotice}
             </p>
           )}
 
           {/* BLOCO 5.1 — motivo legível de bloqueio ao criar com vínculo encerrado. */}
           {blockedByClosedProject && (
-            <p role="alert" className="text-xs font-medium text-ginga-warning">
+            <p role="alert" className="text-xs font-medium text-pegada-warning">
               Resultado {selectedProject!.status === 'concluido' ? 'concluído' : 'arquivado'} — não
               recebe novos avanços. Reabra o resultado pelo comando existente antes de planejar
               avanços vinculados a ele.
@@ -1175,7 +1175,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           {/* BLOCO 5.2 — planejamento em projeto pausado: permitido com aviso. */}
           {contextualPausedNotice && (
-            <p role="note" className="text-xs font-medium text-ginga-warning">
+            <p role="note" className="text-xs font-medium text-pegada-warning">
               Resultado pausado — você pode planejar avanços; execução e seleção de foco continuam
               sujeitas às regras existentes.
             </p>
@@ -1207,7 +1207,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                   {inheritedRef.data.status === 'arquivada' && ' (arquivada — vínculo atual)'}
                 </>
               ) : inheritedRef.status === 'error' ? (
-                <span className="font-medium text-ginga-warning">
+                <span className="font-medium text-pegada-warning">
                   Responsabilidade atual indisponível — vínculo preservado
                 </span>
               ) : (
@@ -1273,7 +1273,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                antes de salvar; Salvar é a confirmação, cancelar nada grava (nunca dois
                saves, nunca remoção silenciosa). */}
             {losingDirectLink && (
-              <p role="alert" className="text-xs font-medium text-ginga-warning">
+              <p role="alert" className="text-xs font-medium text-pegada-warning">
                 Ao salvar, o vínculo direto com{' '}
                 {persistedDirectName
                   ? `“${persistedDirectName}”`
@@ -1283,7 +1283,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             )}
 
             {focusNotice && (
-              <p role="alert" className="text-xs font-medium text-ginga-warning">
+              <p role="alert" className="text-xs font-medium text-pegada-warning">
                 {focusNotice}
               </p>
             )}

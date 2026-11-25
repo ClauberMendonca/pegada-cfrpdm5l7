@@ -78,7 +78,7 @@ export const CompleteProjectDialog: React.FC<CompleteProjectDialogProps> = ({
       <DialogContent className="max-w-[min(520px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
-            <CheckCircle2 className="w-5 h-5 text-ginga-success" />
+            <CheckCircle2 className="w-5 h-5 text-pegada-success" />
             Concluir resultado
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">

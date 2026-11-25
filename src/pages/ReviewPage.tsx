@@ -133,8 +133,8 @@ export const ReviewPage: React.FC = () => {
             variant="outline"
             className={`text-xs uppercase font-medium ${
               contextFilter === 'trabalho'
-                ? 'border-ginga-info/30 text-ginga-info bg-ginga-info-bg'
-                : 'border-ginga-warning/30 text-ginga-warning bg-ginga-warning-bg'
+                ? 'border-pegada-info/30 text-pegada-info bg-pegada-info-bg'
+                : 'border-pegada-warning/30 text-pegada-warning bg-pegada-warning-bg'
             }`}
           >
             Filtro: {contextFilter}
@@ -157,7 +157,7 @@ export const ReviewPage: React.FC = () => {
 
       {/* BLOCO 3(a) — falha com tentativa explícita; zeros não aparecem */}
       {loadError && !isLoading && (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-4 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">Falha ao carregar a Revisão.</p>
@@ -199,7 +199,7 @@ export const ReviewPage: React.FC = () => {
       {hasData && !emptyReal && (
         <Card className="bg-card border-border text-card-foreground">
           <CardHeader className="text-center pb-2">
-            <div className="mx-auto w-12 h-12 rounded-2xl bg-ginga-success-bg border border-ginga-success/30 flex items-center justify-center text-ginga-success mb-2">
+            <div className="mx-auto w-12 h-12 rounded-2xl bg-pegada-success-bg border border-pegada-success/30 flex items-center justify-center text-pegada-success mb-2">
               <Compass className="w-6 h-6" />
             </div>
             <CardTitle className="text-xl font-bold text-foreground">
@@ -234,14 +234,14 @@ export const ReviewPage: React.FC = () => {
                 </span>
               </div>
 
-              <div className="p-4 rounded-xl bg-ginga-warning-bg border border-ginga-warning/30">
-                <span className="text-xs text-ginga-warning block font-medium">
+              <div className="p-4 rounded-xl bg-pegada-warning-bg border border-pegada-warning/30">
+                <span className="text-xs text-pegada-warning block font-medium">
                   Ativos sem Avanço Pronto ou em Andamento
                 </span>
-                <span className="text-2xl font-bold text-ginga-warning mt-1 block">
+                <span className="text-2xl font-bold text-pegada-warning mt-1 block">
                   {flaggedProjects.length}
                 </span>
-                <span className="text-[11px] text-ginga-warning/80">
+                <span className="text-[11px] text-pegada-warning/80">
                   Resultados sem nenhum avanço “pronto” nem “em andamento” — necessitam de
                   desdobramento
                 </span>
@@ -263,7 +263,7 @@ export const ReviewPage: React.FC = () => {
             {/* BLOCO 3(c)+(e) — coleção real de projetos sinalizados, com Cards/Lista */}
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-bold uppercase tracking-wider text-ginga-warning flex items-center gap-2">
+                <h4 className="text-sm font-bold uppercase tracking-wider text-pegada-warning flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" aria-hidden="true" />
                   Resultados sinalizados ({flaggedProjects.length})
                 </h4>
@@ -342,7 +342,7 @@ export const ReviewPage: React.FC = () => {
             {/* Checklist de Reflexão (perguntas NÃO recebem o seletor Cards/Lista) */}
             <div className="p-5 rounded-2xl bg-muted border border-border space-y-4">
               <h4 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-ginga-success" />
+                <ShieldCheck className="w-4 h-4 text-pegada-success" />
                 Perguntas-Chave para o Fechamento Semanal
               </h4>
 

@@ -214,7 +214,7 @@ export default function Layout() {
           type="button"
           onClick={abrirCaptura}
           className={cn(
-            'mt-6 flex min-h-12 items-center justify-between gap-2 rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)]',
+            'mt-6 flex min-h-12 items-center justify-between gap-2 rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--pegada-primary-hover)]',
             FOCO,
           )}
         >
@@ -306,7 +306,7 @@ export default function Layout() {
               onClick={abrirCaptura}
               aria-label="Capturar"
               className={cn(
-                '-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)]',
+                '-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card transition-colors duration-200 hover:bg-[var(--pegada-primary-hover)]',
                 FOCO,
               )}
             >

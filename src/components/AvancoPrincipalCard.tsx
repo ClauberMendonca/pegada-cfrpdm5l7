@@ -115,7 +115,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
                 type="button"
                 disabled={ocupado}
                 onClick={() => executar(() => actionService.updateStatus(principal.id, 'feita'))}
-                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 text-[17px] font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
+                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 text-[17px] font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--pegada-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
               >
                 {ocupado ? (
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />

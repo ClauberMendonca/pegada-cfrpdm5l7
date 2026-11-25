@@ -246,21 +246,10 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         como={
           <>
             <div id="como-chegar" className="scroll-mt-24" />
-            {isProjectClosed ? (
+            {isProjectClosed && (
               <p role="note" className="px-1 text-sm text-muted-foreground">
                 Resultado encerrado. Para planejar de novo, reative o resultado.
               </p>
-            ) : (
-              <AdicionarNoLugar
-                tipos={['avanco', 'estrategia']}
-                onde={{ resultadoId: project.id }}
-                contexto={project.context === 'vida' ? 'vida' : 'trabalho'}
-                em={project.title}
-                onCriado={() => {
-                  void loadData()
-                  setInlineStrategyTick((t) => t + 1)
-                }}
-              />
             )}
             <StrategySection
               projectId={project.id}
@@ -269,6 +258,22 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               renderActions={renderActionBlocks}
               refreshTick={inlineStrategyTick}
               onAvancosCriados={() => void loadData()}
+              contexto={project.context === 'vida' ? 'vida' : 'trabalho'}
+              podeAdicionar={!isProjectClosed}
+              rodape={
+                !isProjectClosed && (
+                  <AdicionarNoLugar
+                    tipos={['avanco', 'estrategia']}
+                    onde={{ resultadoId: project.id }}
+                    contexto={project.context === 'vida' ? 'vida' : 'trabalho'}
+                    em={project.title}
+                    onCriado={() => {
+                      void loadData()
+                      setInlineStrategyTick((t) => t + 1)
+                    }}
+                  />
+                )
+              }
             />
             <Referencias elemento="resultado" id={project.id} recarregar={actions} />
             <Recolhido titulo={`Notas${logs.length ? ` · ${logs.length}` : ''}`}>

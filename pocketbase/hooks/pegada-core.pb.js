@@ -520,8 +520,38 @@ function pegadaRota(e) {
           if (pid) countBy[pid] = (countBy[pid] || 0) + 1
           else if (!openActions[i].getString('responsibility_id')) semFio++
         }
+        // Progresso de cada resultado e os avanços abertos de cada estratégia.
+        var doneActions = app.findRecordsByFilter(
+          'actions',
+          "user_id = {:u} && status = 'feita' && project_id != ''",
+          '',
+          0,
+          0,
+          { u: u },
+        )
+        var doneBy = {}
+        for (var d = 0; d < doneActions.length; d++) {
+          var dp = doneActions[d].getString('project_id')
+          doneBy[dp] = (doneBy[dp] || 0) + 1
+        }
+        var openByStrategy = {}
+        var openLoose = {}
+        for (var o = 0; o < openActions.length; o++) {
+          var item = {
+            id: openActions[o].id,
+            titulo: openActions[o].getString('title'),
+            tipo: openActions[o].getString('kind') || 'acao',
+          }
+          var sid = openActions[o].getString('strategy_id')
+          var opid = openActions[o].getString('project_id')
+          if (sid) (openByStrategy[sid] = openByStrategy[sid] || []).push(item)
+          else if (opid) (openLoose[opid] = openLoose[opid] || []).push(item)
+        }
         var resultsOut = results.map(function (r) {
           var v = resultView(r)
+          v.avancos_feitos = doneBy[r.id] || 0
+          v.avancos_total = (doneBy[r.id] || 0) + (countBy[r.id] || 0)
+          v.avancos_sem_estrategia = openLoose[r.id] || []
           v.estrategias = strategies
             .filter(function (s) {
               return s.getString('project_id') === r.id
@@ -531,6 +561,7 @@ function pegadaRota(e) {
                 id: s.id,
                 titulo: s.getString('title'),
                 sinal_de_teste: s.getString('test_signal'),
+                avancos: openByStrategy[s.id] || [],
               }
             })
           v.avancos_abertos = countBy[r.id] || 0
@@ -640,8 +671,46 @@ function pegadaRota(e) {
           { u: u },
         )
         var total = done.length || 1
+        // Um retrato de cada resultado ativo, para a revisão olhar um por vez:
+        // quanto já andou, o que andou no período e há quanto tempo está parado.
+        var hoje = new Date()
+        var ativos = actives.map(function (r) {
+          var acts = app.findRecordsByFilter(
+            'actions',
+            "user_id = {:u} && project_id = {:p} && status != 'cancelada'",
+            '',
+            0,
+            0,
+            { u: u, p: r.id },
+          )
+          var feitos = 0
+          var ultimo = ''
+          for (var j = 0; j < acts.length; j++) {
+            if (acts[j].getString('status') !== 'feita') continue
+            feitos++
+            var c = String(acts[j].get('completed_at') || '')
+            if (c > ultimo) ultimo = c
+          }
+          var v = resultView(r)
+          v.avancos_total = acts.length
+          v.avancos_feitos = feitos
+          v.feitos_no_periodo = porResultado[r.id] ? porResultado[r.id].concluidos.length : 0
+          v.dias_parado = ultimo
+            ? Math.max(0, Math.floor((hoje.getTime() - new Date(ultimo.replace(' ', 'T')).getTime()) / 86400000))
+            : null
+          v.estrategias = strategies
+            .filter(function (s) {
+              return s.getString('project_id') === r.id
+            })
+            .map(function (s) {
+              return { id: s.id, titulo: s.getString('title') }
+            })
+          return v
+        })
         return {
           periodo_dias: dias,
+          proposito: purpose,
+          resultados_ativos: ativos,
           concluidos: done.length,
           espelho: Object.keys(porResultado).map(function (k) {
             return porResultado[k]

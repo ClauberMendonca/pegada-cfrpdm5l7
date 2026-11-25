@@ -1,5 +1,6 @@
 // PEGADA — coluna do computador na tela Hoje: o fio do avanço principal
-// (Propósito → Resultado → Estratégia → Avanço) e a semana em barras.
+// (Propósito → Resultado → Estratégia → Avanço). A semana em barras mora na
+// Revisão (SuaSemana).
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { op } from '@/lib/pegada/api'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
@@ -28,17 +29,7 @@ function soma(dia: string, n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function FioESemana({
-  actions,
-  hoje,
-  timezone,
-  className,
-}: {
-  actions: ActionItem[]
-  hoje: string
-  timezone?: string
-  className?: string
-}) {
+export function FioESemana({ className }: { className?: string }) {
   const [fio, setFio] = useState<Fio | null>(null)
   const carregar = useCallback(async () => {
     try {
@@ -53,27 +44,6 @@ export function FioESemana({
   }, [carregar])
   usePegadaMudou(carregar)
 
-  // A semana vai de segunda a domingo: feitos em cada dia e o que está planejado.
-  const semana = useMemo(() => {
-    const dow = (new Date(`${hoje}T12:00:00Z`).getUTCDay() + 6) % 7
-    const dias = Array.from({ length: 7 }, (_, i) => soma(hoje, i - dow))
-    return dias.map((dia, i) => {
-      let feitos = 0
-      let planejados = 0
-      for (const a of actions) {
-        if (a.status === 'feita') {
-          if (a.completed_at && dayInZone(a.completed_at, timezone) === dia) feitos++
-        } else if (a.status !== 'cancelada') {
-          const quando = a.planned_date || a.deadline || ((a.is_today_selected || a.is_next_step) ? hoje : '')
-          if (quando === dia) planejados++
-        }
-      }
-      return { dia, i, feitos, planejados }
-    })
-  }, [actions, hoje, timezone])
-  const total = semana.reduce((n, d) => n + d.feitos + d.planejados, 0)
-  const maior = Math.max(1, ...semana.map((d) => d.feitos + d.planejados))
-
   const p = fio?.principal
   const nos = p
     ? [
@@ -87,7 +57,7 @@ export function FioESemana({
     : []
 
   return (
-    <aside aria-label="O fio e a semana" className={cn('flex-col gap-5', className)}>
+    <aside aria-label="O fio de hoje" className={cn('flex-col gap-5', className)}>
       <div className="flex flex-col gap-3.5 pt-3">
         <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">O fio de hoje</p>
         {p ? (
@@ -118,7 +88,43 @@ export function FioESemana({
         )}
       </div>
 
-      <div className="flex flex-col gap-3.5 rounded-[20px] border border-border bg-card p-[18px]">
+    </aside>
+  )
+}
+
+/** A semana em barras: feitos em cada dia e o que está planejado. Mora na Revisão. */
+export function SuaSemana({
+  actions,
+  hoje,
+  timezone,
+}: {
+  actions: ActionItem[]
+  hoje: string
+  timezone?: string
+}) {
+  // A semana vai de segunda a domingo: feitos em cada dia e o que está planejado.
+  const semana = useMemo(() => {
+    const dow = (new Date(`${hoje}T12:00:00Z`).getUTCDay() + 6) % 7
+    const dias = Array.from({ length: 7 }, (_, i) => soma(hoje, i - dow))
+    return dias.map((dia, i) => {
+      let feitos = 0
+      let planejados = 0
+      for (const a of actions) {
+        if (a.status === 'feita') {
+          if (a.completed_at && dayInZone(a.completed_at, timezone) === dia) feitos++
+        } else if (a.status !== 'cancelada') {
+          const quando = a.planned_date || a.deadline || ((a.is_today_selected || a.is_next_step) ? hoje : '')
+          if (quando === dia) planejados++
+        }
+      }
+      return { dia, i, feitos, planejados }
+    })
+  }, [actions, hoje, timezone])
+  const total = semana.reduce((n, d) => n + d.feitos + d.planejados, 0)
+  const maior = Math.max(1, ...semana.map((d) => d.feitos + d.planejados))
+
+  return (
+      <div className="flex flex-col gap-3.5 rounded-[20px] border border-border bg-card p-[18px]" data-sua-semana>
         <div className="flex items-baseline justify-between">
           <p className="text-base font-semibold text-foreground">Sua semana</p>
           <p className="text-[13px] text-muted-foreground">
@@ -155,7 +161,6 @@ export function FioESemana({
           Laranja é o que já foi feito. O resto está planejado.
         </p>
       </div>
-    </aside>
   )
 }
 

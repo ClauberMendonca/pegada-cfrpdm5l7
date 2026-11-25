@@ -37,7 +37,7 @@ interface Resumo {
 }
 
 const PERIODOS = [
-  { dias: 1, nome: 'Diária', titulo: 'Revisão do dia', frase: 'hoje', duracao: 'até 5 min' },
+  // A revisão diária saiu: o dia se fecha em Hoje, com "Fechar o dia".
   { dias: 7, nome: 'Semanal', titulo: 'Revisão da semana', frase: 'na semana', duracao: 'até 30 min' },
   { dias: 90, nome: 'Trimestral', titulo: 'Revisão do trimestre', frase: 'no trimestre', duracao: 'até 1 hora' },
   { dias: 365, nome: 'Anual', titulo: 'Revisão do ano', frase: 'no ano', duracao: 'até 2 horas' },
@@ -55,7 +55,6 @@ const PASSO: Record<Tipo, { nome: string; titulo: string }> = {
 }
 // Cada revisão tem o próprio roteiro (seção Ritmo do método).
 const ROTEIROS: Record<number, Tipo[]> = {
-  1: ['andou', 'resultados', 'esperas', 'fechamento'],
   7: ['andou', 'resultados', 'esperas', 'fechamento'],
   90: ['resultados', 'andou', 'futuros', 'fechamento'],
   365: ['proposito', 'responsabilidades', 'andou', 'fechamento'],
@@ -109,7 +108,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
   const trimestral = dias === 90
   const respostasDoPeriodo = trimestral ? RESPOSTAS_TRIMESTRE : RESPOSTAS
 
-  const periodo = PERIODOS.find((p) => p.dias === dias) ?? PERIODOS[1]
+  const periodo = PERIODOS.find((p) => p.dias === dias) ?? PERIODOS[0]
 
   const carregar = useCallback(async () => {
     setCarregando(true)

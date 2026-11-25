@@ -37,6 +37,7 @@ import { EntityNumberBadge } from "@/components/EntityNumberBadge";
 import { formatEntityTitle } from "@/lib/entityNumber";
 import { GuidedReview } from "@/components/GuidedReview";
 import { OQueReavaliar } from "@/components/OQueReavaliar";
+import { SuaSemana } from "@/components/FioESemana";
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -164,7 +165,14 @@ export const ReviewPage: React.FC = () => {
       <GuidedReview onChanged={retry} />
 
       {!isLoading && !loadError && (
-        <OQueReavaliar actions={actions} hoje={referenceDate} />
+        <>
+          <SuaSemana
+            actions={actions}
+            hoje={referenceDate}
+            timezone={ownerTimezone(user?.timezone)}
+          />
+          <OQueReavaliar actions={actions} hoje={referenceDate} />
+        </>
       )}
 
       {/* BLOCO 3(a) — carregando */}

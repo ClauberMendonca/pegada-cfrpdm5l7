@@ -444,12 +444,7 @@ export const TodayPage: React.FC = () => {
           onDevolver={(a) => void devolver(a)}
         />
       </div>
-      <FioESemana
-        actions={actions}
-        hoje={todayStr}
-        timezone={timezone}
-        className="hidden lg:sticky lg:top-6 lg:flex"
-      />
+      <FioESemana className="hidden lg:sticky lg:top-6 lg:flex" />
     </div>
   )
 }

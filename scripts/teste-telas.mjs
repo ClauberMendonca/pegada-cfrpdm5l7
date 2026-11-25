@@ -96,6 +96,18 @@ async function ligar(sw) {
   if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
   await page.waitForTimeout(150)
 }
+// Novo avanço: o que não é uma das quatro decisões fica em "Mais detalhes".
+async function maisDetalhes(d) {
+  const b = d.getByRole('button', { name: /Mais detalhes/ }).first()
+  if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click()
+  await page.waitForTimeout(200)
+}
+// Novo avanço: marca "Hoje" sem desmarcar se já vier marcado.
+async function paraHoje(d) {
+  const b = d.getByRole('group', { name: 'Quando' }).getByRole('button', { name: 'Hoje', exact: true })
+  if ((await b.getAttribute('aria-pressed')) !== 'true') await b.click()
+  await page.waitForTimeout(150)
+}
 const botao = (nome, raiz = page) => raiz.getByRole('button', { name: nome }).first()
 const esperaSumir = async () => {
   await page.locator('[role=dialog]').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {})
@@ -190,10 +202,11 @@ await passo('avanço na ficha', async () => {
   await botao('Adicionar Avanço').click()
   const d = dialogo()
   await d.locator('input[id$=action-title]').fill(nomes.estudo)
-  await escolher(d.locator('button', { hasText: /^\s*Ação\s*$/ }).first(), 'Estudo')
+  await d.getByRole('group', { name: 'Tipo de avanço' }).getByRole('button', { name: 'Estudo', exact: true }).click()
+  await paraHoje(d)
+  await maisDetalhes(d)
   await escolher(d.locator('[id$=action-strategy]'), nomes.estrategia)
-  await ligar(d.locator('[id$=action-today-selected]'))
-  await botao('Criar avanço', d).click()
+  await botao('Salvar avanço', d).click()
   await esperaSumir()
   confere('criar Estudo ligado à estratégia, para hoje', (await texto('main')).includes(nomes.estudo))
 })
@@ -211,15 +224,16 @@ await passo('registro de progresso', async () => {
 })
 
 // 6. Hoje: novo avanço, principal, concluir
-await passo('novo avanço em Hoje', async () => {
-  await ir('/')
-  await botao('Novo Avanço').click()
+await passo('novo avanço para hoje', async () => {
+  await ir('/avancos')
+  await botao('Novo avanço').click()
   const d = dialogo()
   await d.locator('input[id$=action-title]').fill(nomes.acao)
-  await escolher(d.locator('[id$=action-context]'), 'Vida')
   await escolher(d.locator('[id$=action-project]'), new RegExp(nomes.resultado))
-  await ligar(d.locator('[id$=action-today-selected]'))
-  await botao('Criar avanço', d).click()
+  const fio = await d.locator('[data-fio]').innerText()
+  confere('Novo avanço mostra o fio enquanto a pessoa preenche', fio.toLowerCase().includes(nomes.resultado.toLowerCase()), fio)
+  await paraHoje(d)
+  await botao('Salvar avanço', d).click()
   await esperaSumir()
   await ir('/')
   const t = await texto('main')
@@ -234,7 +248,7 @@ await passo('capturar pelo botão do topo', async () => {
   await ir('/')
   await botao(/^Capturar/).click()
   await dialogo().locator('textarea').fill(nomes.captura)
-  await botao('Guardar', dialogo()).click()
+  await dialogo().getByRole('button', { name: 'Capturar', exact: true }).click()
   await esperaSumir()
   await ir('/capturas')
   confere('captura do topo aparece em Capturas', (await texto('main')).includes(nomes.captura))
@@ -250,6 +264,30 @@ await passo('capturar na tela de Capturas', async () => {
 })
 
 const cartao = (titulo) => page.locator('div.group.relative').filter({ hasText: titulo }).first()
+// Avanços: lista por estado; a linha abre os comandos completos ao tocar no título.
+const verGrupo = async (nome) => {
+  await ir('/avancos')
+  await page.getByRole('group', { name: 'Estado dos avanços' }).getByRole('button', { name: new RegExp('^' + nome) }).click()
+  await page.waitForTimeout(400)
+}
+const linhaAvanco = (titulo) => page.locator('li[data-avanco]').filter({ hasText: titulo }).first()
+const abrirLinha = async (titulo) => {
+  const b = linhaAvanco(titulo).locator('button[aria-expanded]').first()
+  if ((await b.getAttribute('aria-expanded')) !== 'true') await b.click()
+  await page.waitForTimeout(300)
+}
+// Hoje: o avanço está no cartão principal ou na lista "Também hoje".
+async function concluirEmHoje(titulo) {
+  await ir('/')
+  const naLista = page.getByRole('button', { name: `Concluir: ${titulo}` })
+  if (await naLista.count()) await naLista.first().click()
+  else {
+    const principal = page.locator('section[aria-label="Avanço principal"]')
+    if (!(await principal.innerText()).includes(titulo)) throw new Error('avanço não está em Hoje: ' + titulo)
+    await principal.getByRole('button', { name: 'Concluir', exact: true }).click()
+  }
+  await page.waitForTimeout(1500)
+}
 const item = (nome) => page.getByRole('menuitem', { name: nome }).first()
 
 // 8. Processar capturas: uma vira avanço, a outra é descartada e depois volta
@@ -259,7 +297,7 @@ await passo('processar captura em avanço', async () => {
   await botao('Processar', linha).click()
   await item(/^Ação$/).click()
   await page.waitForTimeout(1500)
-  await ir('/avancos')
+  await verGrupo('Prontos')
   confere('captura processada vira avanço em Avanços', (await texto('main')).includes(nomes.captura))
 })
 
@@ -288,44 +326,45 @@ await passo('atividade e desfazer', async () => {
 
 // 10. Concluir avanços: a Ação direto, o Estudo deixando rastro
 await passo('concluir a Ação em Hoje', async () => {
-  await ir('/')
-  await cartao(nomes.acao).getByRole('button', { name: 'Marcar como concluído' }).click()
-  await page.waitForTimeout(1500)
+  await concluirEmHoje(nomes.acao)
   if (await page.locator('[role=dialog]').count()) {
     await dialogo().locator('textarea').fill(T('Corri no parque'))
     await botao('Concluir', dialogo()).click()
     await esperaSumir()
   }
-  await ir('/avancos')
-  const feito = await cartao(nomes.acao).getByRole('button', { name: 'Reabrir como pronto' }).count()
+  await verGrupo('Feitos')
+  const feito = await page.getByRole('button', { name: `Reabrir: ${nomes.acao}` }).count()
   confere('Ação concluída fica marcada como feita', feito === 1)
 })
 
 await passo('concluir o Estudo com rastro', async () => {
-  await ir('/')
-  await cartao(nomes.estudo).getByRole('button', { name: 'Marcar como concluído' }).click()
+  await concluirEmHoje(nomes.estudo)
   await dialogo().locator('textarea').fill(T('Aprendi a montar a planilha'))
   await botao('Concluir', dialogo()).click()
   await esperaSumir()
-  await ir('/avancos')
-  const feito = await cartao(nomes.estudo).getByRole('button', { name: 'Reabrir como pronto' }).count()
+  await verGrupo('Feitos')
+  const feito = await page.getByRole('button', { name: `Reabrir: ${nomes.estudo}` }).count()
   confere('Estudo só conclui deixando rastro, e fica feito', feito === 1)
 })
 
 // 11. Avanços: editar e cancelar o avanço que veio da captura
 await passo('editar e cancelar avanço', async () => {
-  await ir('/avancos')
-  await cartao(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  await verGrupo('Prontos')
+  await abrirLinha(nomes.captura)
+  await linhaAvanco(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
   await item(/Editar/).click()
   const d = dialogo()
   await d.locator('input[id$=action-title]').fill(nomes.captura + ' (editado)')
   await botao(/Atualizar|Salvar/, d).click()
   await esperaSumir()
   confere('editar o título de um avanço', (await texto('main')).includes(nomes.captura + ' (editado)'))
-  await cartao(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
+  await abrirLinha(nomes.captura)
+  await linhaAvanco(nomes.captura).getByRole('button', { name: 'Mais comandos do avanço' }).click()
   await item('Cancelar avanço').click()
   await page.waitForTimeout(1500)
-  confere('cancelar um avanço', /Cancelad/i.test(await cartao(nomes.captura).innerText()))
+  await verGrupo('Feitos')
+  await abrirLinha(nomes.captura)
+  confere('cancelar um avanço', /Cancelad/i.test(await linhaAvanco(nomes.captura).innerText()))
 })
 
 // 12. Resultado: pausar e reativar
@@ -356,36 +395,59 @@ await passo('arquivar e reativar responsabilidade', async () => {
 await passo('mapa e revisão', async () => {
   await ir('/mapa')
   const m = await texto('main')
-  confere('Mapa liga responsabilidade e resultado', m.includes(nomes.resp) && m.includes(nomes.resultado), m.slice(0, 200))
+  confere('Mapa mostra o resultado e quantos avanços já andaram', m.includes(nomes.resultado) && /\d+ de \d+ avanços/.test(m), m.slice(0, 200))
+  const no = page.locator('[data-resultado]').filter({ hasText: nomes.resultado }).first()
+  const abre = no.locator('button[aria-expanded]').last()
+  if ((await abre.getAttribute('aria-expanded')) !== 'true') await abre.click()
+  await page.waitForTimeout(400)
+  const aberto = await no.innerText()
+  confere('Mapa abre a estratégia dentro do resultado', aberto.includes(nomes.estrategia), aberto.slice(0, 200))
+  await page.getByRole('group', { name: 'Visão do mapa' }).getByRole('button', { name: 'Sustentar' }).click()
+  await page.waitForTimeout(400)
+  confere('Mapa em Sustentar mostra as responsabilidades', (await texto('main')).includes(nomes.resp))
   await ir('/revisao')
   confere('Revisão abre', /Revis/i.test(await texto('main')))
   await foto('revisao')
 })
 
-// 14b. Revisão guiada: percorre os passos e toma uma decisão com Desfazer
+// 14b. Revisão guiada: tela focada, um resultado por vez, decisão com Desfazer
 await passo('revisão guiada', async () => {
   await ir('/revisao')
-  const guia = page.locator('section[aria-label="Revisão guiada"]')
-  await guia.locator('[data-passo="Espelho"]').waitFor()
+  await botao('Começar a revisão').click()
+  const guia = page.locator('[data-revisao]')
+  await guia.locator('[data-passo="O que andou"]').waitFor()
+  const caixa = await guia.boundingBox()
+  confere('Revisão guiada: tela focada, cobre o menu do aplicativo', caixa && caixa.width >= viewport.width - 1 && caixa.height >= viewport.height - 1, JSON.stringify(caixa))
   const espelho = await guia.innerText()
-  confere('Revisão guiada: o espelho mostra o que foi concluído', espelho.includes(nomes.acao) && espelho.includes(nomes.resultado), espelho.slice(0, 200))
-  await botao('Próximo passo', guia).click()
-  confere('Revisão guiada: o balanço aparece', /Construir/.test(await guia.innerText()))
-  await botao('Próximo passo', guia).click()
-  await guia.locator('[data-passo="Resultados parados"]').waitFor()
-  await botao('Próximo passo', guia).click()
-  const aposta = guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).first()
-  confere('Revisão guiada: a aposta aparece para teste', (await aposta.count()) === 1)
-  await botao(/Trocar de aposta/, aposta).click()
+  confere('Revisão guiada: mostra o que foi concluído', espelho.includes(nomes.acao) && espelho.includes(nomes.resultado), espelho.slice(0, 200))
+  await guia.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await guia.locator('[data-passo="Resultados"]').waitFor()
+  let achou = false
+  for (let n = 0; n < 10 && !achou; n++) {
+    achou = (await guia.innerText()).includes(nomes.resultado)
+    if (!achou) await guia.getByRole('button', { name: 'Próximo resultado', exact: true }).click()
+    await page.waitForTimeout(300)
+  }
+  const cartaoResultado = await guia.innerText()
+  confere('Revisão guiada: um resultado por vez, com a aposta atual', achou && cartaoResultado.includes(nomes.estrategia), cartaoResultado.slice(0, 200))
+  await guia.getByRole('button', { name: 'Este resultado não vale mais' }).click()
+  await guia.getByRole('button', { name: /^(Próximo resultado|Continuar)$/ }).click()
   await page.waitForTimeout(1500)
-  confere('Revisão guiada: trocar de aposta arquiva a estratégia', (await guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).count()) === 0)
   await page.getByRole('button', { name: 'Desfazer' }).first().click()
   await page.waitForTimeout(1500)
-  confere('Revisão guiada: Desfazer traz a aposta de volta', (await guia.locator('div.rounded-xl').filter({ hasText: nomes.estrategia }).count()) === 1)
-  await botao('Próximo passo', guia).click()
-  await botao('Próximo passo', guia).click()
+  for (let n = 0; n < 10; n++) {
+    const b = guia.getByRole('button', { name: /^(Próximo resultado|Continuar)$/ })
+    if (await guia.locator('[data-passo="Fechamento"]').count()) break
+    await b.click()
+    await page.waitForTimeout(300)
+  }
   confere('Revisão guiada: fecha na caixa de entrada', /captura/i.test(await guia.innerText()))
   await foto('revisao-guiada')
+  await guia.getByRole('button', { name: 'Concluir revisão', exact: true }).click()
+  await page.waitForTimeout(600)
+  confere('Revisão guiada: concluir volta para o aplicativo', (await page.locator('[data-revisao]').count()) === 0)
+  await abrirResultado()
+  confere('Revisão guiada: Desfazer mantém o resultado ativo', (await botao('Pausar').count()) === 1)
 })
 
 // 14c. IA embutida nas telas (só quando o servidor tem a chave): sugere, a pessoa decide
@@ -407,9 +469,22 @@ if (process.env.PEGADA_TESTE_IA) {
       confere('usar a sugestão processa a captura', pendente === 0)
     }
   })
-  await passo('IA no Novo Avanço', async () => {
+  await passo('IA na captura rápida', async () => {
     await ir('/')
-    await botao('Novo Avanço').click()
+    await botao(/^Capturar/).click()
+    const d = dialogo()
+    await d.locator('textarea').fill(T('ligar para a academia e perguntar o horário'))
+    await d.locator('[data-sugestao]').waitFor({ timeout: 45000 })
+    confere('captura rápida: o Pegada sugere o destino', /Sugestão do Pegada/i.test(await d.innerText()))
+    await botao('Decidir depois', d).click()
+    await page.waitForTimeout(400)
+    confere('captura rápida: "Decidir depois" dispensa a sugestão', (await d.locator('[data-sugestao]').count()) === 0)
+    await page.keyboard.press('Escape')
+    await esperaSumir()
+  })
+  await passo('IA no Novo Avanço', async () => {
+    await ir('/avancos')
+    await botao('Novo avanço').click()
     const d = dialogo()
     await d.locator('input[id$=action-title]').fill('planilha de treino, olhar')
     await botao('Sugerir com IA', d).click()

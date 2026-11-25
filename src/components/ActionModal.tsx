@@ -676,6 +676,10 @@ export const ActionModal: React.FC<ActionModalProps> = ({
   // retorno tardio de consulta; o original da abertura segue intocado aqui.
   const handleProjectChange = (nextProjectId: string) => {
     setProjectId(nextProjectId)
+    // O contexto fica em "Mais detalhes": ao escolher um resultado, o avanço
+    // acompanha o contexto dele, sem pedir um ajuste escondido.
+    const escolhido = nextProjectId ? projects.find((p) => p.id === nextProjectId) : null
+    if (escolhido && escolhido.context !== context) setContext(escolhido.context)
     if (!nextProjectId) {
       if (strategyId) {
         setStrategyNotice(
@@ -809,7 +813,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+        <form onSubmit={handleSubmit} className="min-w-0 space-y-4 pt-2">
           <div className="space-y-2">
             <Label htmlFor={ids.title} className="text-sm font-medium text-foreground">
               O que você vai fazer?

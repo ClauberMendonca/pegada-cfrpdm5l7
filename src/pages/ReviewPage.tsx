@@ -38,6 +38,7 @@ import { formatEntityTitle } from "@/lib/entityNumber";
 import { GuidedReview } from "@/components/GuidedReview";
 import { OQueReavaliar } from "@/components/OQueReavaliar";
 import { SuaSemana } from "@/components/FioESemana";
+import { TempoDaSemana } from "@/components/TempoDaSemana";
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -170,6 +171,11 @@ export const ReviewPage: React.FC = () => {
             actions={actions}
             hoje={referenceDate}
             timezone={ownerTimezone(user?.timezone)}
+          />
+          <TempoDaSemana
+            actions={actions}
+            projects={projects}
+            hoje={referenceDate}
           />
           <OQueReavaliar actions={actions} hoje={referenceDate} />
         </>

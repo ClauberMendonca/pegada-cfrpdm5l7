@@ -194,7 +194,16 @@ async function main() {
   confere('lote atômico de operações', lote.status === 200, lote)
 
   // --- Nível 1: IA embutida ---
-  const ia = await http('POST', '/backend/v1/pegada/ia/sugerir', { token: t, body: { tipo: 'resultado', texto: 'quero correr melhor' } })
+  // Privacidade da IA: sem ler o aviso nada é enviado; desligada, também não.
+  const pedido = { token: t, body: { tipo: 'resultado', texto: 'quero correr melhor' } }
+  const semAviso = await http('POST', '/backend/v1/pegada/ia/sugerir', pedido)
+  if (IA_ESPERADA === 'simulada') confere('IA não envia nada antes do aviso de privacidade', semAviso.status === 428, semAviso)
+  await http('POST', '/backend/v1/pegada/ia/preferencia', { token: t, body: { aviso_visto: true, desligada: true } })
+  const desligada = await http('POST', '/backend/v1/pegada/ia/sugerir', pedido)
+  if (IA_ESPERADA === 'simulada') confere('IA desligada em Configurações recusa o pedido', desligada.status === 403, desligada)
+  const pref = await http('POST', '/backend/v1/pegada/ia/preferencia', { token: t, body: { desligada: false } })
+  confere('preferência da IA volta a ligada', pref.status === 200 && pref.json.desligada === false && pref.json.aviso_visto === true, pref)
+  const ia = await http('POST', '/backend/v1/pegada/ia/sugerir', pedido)
   if (IA_ESPERADA === 'simulada') {
     confere('IA embutida devolve sugestão (servidor simulado)', ia.status === 200 && ia.json?.sugestao?.titulo, ia)
   } else {

@@ -172,8 +172,55 @@ async function main() {
       (mapa.json?.resultado?.responsabilidades || []).every((r) => Array.isArray(r.avancos)),
     mapa,
   )
+  // --- Vontades: no mesmo nível da responsabilidade, logo abaixo do Propósito ---
+  const vont = await op('criar_vontade', { titulo: 'Voltar a tocar violão', contexto: 'vida' })
+  const vontId = vont.json?.resultado?.vontade_id
+  confere('criar vontade', vont.status === 200 && vontId, vont)
+  const vontSem = await op('criar_vontade', { titulo: 'Sem contexto' })
+  confere('vontade exige contexto', vontSem.status >= 400, vontSem)
+  const rv = await op('criar_resultado', { titulo: 'Tocar duas músicas inteiras até julho', prazo: '2027-07-01', vontade_id: vontId })
+  const rvId = rv.json?.resultado?.resultado_id
+  confere('resultado nasce de uma vontade', rv.status === 200 && rvId, rv)
+  const dupla = await op('criar_resultado', { titulo: 'Origem dupla', prazo: '2027-07-01', vontade_id: vontId, responsabilidade_id: respId })
+  confere('resultado não nasce de vontade e responsabilidade ao mesmo tempo', dupla.status >= 400, dupla)
+  const livre = await op('criar_resultado', { titulo: 'Resultado livre até agosto', prazo: '2027-08-01' })
+  const livreId = livre.json?.resultado?.resultado_id
+  confere('resultado livre continua permitido', livre.status === 200 && livreId, livre)
+  const avV = await op('criar_avanco', { titulo: 'Afinar o violão', tipo: 'acao', resultado_id: rvId, para_hoje: true })
+  confere('avanço de resultado de vontade tem o fio com a vontade', avV.json?.resultado?.fio?.apoio === 'vontade' && /realizando a vontade/.test(avV.json?.resultado?.fio?.frase || ''), avV)
+  const mapa2 = await op('ver_mapa')
+  const vontades = mapa2.json?.resultado?.vontades || []
+  confere('mapa traz as vontades', vontades.some((v) => v.titulo === 'Voltar a tocar violão'), mapa2)
+  confere(
+    'mapa traz vontade_id em cada resultado',
+    (mapa2.json?.resultado?.resultados || []).find((r) => r.id === rvId)?.vontade_id === vontId,
+    mapa2,
+  )
+  const religa = await op('editar_resultado', { resultado_id: rvId, responsabilidade_id: respId })
+  confere('ligar o resultado a uma responsabilidade desliga a vontade', religa.status === 200, religa)
+  const mapa3 = await op('ver_mapa')
+  confere('resultado fica com uma origem só', (mapa3.json?.resultado?.resultados || []).find((r) => r.id === rvId)?.vontade_id === null, mapa3)
+  const volta = await op('editar_resultado', { resultado_id: rvId, vontade_id: vontId })
+  confere('religar a uma vontade', volta.status === 200, volta)
+  const edV = await op('editar_vontade', { vontade_id: vontId, titulo: 'Voltar a tocar violão, sem pressa' })
+  confere('editar vontade', edV.status === 200, edV)
+  const capV = await op('capturar', { texto: 'Quero aprender a velejar' })
+  const procV = await op('processar_captura', { captura_id: acharId(capV.json?.resultado), destino: 'vontade', dados: { contexto: 'vida' } })
+  confere('captura vira vontade', procV.status === 200 && JSON.stringify(procV.json).includes('vontade_id'), procV)
+  const arqV = await op('arquivar_vontade', { vontade_id: vontId })
+  confere('arquivar vontade', arqV.status === 200, arqV)
+  const mapa4 = await op('ver_mapa')
+  confere('vontade arquivada sai do mapa', !(mapa4.json?.resultado?.vontades || []).some((v) => v.id === vontId), mapa4)
+  const volV = await op('arquivar_vontade', { vontade_id: vontId, reativar: true })
+  confere('reativar vontade', volV.status === 200, volV)
   const semana = await op('ver_resumo_semana', { dias: 7 })
   confere('ver resumo da semana', semana.status === 200, semana)
+  const bal = semana.json?.resultado?.balanco || {}
+  confere(
+    'o balanço divide o tempo entre vontades, responsabilidades e livres',
+    ['vontades', 'responsabilidades', 'livres'].every((k) => typeof bal[k] === 'number'),
+    bal,
+  )
   const listAv = await op('listar_avancos', { resultado_id: resId })
   confere('listar avanços do resultado', listAv.status === 200, listAv)
 

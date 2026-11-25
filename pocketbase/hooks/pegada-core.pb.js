@@ -202,11 +202,13 @@ function pegadaRota(e) {
     var strategy = get('strategies', action.getString('strategy_id'))
     var directResp = get('responsibilities', action.getString('responsibility_id'))
     var resp = result ? get('responsibilities', result.getString('responsibility_id')) : directResp
+    var wish = result ? get('wishes', result.getString('wish_id')) : null
     var parts = ['Faço "' + title + '"']
     if (strategy) parts.push('pela estratégia "' + strategy.getString('title') + '"')
     if (result) {
       parts.push('para alcançar "' + result.getString('title') + '"')
-      if (resp) parts.push('sustentando "' + resp.getString('title') + '"')
+      if (wish) parts.push('realizando a vontade "' + wish.getString('title') + '"')
+      else if (resp) parts.push('sustentando "' + resp.getString('title') + '"')
     } else if (resp) {
       parts.push('para sustentar "' + resp.getString('title') + '"')
     }
@@ -221,8 +223,10 @@ function pegadaRota(e) {
       resultado: result ? { id: result.id, titulo: result.getString('title') } : null,
       estrategia: strategy ? { id: strategy.id, titulo: strategy.getString('title') } : null,
       responsabilidade: resp ? { id: resp.id, titulo: resp.getString('title') } : null,
-      // construir = nasce do Propósito; sustentar = nasce de uma Responsabilidade
-      apoio: semFio ? 'livre' : resp ? 'sustentar' : 'construir',
+      vontade: wish ? { id: wish.id, titulo: wish.getString('title') } : null,
+      // vontade = nasce de uma Vontade; responsabilidade = nasce de uma
+      // Responsabilidade (ou é rotina dela); livre = não nasce de nenhuma
+      apoio: wish ? 'vontade' : resp ? 'responsabilidade' : 'livre',
     }
   }
 
@@ -257,6 +261,7 @@ function pegadaRota(e) {
       status: r.getString('status'),
       contexto: r.getString('context'),
       responsabilidade_id: r.getString('responsibility_id') || null,
+      vontade_id: r.getString('wish_id') || null,
     }
   }
 
@@ -450,13 +455,21 @@ function pegadaRota(e) {
       write: false,
       title: 'Ver o mapa do sentido',
       description:
-        'Devolve a estrutura inteira: Propósito, Responsabilidades ativas (com os avanços e rotinas que as sustentam), Resultados (ativos e futuros) com suas Estratégias e avanços abertos, e os avanços livres. Use para entender onde encaixar algo novo.',
+        'Devolve a estrutura inteira: Propósito, Vontades ativas, Responsabilidades ativas (com os avanços e rotinas que as sustentam), Resultados (ativos e futuros) com suas Estratégias e avanços abertos, e os avanços livres. Use para entender onde encaixar algo novo.',
       schema: { type: 'object', properties: {} },
       run: function (ctx) {
         var app = ctx.app
         var u = ctx.userId
         var resps = app.findRecordsByFilter(
           'responsibilities',
+          "user_id = {:u} && status = 'ativa'",
+          'title',
+          0,
+          0,
+          { u: u },
+        )
+        var wishes = app.findRecordsByFilter(
+          'wishes',
           "user_id = {:u} && status = 'ativa'",
           'title',
           0,
@@ -566,6 +579,15 @@ function pegadaRota(e) {
               avancos: openByResp[r.id] || [],
             }
           }),
+          vontades: wishes.map(function (r) {
+            return {
+              id: r.id,
+              titulo: r.getString('title'),
+              contexto: r.getString('context'),
+              descricao: r.getString('description'),
+              avancos: [],
+            }
+          }),
           resultados: resultsOut,
           avancos_livres: openFree,
           avancos_sem_fio: semFio,
@@ -613,7 +635,7 @@ function pegadaRota(e) {
           { u: u, s: since },
         )
         var cache = {}
-        var balanco = { construir: 0, sustentar: 0, livre: 0 }
+        var balanco = { vontade: 0, responsabilidade: 0, livre: 0 }
         var porResultado = {}
         var porEstrategia = {}
         for (var i = 0; i < done.length; i++) {
@@ -707,8 +729,11 @@ function pegadaRota(e) {
           }),
           resultados_parados: parados,
           balanco: {
-            construir: balanco.construir,
-            sustentar: balanco.sustentar,
+            vontades: balanco.vontade,
+            responsabilidades: balanco.responsabilidade,
+            // nomes antigos, mantidos para quem ainda os lê: construir = vontades
+            construir: balanco.vontade,
+            sustentar: balanco.responsabilidade,
             livres: balanco.livre,
             percentual_livres: Math.round((balanco.livre * 100) / total),
           },
@@ -953,7 +978,7 @@ function pegadaRota(e) {
       write: true,
       title: 'Processar captura',
       description:
-        "Transforma uma captura pendente em: 'avanco' (com ou sem fio), 'resultado', 'responsabilidade' ou 'estrategia'. Em 'dados' vão os mesmos campos da operação de criação correspondente (criar_avanco, criar_resultado, criar_responsabilidade, criar_estrategia). Se dados.titulo faltar, usa o texto da captura. Para agentes, os destinos resultado, responsabilidade e estrategia viram proposta para o dono confirmar.",
+        "Transforma uma captura pendente em: 'avanco' (com ou sem fio), 'resultado' (ligado a uma vontade, a uma responsabilidade ou livre), 'vontade', 'responsabilidade' ou 'estrategia'. Em 'dados' vão os mesmos campos da operação de criação correspondente (criar_avanco, criar_resultado, criar_responsabilidade, criar_estrategia). Se dados.titulo faltar, usa o texto da captura. Para agentes, os destinos resultado, responsabilidade e estrategia viram proposta para o dono confirmar.",
       isChoice: function (input) {
         return str(input.destino) !== 'avanco'
       },
@@ -964,7 +989,7 @@ function pegadaRota(e) {
           captura_id: S_ID,
           destino: {
             type: 'string',
-            enum: ['avanco', 'resultado', 'responsabilidade', 'estrategia'],
+            enum: ['avanco', 'resultado', 'vontade', 'responsabilidade', 'estrategia'],
           },
           dados: { type: 'object', description: 'campos da criação do destino' },
         },
@@ -987,6 +1012,7 @@ function pegadaRota(e) {
             'converted_project_id',
             'resultado_id',
           ],
+          vontade: ['criar_vontade', 'convertida_vontade', 'converted_wish_id', 'vontade_id'],
           responsabilidade: [
             'criar_responsabilidade',
             'convertida_responsabilidade',
@@ -1003,7 +1029,7 @@ function pegadaRota(e) {
         if (!map)
           throw rule(
             'DESTINO_INVALIDO',
-            'destino deve ser avanco, resultado, responsabilidade ou estrategia.',
+            'destino deve ser avanco, resultado, vontade, responsabilidade ou estrategia.',
           )
         var out = OPS[map[0]].run(ctx, dados)
         var patch = { status: map[1] }
@@ -1615,6 +1641,96 @@ function pegadaRota(e) {
       },
     },
 
+    // ======================= VONTADES =======================
+    criar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Criar vontade',
+      description:
+        'Cria uma vontade: algo que a pessoa quer construir e que ninguém cobra se ela largar ("se eu largar, alguém me cobra?" não = Vontade; sim = Responsabilidade). Não tem linha de chegada: os resultados nascem dentro dela. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['titulo', 'contexto'],
+        properties: {
+          titulo: { type: 'string', maxLength: 200 },
+          contexto: S_CTX,
+          descricao: { type: 'string', maxLength: 3000 },
+        },
+      },
+      run: function (ctx, input) {
+        var c = str(input.contexto)
+        if (c !== 'vida' && c !== 'trabalho')
+          throw rule('CONTEXTO_OBRIGATORIO', "contexto deve ser 'vida' ou 'trabalho'.")
+        if (!str(input.titulo)) throw rule('TITULO_OBRIGATORIO', 'A vontade precisa de um título.')
+        var r = ctx.create('wishes', {
+          title: str(input.titulo),
+          context: c,
+          status: 'ativa',
+          description: str(input.descricao) || undefined,
+        })
+        return { resumo: 'Criou a vontade "' + r.getString('title') + '"', vontade_id: r.id }
+      },
+    },
+
+    editar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Editar vontade',
+      description: 'Muda título, descrição ou contexto de uma vontade. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['vontade_id'],
+        properties: {
+          vontade_id: S_ID,
+          titulo: { type: 'string', maxLength: 200 },
+          descricao: { type: 'string', maxLength: 3000 },
+          contexto: S_CTX,
+        },
+      },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'wishes', str(input.vontade_id), ctx.userId, 'Vontade')
+        var patch = {}
+        if (has(input, 'titulo')) {
+          if (!str(input.titulo)) throw rule('TITULO_OBRIGATORIO', 'A vontade precisa de um título.')
+          patch.title = str(input.titulo)
+        }
+        if (has(input, 'descricao')) patch.description = str(input.descricao)
+        if (has(input, 'contexto')) {
+          var cx = str(input.contexto)
+          if (cx !== 'vida' && cx !== 'trabalho')
+            throw rule('CONTEXTO_OBRIGATORIO', "contexto deve ser 'vida' ou 'trabalho'.")
+          patch.context = cx
+        }
+        ctx.update(r, patch)
+        return { resumo: 'Editou a vontade "' + r.getString('title') + '"', vontade_id: r.id }
+      },
+    },
+
+    arquivar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Arquivar vontade',
+      description:
+        'Arquiva uma vontade que perdeu a força (reativar=true para trazer de volta). Os resultados dela continuam ligados. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['vontade_id'],
+        properties: { vontade_id: S_ID, reativar: { type: 'boolean' } },
+      },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'wishes', str(input.vontade_id), ctx.userId, 'Vontade')
+        var back = input.reativar === true
+        ctx.update(r, { status: back ? 'ativa' : 'arquivada' })
+        return {
+          resumo: (back ? 'Reativou' : 'Arquivou') + ' a vontade "' + r.getString('title') + '"',
+          vontade_id: r.id,
+        }
+      },
+    },
+
     criar_resultado: {
       scope: 'propor',
       write: true,
@@ -1630,6 +1746,7 @@ function pegadaRota(e) {
           prazo: S_DATE,
           como_sei: { type: 'string', maxLength: 2000, description: 'como saberei que alcancei' },
           responsabilidade_id: S_ID,
+          vontade_id: { type: 'string', description: 'a Vontade de onde o resultado nasce (ou responsabilidade_id; nunca as duas)' },
           contexto: S_CTX,
           situacao: {
             type: 'string',
@@ -1651,6 +1768,12 @@ function pegadaRota(e) {
         } else if (!title) checkResultShape(title, deadline)
         if (deadline && !isDate(deadline)) throw rule('DATA_INVALIDA', 'Prazo deve ser AAAA-MM-DD.')
         var respId = str(input.responsabilidade_id)
+        var wishId = str(input.vontade_id)
+        if (respId && wishId)
+          throw rule(
+            'ORIGEM_UNICA',
+            'Um resultado nasce de uma Vontade ou de uma Responsabilidade, não das duas.',
+          )
         var context = str(input.contexto)
         if (respId)
           context = findOwned(
@@ -1660,6 +1783,8 @@ function pegadaRota(e) {
             ctx.userId,
             'Responsabilidade',
           ).getString('context')
+        if (wishId)
+          context = findOwned(ctx.app, 'wishes', wishId, ctx.userId, 'Vontade').getString('context')
         if (context !== 'vida' && context !== 'trabalho') context = 'trabalho'
         var data = { title: title }
         var r = ctx.create(
@@ -1668,6 +1793,7 @@ function pegadaRota(e) {
             deadline: deadline || undefined,
             completion_condition: str(input.como_sei) || undefined,
             responsibility_id: respId || undefined,
+            wish_id: wishId || undefined,
             context: context,
             status: status,
           }),
@@ -1696,14 +1822,15 @@ function pegadaRota(e) {
           prazo: S_DATE,
           como_sei: { type: 'string' },
           contexto: S_CTX,
-          responsabilidade_id: { type: 'string', description: "id ou '' para nascer do Propósito" },
+          responsabilidade_id: { type: 'string', description: "id ou '' para desligar" },
+          vontade_id: { type: 'string', description: "id ou '' para desligar" },
         },
       },
       run: function (ctx, input) {
         var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
         var patch = {}
         if (has(input, 'titulo')) patch.title = str(input.titulo)
-        if (has(input, 'contexto') && !has(input, 'responsabilidade_id')) {
+        if (has(input, 'contexto') && !has(input, 'responsabilidade_id') && !has(input, 'vontade_id')) {
           var cx = str(input.contexto)
           if (cx === 'vida' || cx === 'trabalho') patch.context = cx
         }
@@ -1721,6 +1848,22 @@ function pegadaRota(e) {
               'Responsabilidade',
             ).getString('context')
         }
+        if (has(input, 'vontade_id')) {
+          var wid = str(input.vontade_id)
+          patch.wish_id = wid
+          if (wid) {
+            patch.context = findOwned(ctx.app, 'wishes', wid, ctx.userId, 'Vontade').getString('context')
+            // Nasce de uma só origem: ligar a uma Vontade desliga a Responsabilidade.
+            if (!has(input, 'responsabilidade_id')) patch.responsibility_id = ''
+          }
+        }
+        if (has(patch, 'responsibility_id') && patch.responsibility_id && !has(input, 'vontade_id'))
+          patch.wish_id = ''
+        if (patch.responsibility_id && patch.wish_id)
+          throw rule(
+            'ORIGEM_UNICA',
+            'Um resultado nasce de uma Vontade ou de uma Responsabilidade, não das duas.',
+          )
         var finalTitle = has(patch, 'title') ? patch.title : r.getString('title')
         var finalDeadline = has(patch, 'deadline') ? patch.deadline : r.getString('deadline')
         var aviso = ''
@@ -2571,10 +2714,12 @@ function pegadaRota(e) {
       proposito:
         'Proponha uma frase de propósito no formato "Eu existo para [verbo] [quem ou o quê], para que [mudança]." Responda JSON {"texto": "...", "por_que": "uma frase"}.',
       captura:
-        'Classifique a captura: destino entre avanco, resultado, responsabilidade, estrategia; se avanco, o tipo. Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
+        'Classifique a captura: destino entre avanco, resultado, vontade, responsabilidade, estrategia; se avanco, o tipo. Teste entre vontade e responsabilidade: "se eu largar, alguém me cobra?" (sim = responsabilidade, não = vontade). Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
       // Desdobrar: descer um degrau da escada, sempre como sugestões selecionáveis.
       desdobrar_papel:
         'A pessoa descreve um PAPEL que vive (pai, sócia, líder). Traduza em 3 a 5 RESPONSABILIDADES: compromissos contínuos, com padrão a manter e sem linha de chegada, escritos como "Cuidar de…" ou "Zelar por…". Para cada uma, o contexto: vida ou trabalho. Responda JSON {"sugestoes": [{"titulo": "...", "contexto": "vida ou trabalho", "por_que": "uma frase"}]}.',
+      desdobrar_vontade:
+        'A pessoa informa uma VONTADE: algo que quer construir, sem linha de chegada (ex.: "voltar a tocar violão"). Proponha 2 a 4 RESULTADOS que podem nascer dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
       desdobrar_responsabilidade:
         'A pessoa informa uma RESPONSABILIDADE. Proponha 2 a 4 RESULTADOS que nascem dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
       desdobrar_resultado:
@@ -2583,7 +2728,7 @@ function pegadaRota(e) {
         'A pessoa informa uma ESTRATÉGIA e o resultado a que ela serve. Proponha 3 a 5 AVANÇOS concretos: título curto começando por verbo e o tipo entre acao, compromisso, estudo, reflexao, ideia, espera. Responda JSON {"sugestoes": [{"titulo": "...", "tipo": "...", "por_que": "uma frase"}]}.',
       // Correção gentil: confere se o texto é mesmo um resultado.
       conferir_resultado:
-        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, responsabilidade (padrão a manter, sem linha de chegada), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
+        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, vontade (algo que a pessoa quer construir, sem linha de chegada e sem ninguém cobrando), responsabilidade (padrão a manter, alguém cobra se ela largar), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|vontade|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
     }[tipo]
     if (!guide) throw new BadRequestError('tipo de sugestão desconhecido.')
     var baseUrl = ($os.getenv('PEGADA_IA_URL') || 'https://api.anthropic.com').replace(/\/$/, '')

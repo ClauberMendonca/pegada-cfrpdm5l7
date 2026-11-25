@@ -85,6 +85,17 @@ export function ProcessCaptureMenu({ capture, onDone }: Props) {
           Resultado (rascunho)
         </DropdownMenuItem>
         <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Vontade</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onSelect={() => processar('vontade', { contexto: 'vida' })}>
+              de Vida
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => processar('vontade', { contexto: 'trabalho' })}>
+              de Trabalho
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
           <DropdownMenuSubTrigger>Responsabilidade</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem onSelect={() => processar('responsabilidade', { contexto: 'vida' })}>

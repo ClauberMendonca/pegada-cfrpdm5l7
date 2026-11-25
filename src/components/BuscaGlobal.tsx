@@ -31,21 +31,24 @@ interface Item {
   to: string
 }
 interface Grupos {
+  vontades: Item[]
   responsabilidades: Item[]
   resultados: Item[]
   estrategias: Item[]
   avancos: Item[]
   capturas: Item[]
 }
-const VAZIO: Grupos = { responsabilidades: [], resultados: [], estrategias: [], avancos: [], capturas: [] }
+const VAZIO: Grupos = { vontades: [], responsabilidades: [], resultados: [], estrategias: [], avancos: [], capturas: [] }
 
 interface MapaBusca {
   proposito: string
+  vontades?: { id: string; titulo: string; contexto: string }[]
   responsabilidades: { id: string; titulo: string; contexto: string }[]
   resultados: {
     id: string
     titulo: string
     responsabilidade_id: string | null
+    vontade_id?: string | null
     estrategias: { id: string; titulo: string }[]
   }[]
 }
@@ -59,8 +62,15 @@ async function carregarTudo(): Promise<Grupos> {
       .catch(() => []),
   ])
   const respPorId = new Map((mapa?.responsabilidades ?? []).map((r) => [r.id, r.titulo]))
+  const vontadePorId = new Map((mapa?.vontades ?? []).map((v) => [v.id, v.titulo]))
   const resultadoPorId = new Map((mapa?.resultados ?? []).map((r) => [r.id, r.titulo]))
   return {
+    vontades: (mapa?.vontades ?? []).map((v) => ({
+      id: v.id,
+      titulo: v.titulo,
+      fio: v.contexto === 'vida' ? 'Vida' : 'Trabalho',
+      to: `/mapa/vontade/${encodeURIComponent(v.id)}`,
+    })),
     responsabilidades: (mapa?.responsabilidades ?? []).map((r) => ({
       id: r.id,
       titulo: r.titulo,
@@ -70,7 +80,10 @@ async function carregarTudo(): Promise<Grupos> {
     resultados: (mapa?.resultados ?? []).map((r) => ({
       id: r.id,
       titulo: r.titulo,
-      fio: (r.responsabilidade_id && respPorId.get(r.responsabilidade_id)) || 'Do seu propósito',
+      fio:
+        (r.vontade_id && vontadePorId.get(r.vontade_id)) ||
+        (r.responsabilidade_id && respPorId.get(r.responsabilidade_id)) ||
+        'Resultado livre',
       to: `/mapa/resultado/${encodeURIComponent(r.id)}`,
     })),
     estrategias: (mapa?.resultados ?? []).flatMap((r) =>
@@ -101,6 +114,7 @@ const NOMES: [keyof Grupos, string][] = [
   ['avancos', 'Avanços'],
   ['resultados', 'Resultados'],
   ['estrategias', 'Estratégias'],
+  ['vontades', 'Vontades'],
   ['responsabilidades', 'Responsabilidades'],
   ['capturas', 'Caixa'],
 ]
@@ -158,7 +172,7 @@ export function BuscaGlobal() {
     <CommandDialog open={aberta} onOpenChange={setAberta}>
       <DialogTitle className="sr-only">Buscar</DialogTitle>
       <DialogDescription className="sr-only">
-        Procure por avanços, resultados, estratégias, responsabilidades e capturas.
+        Procure por avanços, resultados, estratégias, vontades, responsabilidades e capturas.
       </DialogDescription>
       <CommandInput placeholder="Buscar em tudo" aria-label="Buscar em tudo" className="text-base" />
       <CommandList className="max-h-[60vh]">

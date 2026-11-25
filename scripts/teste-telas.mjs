@@ -34,6 +34,8 @@ const nomes = {
   proposito: T('Eu existo para cuidar de quem amo, para que todos cresçam com calma.'),
   resp: T('Saúde da família'),
   resp2: T('Casa em ordem'),
+  vontade: T('Voltar a tocar violão'),
+  resultadoDaVontade: T('Tocar uma música inteira de cor'),
   resultado: T('Corrida de 10 km concluída'),
   estrategia: T('Treinar 3 vezes por semana'),
   acao: T('Correr 3 km no parque'),
@@ -156,14 +158,40 @@ const arvore = () => page.locator('[data-mapa]')
 const noDoMapa = (tipo, titulo) => arvore().locator(`[data-${tipo}]`).filter({ hasText: titulo }).last()
 const ficha = () => page.locator('[data-ficha]')
 
-// 3. Responsabilidades: nascem no ramo Sustentar do Mapa
+// 3. Responsabilidades: nascem no ramo Responsabilidades do Mapa
 await passo('responsabilidades', async () => {
   await ir('/mapa')
-  const ramo = arvore().locator('[data-ramo="sustentar"]')
-  for (const nome of [nomes.resp, nomes.resp2]) await adicionarEm(ramo, 'Sustentar', { texto: nome, contexto: 'vida' })
+  const ramo = arvore().locator('[data-ramo="responsabilidades"]')
+  for (const nome of [nomes.resp, nomes.resp2]) await adicionarEm(ramo, 'Responsabilidades', { texto: nome, contexto: 'vida' })
   const t = await texto('main')
   confere('criar duas responsabilidades sem sair do Mapa', t.includes(nomes.resp) && t.includes(nomes.resp2))
   await foto('mapa-responsabilidades')
+})
+
+// 3b. Vontade: nasce no ramo Vontades, ganha um resultado e pode ser arquivada
+await passo('vontade', async () => {
+  await ir('/mapa')
+  await adicionarEm(arvore().locator('[data-ramo="vontades"]'), 'Vontades', { texto: nomes.vontade, contexto: 'vida' })
+  confere('criar uma vontade sem sair do Mapa', (await noDoMapa('vontade', nomes.vontade).count()) === 1)
+  await adicionarEm(noDoMapa('vontade', nomes.vontade), nomes.vontade, { prazo: '2027-06-30', texto: nomes.resultadoDaVontade })
+  confere('criar resultado embaixo da vontade', (await noDoMapa('vontade', nomes.vontade).innerText()).includes(nomes.resultadoDaVontade))
+  await noDoMapa('vontade', nomes.vontade).getByRole('link', { name: new RegExp(nomes.resultadoDaVontade) }).first().click()
+  await ficha().locator('[data-zona="para-que"]').getByText(/Para realizar/).waitFor()
+  confere('ficha do resultado diz a vontade que ele realiza', (await ficha().locator('[data-zona="para-que"]').innerText()).includes(nomes.vontade))
+  await botao('Concluir resultado', ficha()).click()
+  await botao('Reativar', ficha()).waitFor()
+  await ficha().locator('[data-zona="para-que"]').getByRole('link').first().click()
+  await ficha().getByRole('heading', { name: nomes.vontade }).waitFor()
+  confere('ficha da vontade lista o resultado dela', (await ficha().locator('[data-zona="como"]').innerText()).includes(nomes.resultadoDaVontade))
+  await botao('Editar', ficha()).click()
+  await dialogo().locator('#vontade-descricao').fill('Porque me faz bem.')
+  await botao('Salvar', dialogo()).click()
+  await esperaSumir()
+  confere('editar a vontade', (await ficha().innerText()).includes('Porque me faz bem.'))
+  await botao('Arquivar', ficha()).click()
+  await botao('Reativar', ficha()).waitFor()
+  confere('arquivar a vontade', true)
+  await foto('ficha-vontade')
 })
 
 // 4. Resultado: nasce embaixo da responsabilidade que ele sustenta
@@ -476,7 +504,7 @@ await passo('arquivar e reativar responsabilidade', async () => {
 await passo('mapa e revisão', async () => {
   await ir('/mapa')
   const m = await arvore().innerText()
-  confere('Mapa tem os três ramos sob o Propósito', /Construir/i.test(m) && /Sustentar/i.test(m) && /Avanços livres/i.test(m), m.slice(0, 200))
+  confere('Mapa tem os três ramos sob o Propósito', /Vontades/i.test(m) && /Responsabilidades/i.test(m) && /Livres/i.test(m), m.slice(0, 200))
   const no = noDoMapa('responsabilidade', nomes.resp)
   const dentro = await no.innerText()
   confere('Mapa mostra a escada inteira: responsabilidade, resultado e estratégia', dentro.includes(nomes.resultado) && dentro.includes(nomes.estrategia), dentro.slice(0, 200))
@@ -576,7 +604,7 @@ if (process.env.PEGADA_TESTE_IA) {
   const abrirEdicaoDeUmAvanco = async () => {
     await ir('/mapa')
     const livres = arvore().locator('[data-ramo="livres"]')
-    if (!(await livres.getByText(avancoDaIA).count())) await adicionarEm(livres, 'Avanços livres', { texto: avancoDaIA, contexto: 'vida' })
+    if (!(await livres.getByText(avancoDaIA).count())) await adicionarEm(livres, 'Livres', { texto: avancoDaIA, contexto: 'vida' })
     await livres.getByRole('link', { name: new RegExp(avancoDaIA) }).first().click()
     await page.waitForURL(/\/mapa\/avanco\//)
     await ficha().getByRole('button', { name: 'Mais comandos do avanço' }).click()
@@ -646,9 +674,11 @@ if (process.env.PEGADA_TESTE_IA) {
   })
   await passo('correção gentil', async () => {
     await ir('/mapa')
-    const ramo = arvore().locator('[data-ramo="construir"]')
-    await ramo.getByRole('button', { name: 'Adicionar em Construir', exact: true }).click()
+    const ramo = arvore().locator('[data-ramo="livres"]')
+    if (!(await ramo.locator('form[data-adicionar-aberto]').count()))
+      await ramo.getByRole('button', { name: 'Adicionar em Livres', exact: true }).click()
     const form = ramo.locator('form[data-adicionar-aberto]')
+    await form.getByRole('group', { name: 'O que adicionar' }).getByRole('button', { name: 'Resultado', exact: true }).click()
     await form.locator('input[type=text]').fill('Ser um bom pai para as minhas filhas')
     await form.locator('[data-correcao]').waitFor({ timeout: 45000 }).catch(() => {})
     const n = await form.locator('[data-correcao]').count()

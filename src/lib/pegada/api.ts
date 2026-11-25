@@ -206,7 +206,7 @@ export async function sugerir(
   return pedirIA<{ tipo: string; sugestao: Record<string, string>; origem: string }>({ tipo, texto }, automatico)
 }
 
-export type NivelDesdobrar = 'papel' | 'responsabilidade' | 'resultado' | 'estrategia'
+export type NivelDesdobrar = 'papel' | 'vontade' | 'responsabilidade' | 'resultado' | 'estrategia'
 export interface SugestaoDesdobrada {
   titulo: string
   por_que?: string

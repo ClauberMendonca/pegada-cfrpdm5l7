@@ -25,6 +25,8 @@ import { useToast } from '@/hooks/use-toast'
 import { calendarDayOrNull } from '@/lib/datetime'
 import { EntityNumberBadge } from '@/components/EntityNumberBadge'
 import { ResponsibilitySelect, useResponsibilityOptions } from '@/components/ResponsibilitySelect'
+import { wishService } from '@/services/wishService'
+import type { Wish } from '@/types/execution'
 
 interface ProjectModalProps {
   isOpen: boolean
@@ -63,6 +65,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
       completionCondition: `${uid}-project-completion-condition`,
       deadline: `${uid}-project-deadline`,
       responsibility: `${uid}-project-responsibility`,
+      wish: `${uid}-project-wish`,
     }),
     [uid],
   )
@@ -75,6 +78,18 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   // do Propósito/remoção. Comportamento de vínculo mantido como estava.
   const [responsibilityId, setResponsibilityId] = useState('')
   const responsibilityOptions = useResponsibilityOptions(isOpen)
+  // Origem alternativa: uma Vontade. Um resultado nasce de uma vontade OU de
+  // uma responsabilidade, nunca das duas; escolher uma solta a outra.
+  const [wishId, setWishId] = useState('')
+  const [vontades, setVontades] = useState<Wish[]>([])
+  useEffect(() => {
+    if (!isOpen) return
+    let vivo = true
+    wishService.list().then((l) => vivo && setVontades(l)).catch(() => {})
+    return () => {
+      vivo = false
+    }
+  }, [isOpen])
 
   const [isSaving, setIsSaving] = useState(false)
   // Correção gentil: se o texto não tem linha de chegada, o Pegada oferece
@@ -128,6 +143,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setCompletionCondition(projectToEdit.completion_condition || '')
         setDeadline(projectToEdit.deadline || '')
         setResponsibilityId(projectToEdit.responsibility_id || '')
+        setWishId(projectToEdit.wish_id || '')
       } else {
         setTitle('')
         setCorrecao(null)
@@ -137,6 +153,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setCompletionCondition('')
         setDeadline('')
         setResponsibilityId('')
+        setWishId('')
       }
     }
   }, [isOpen, projectToEdit, defaultContext])
@@ -160,6 +177,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         deadline: calendarDayOrNull(deadline) || undefined,
         // FATIA 3C1 — '' remove; ID escolhido vincula; nunca o sentinel 'none'.
         responsibility_id: responsibilityId,
+        wish_id: wishId,
       }
       if (projectToEdit) {
         await projectService.update(projectToEdit.id, base)
@@ -323,11 +341,49 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
 
           {/* FATIA 3C1 — Origem: Responsabilidade (opcional; sem vínculo =
              nasce do Propósito). Comportamento de vínculo mantido como estava. */}
+          <div className="space-y-1.5">
+            <Label htmlFor={ids.wish} className="text-xs uppercase tracking-wider text-muted-foreground">
+              Vontade (opcional)
+            </Label>
+            <Select
+              value={wishId || 'none'}
+              onValueChange={(v) => {
+                const nextId = v === 'none' ? '' : v
+                setWishId(nextId)
+                if (nextId) setResponsibilityId('')
+                const escolhida = vontades.find((w) => w.id === nextId)
+                if (escolhida) setContext(escolhida.context as EntityContext)
+              }}
+              disabled={isSaving}
+            >
+              <SelectTrigger id={ids.wish} className="min-h-11 w-full">
+                <SelectValue placeholder="Nenhuma" />
+              </SelectTrigger>
+              <SelectContent className="max-h-56">
+                <SelectItem value="none" className="min-h-11">
+                  Nenhuma
+                </SelectItem>
+                {vontades
+                  .filter((w) => w.status === 'ativa' || w.id === wishId)
+                  .map((w) => (
+                    <SelectItem key={w.id} value={w.id} className="min-h-11">
+                      {w.title} · {w.context === 'trabalho' ? 'Trabalho' : 'Vida'}
+                      {w.status === 'arquivada' ? ' (arquivada)' : ''}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            <span className="block text-[11px] text-muted-foreground">
+              O resultado nasce de uma vontade ou de uma responsabilidade. Sem nenhuma, fica livre.
+            </span>
+          </div>
+
           <ResponsibilitySelect
             id={ids.responsibility}
             value={responsibilityId}
             onChange={(nextId) => {
               setResponsibilityId(nextId)
+              if (nextId) setWishId('')
               // O Resultado herda o contexto da Responsabilidade de onde nasce.
               const escolhida = responsibilityOptions.list.find((r) => r.id === nextId)
               if (escolhida) setContext(escolhida.context as EntityContext)

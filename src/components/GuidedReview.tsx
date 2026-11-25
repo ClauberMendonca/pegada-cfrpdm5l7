@@ -337,10 +337,10 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                     </div>
                     {resumo.concluidos > 0 && (
                       <p className="rounded-3xl bg-secondary p-4 text-sm text-foreground" data-balanco>
-                        O balanço {periodo.frase}: <strong>{resumo.balanco.construir}</strong> para construir,{' '}
-                        <strong>{resumo.balanco.sustentar}</strong> para sustentar e{' '}
-                        <strong>{resumo.balanco.livres}</strong> livres. Quem só sustenta não avança, e quem só
-                        constrói deixa a vida desabar.
+                        O balanço {periodo.frase}: <strong>{resumo.balanco.construir}</strong> para as suas
+                        vontades, <strong>{resumo.balanco.sustentar}</strong> para as suas responsabilidades e{' '}
+                        <strong>{resumo.balanco.livres}</strong> livres. Quem só cuida das responsabilidades não
+                        avança, e quem só segue as vontades deixa a vida desabar.
                       </p>
                     )}
                     {resumo.concluidos === 0 && (

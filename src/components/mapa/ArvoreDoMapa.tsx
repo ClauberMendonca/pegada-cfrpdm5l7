@@ -1,7 +1,8 @@
 // PEGADA — o Mapa: a escada inteira em uma lista que abre e fecha.
-// Do Propósito saem três ramos. "Construir" são os resultados que nascem
-// direto dele. "Sustentar" são as responsabilidades, com os resultados e os
-// avanços de cada uma. "Avanços livres" são os que não servem a nada ainda.
+// Do Propósito saem as Vontades (o que a pessoa quer, e ninguém cobra) e as
+// Responsabilidades (o que ela responde por, e alguém cobra). De cada uma
+// nascem resultados, estratégias e avanços. O que não nasce de nenhuma fica
+// em "Livres", e também vale.
 // Cada coisa aparece em um lugar só, e é aqui que se cria o que já tem lugar.
 // Fonte única: a operação ver_mapa (os agentes leem o mesmo pelo MCP).
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -9,11 +10,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
 import { op } from '@/lib/pegada/api'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
-import { fichaDaResponsabilidade, fichaDoAvanco, fichaDoResultado } from '@/lib/pegada/enderecos'
+import { fichaDaResponsabilidade, fichaDaVontade, fichaDoAvanco, fichaDoResultado } from '@/lib/pegada/enderecos'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 import { actionService, notificarMudanca } from '@/services/actionService'
 import { projectService } from '@/services/projectService'
 import { responsibilityService } from '@/services/responsibilityService'
+import { wishService } from '@/services/wishService'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
 import { Desdobrar } from '@/components/Desdobrar'
 import { Dica } from '@/components/Dica'
@@ -44,6 +46,7 @@ export interface MapaResultado {
   status: string
   contexto: string
   responsabilidade_id: string | null
+  vontade_id?: string | null
   estrategias: MapaEstrategia[]
   avancos_abertos: number
   avancos_sem_estrategia?: MapaAvanco[]
@@ -54,8 +57,14 @@ interface MapaResponsabilidade {
   contexto: string
   avancos?: MapaAvanco[]
 }
+interface MapaVontade {
+  id: string
+  titulo: string
+  contexto: string
+}
 export interface Mapa {
   proposito: string
+  vontades?: MapaVontade[]
   responsabilidades: MapaResponsabilidade[]
   resultados: MapaResultado[]
   avancos_livres?: MapaAvanco[]
@@ -368,10 +377,11 @@ function Encerrados({ c }: { c: Ctx }) {
 
   const carregar = useCallback(async () => {
     const contexto = contextFilter === 'todos' ? undefined : contextFilter
-    const [concluidos, arquivados, resps] = await Promise.all([
+    const [concluidos, arquivados, resps, vontades] = await Promise.all([
       projectService.list(contexto, 'concluido').catch(() => []),
       projectService.list(contexto, 'arquivado').catch(() => []),
       responsibilityService.list({ context: contexto }).catch(() => []),
+      wishService.list().catch(() => []),
     ])
     setItens([
       ...concluidos.map((p) => ({
@@ -386,6 +396,14 @@ function Encerrados({ c }: { c: Ctx }) {
         to: fichaDoResultado(p.id),
         detalhe: 'Resultado · arquivado',
       })),
+      ...vontades
+        .filter((v) => v.status === 'arquivada' && (!contexto || v.context === contexto))
+        .map((v) => ({
+          id: v.id,
+          titulo: v.title,
+          to: fichaDaVontade(v.id),
+          detalhe: 'Vontade · arquivada',
+        })),
       ...resps
         .filter((r) => r.status === 'arquivada')
         .map((r) => ({
@@ -517,15 +535,23 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
     const resultados = mapa.resultados
       .filter((r) => noContexto(r.contexto))
       .sort((a, b) => (ordem[a.status] ?? 9) - (ordem[b.status] ?? 9))
-    const conhecidas = new Set(mapa.responsabilidades.map((r) => r.id))
+    const responsabilidades = new Set(mapa.responsabilidades.map((r) => r.id))
+    const vontades = new Set((mapa.vontades ?? []).map((v) => v.id))
+    // Cada resultado mora em um lugar só: na vontade, na responsabilidade ou em Livres.
+    const daVontade = (r: MapaResultado) => Boolean(r.vontade_id && vontades.has(r.vontade_id))
+    const daResponsabilidade = (r: MapaResultado) =>
+      !daVontade(r) && Boolean(r.responsabilidade_id && responsabilidades.has(r.responsabilidade_id))
     return {
-      construir: resultados.filter((r) => !r.responsabilidade_id || !conhecidas.has(r.responsabilidade_id)),
-      sustentar: mapa.responsabilidades
+      vontades: (mapa.vontades ?? [])
+        .filter((v) => noContexto(v.contexto))
+        .map((v) => ({ ...v, resultados: resultados.filter((r) => daVontade(r) && r.vontade_id === v.id) })),
+      responsabilidades: mapa.responsabilidades
         .filter((r) => noContexto(r.contexto))
         .map((resp) => ({
           ...resp,
-          resultados: resultados.filter((r) => r.responsabilidade_id === resp.id),
+          resultados: resultados.filter((r) => daResponsabilidade(r) && r.responsabilidade_id === resp.id),
         })),
+      resultadosLivres: resultados.filter((r) => !daVontade(r) && !daResponsabilidade(r)),
       livres: (mapa.avancos_livres ?? []).filter((a) => noContexto(a.contexto)),
       ativos: mapa.resultados.filter((r) => r.status === 'ativo').length,
     }
@@ -609,25 +635,59 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
         )}
       </Link>
 
-      <Ramo id="construir" nome="Construir" explicacao="Resultados que nascem direto do seu propósito." c={c}>
-        {visao.construir.length === 0 && (
+      <Ramo id="vontades" nome="Vontades" explicacao="O que você quer construir. Se largar, ninguém cobra." c={c}>
+        {visao.vontades.length === 0 && (
           <p className="px-2 py-1 text-sm text-muted-foreground">
-            Nenhum resultado aqui ainda. Um resultado é um estado alcançado e um prazo, como “Até 30 de junho,
-            loja no ar com 10 clientes”.
+            Nenhuma vontade aqui ainda. É algo que você quer porque quer, como “voltar a tocar violão”.
           </p>
         )}
-        <Resultados itens={visao.construir} grupo="construir" c={c} />
-        <AdicionarNoLugar tipos={['resultado']} contexto={contexto} em="Construir" />
+        <ul className="flex flex-col gap-1">
+          {visao.vontades.map((v) => {
+            const id = `vontade:${v.id}`
+            return (
+              <li key={v.id} data-vontade={v.id}>
+                <div className="flex items-start gap-1">
+                  <Alternar id={id} padrao nome={v.titulo} c={c} />
+                  <Titulo
+                    to={fichaDaVontade(v.id)}
+                    detalhe={`Vontade · ${v.contexto === 'vida' ? 'Vida' : 'Trabalho'}`}
+                    forte
+                    c={c}
+                  >
+                    {v.titulo}
+                  </Titulo>
+                </div>
+                {c.aberto(id, true) && (
+                  <div className="ml-2.5 flex flex-col gap-1 border-l-2 border-border pl-4">
+                    <Resultados itens={v.resultados} grupo={v.id} c={c} />
+                    <AdicionarNoLugar
+                      tipos={['resultado']}
+                      onde={{ vontadeId: v.id }}
+                      contexto={v.contexto === 'vida' ? 'vida' : 'trabalho'}
+                      em={v.titulo}
+                    />
+                  </div>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <AdicionarNoLugar tipos={['vontade']} contexto={contexto} em="Vontades" />
       </Ramo>
 
-      <Ramo id="sustentar" nome="Sustentar" explicacao="O que você escolheu manter de pé, e o que nasce disso." c={c}>
-        {visao.sustentar.length === 0 && (
+      <Ramo
+        id="responsabilidades"
+        nome="Responsabilidades"
+        explicacao="O que você responde por. Se largar, alguém cobra."
+        c={c}
+      >
+        {visao.responsabilidades.length === 0 && (
           <p className="px-2 py-1 text-sm text-muted-foreground">
             Nenhuma responsabilidade aqui ainda. É algo pelo qual você responde hoje, como “saúde da família”.
           </p>
         )}
         <ul className="flex flex-col gap-1">
-          {visao.sustentar.map((resp) => {
+          {visao.responsabilidades.map((resp) => {
             const id = `responsabilidade:${resp.id}`
             return (
               <li key={resp.id} data-responsabilidade={resp.id}>
@@ -658,7 +718,7 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
             )
           })}
         </ul>
-        <AdicionarNoLugar tipos={['responsabilidade']} contexto={contexto} em="Sustentar" />
+        <AdicionarNoLugar tipos={['responsabilidade']} contexto={contexto} em="Responsabilidades" />
         {!compacta && (
           <Desdobrar
             nivel="papel"
@@ -678,12 +738,13 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
 
       <Ramo
         id="livres"
-        nome="Avanços livres"
-        explicacao="O que você faz sem estar ligado a um resultado. Também vale."
+        nome="Livres"
+        explicacao="O que não nasce de uma vontade nem de uma responsabilidade. Também vale."
         c={c}
       >
+        <Resultados itens={visao.resultadosLivres} grupo="livres" c={c} />
         <Avancos itens={visao.livres} c={c} />
-        <AdicionarNoLugar tipos={['avanco']} contexto={contexto} em="Avanços livres" />
+        <AdicionarNoLugar tipos={['avanco', 'resultado']} contexto={contexto} em="Livres" />
       </Ramo>
 
       <Encerrados c={c} />

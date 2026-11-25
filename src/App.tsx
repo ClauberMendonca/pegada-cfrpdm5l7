@@ -11,6 +11,7 @@ import { CapturesPage } from '@/pages/CapturesPage'
 import { FichaAvancoPage } from '@/pages/FichaAvancoPage'
 import { FichaResultadoPage } from '@/pages/FichaResultadoPage'
 import { FichaResponsabilidadePage } from '@/pages/FichaResponsabilidadePage'
+import { FichaVontadePage } from '@/pages/FichaVontadePage'
 import { fichaDe, type Degrau } from '@/lib/pegada/enderecos'
 import { MapPage } from '@/pages/MapPage'
 import { ReviewPage } from '@/pages/ReviewPage'
@@ -66,6 +67,7 @@ const ProtectedRoutes = () => {
             {/* O Mapa é a casa dos cinco elementos: toda ficha mora embaixo dele. */}
             <Route path="/mapa" element={<MapPage />}>
               <Route path="proposito" element={<PropositoPage />} />
+              <Route path="vontade/:id" element={<FichaVontadePage />} />
               <Route path="responsabilidade/:id" element={<FichaResponsabilidadePage />} />
               <Route path="resultado/:id" element={<FichaResultadoPage />} />
               <Route path="avanco/:id" element={<FichaAvancoPage />} />

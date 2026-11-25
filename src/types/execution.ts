@@ -76,6 +76,18 @@ export interface Strategy {
   }
 }
 
+/** PEGADA — Vontade: o que a pessoa quer construir, sem que ninguém cobre. */
+export interface Wish {
+  id: string
+  user_id: string
+  title: string
+  description?: string
+  context: 'vida' | 'trabalho'
+  status: 'ativa' | 'arquivada'
+  created: string
+  updated: string
+}
+
 export interface Responsibility {
   id: string
   user_id: string
@@ -118,10 +130,13 @@ export interface Project {
   // Vínculo novo exige destino existente, mesmo dono, mesmo contexto e ativa
   // (validado no backend, incl. caminho txApp da conversão).
   responsibility_id?: string
+  /** A Vontade de onde o resultado nasce. Nunca junto com responsibility_id. */
+  wish_id?: string
   created: string
   updated: string
   expand?: {
     responsibility_id?: Responsibility
+    wish_id?: Wish
   }
 }
 

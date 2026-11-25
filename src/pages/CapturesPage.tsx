@@ -85,6 +85,7 @@ const TIPOS_SUGERIVEIS: ActionKind[] = ['acao', 'compromisso', 'estudo', 'reflex
 const DESTINO_ROTULO: Record<string, string> = {
   avanco: 'Avanço',
   resultado: 'Resultado (rascunho)',
+  vontade: 'Vontade',
   responsabilidade: 'Responsabilidade',
   estrategia: 'Estratégia',
 }

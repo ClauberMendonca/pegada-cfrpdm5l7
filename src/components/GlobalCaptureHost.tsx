@@ -34,6 +34,7 @@ function digitandoEmCampo(alvo: EventTarget | null): boolean {
 type Sugestao = Record<string, string>
 const DESTINOS: Record<string, string> = {
   resultado: 'um Resultado',
+  vontade: 'uma Vontade',
   responsabilidade: 'uma Responsabilidade',
   estrategia: 'uma Estratégia',
 }
@@ -96,7 +97,7 @@ export function GlobalCaptureHost() {
     const t = setTimeout(() => {
       sugerir('captura', valor, true)
         .then((r) => {
-          if (vivo && ['avanco', 'resultado', 'responsabilidade', 'estrategia'].includes(r.sugestao?.destino))
+          if (vivo && ['avanco', 'resultado', 'vontade', 'responsabilidade', 'estrategia'].includes(r.sugestao?.destino))
             setSugestao(r.sugestao)
         })
         .catch(() => {})

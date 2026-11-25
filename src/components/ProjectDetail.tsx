@@ -1,7 +1,8 @@
 import { Referencias } from '@/components/Referencias'
 import { Ficha, Recolhido, FichaNaoEncontrada } from '@/components/Ficha'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
-import { fichaDaResponsabilidade } from '@/lib/pegada/enderecos'
+import { fichaDaResponsabilidade, fichaDaVontade } from '@/lib/pegada/enderecos'
+import { wishService } from '@/services/wishService'
 import { Link, useLocation } from 'react-router-dom'
 import { useResponsibilityReference } from '@/hooks/use-responsibility-reference'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
@@ -51,6 +52,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const { running } = useTimer()
   const [project, setProject] = useState<Project | null>(null)
   const responsabilidadeRef = useResponsibilityReference(project?.responsibility_id || null)
+  const [vontade, setVontade] = useState<{ id: string; title: string } | null>(null)
+  const vontadeId = project?.wish_id || ''
+  useEffect(() => {
+    setVontade(null)
+    if (!vontadeId) return
+    let vivo = true
+    wishService.getById(vontadeId).then((v) => vivo && setVontade(v)).catch(() => {})
+    return () => {
+      vivo = false
+    }
+  }, [vontadeId])
   const [actions, setActions] = useState<ActionItem[]>([])
   const [logs, setLogs] = useState<ProgressLog[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -192,6 +204,9 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       <Ficha
         degraus={[
           { rotulo: 'Mapa', to: '/mapa' },
+          ...(project.wish_id
+            ? [{ rotulo: vontade?.title ?? 'Vontade', to: fichaDaVontade(project.wish_id) }]
+            : []),
           ...(project.responsibility_id
             ? [
                 {
@@ -206,7 +221,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
         ]}
         atual={project.title}
         paraQue={
-          project.responsibility_id ? (
+          project.wish_id ? (
+            <Link
+              to={fichaDaVontade(project.wish_id)}
+              className="font-medium underline-offset-4 hover:underline"
+            >
+              Para realizar {vontade ? `“${vontade.title}”` : 'uma vontade sua'}
+            </Link>
+          ) : project.responsibility_id ? (
             <Link
               to={fichaDaResponsabilidade(project.responsibility_id)}
               className="font-medium underline-offset-4 hover:underline"
@@ -217,9 +239,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 : 'uma responsabilidade sua'}
             </Link>
           ) : (
-            <Link to="/mapa/proposito" className="font-medium underline-offset-4 hover:underline">
-              Nasce direto do seu propósito
-            </Link>
+            <p>Resultado livre: não nasce de uma vontade nem de uma responsabilidade. Também vale.</p>
           )
         }
         como={

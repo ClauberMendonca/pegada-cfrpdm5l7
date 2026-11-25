@@ -19,9 +19,11 @@ O Mapa é uma lista só, que abre e fecha (`src/components/mapa/ArvoreDoMapa.tsx
 
 | Ramo | O que mora nele |
 | --- | --- |
-| Construir | Resultados que nascem direto do Propósito, com as estratégias e os avanços de cada um |
-| Sustentar | Responsabilidades, com os resultados e os avanços (rotinas) que as mantêm de pé |
-| Avanços livres | O que não está ligado a nada. É legítimo, e aparece sem tom de erro |
+| Vontades | O que a pessoa quer construir e ninguém cobra se ela largar, com os resultados de cada uma |
+| Responsabilidades | O que alguém cobra se ela largar, com os resultados e os avanços (rotinas) que as mantêm de pé |
+| Livres | Resultados e avanços que não estão ligados a nada. É legítimo, e aparece sem tom de erro |
+
+O teste que separa as duas: "se eu largar, alguém me cobra?". Sim é Responsabilidade, não é Vontade. Um resultado nasce de uma vontade ou de uma responsabilidade, nunca das duas.
 
 Resultados sem prazo ou guardados para depois ficam recolhidos em "Depois". O que foi concluído ou arquivado fica em "Encerrados", no fim do Mapa.
 
@@ -30,6 +32,7 @@ Toda ficha mora embaixo do Mapa e tem endereço próprio (`src/lib/pegada/endere
 | Ficha | Endereço |
 | --- | --- |
 | Propósito | `/mapa/proposito` |
+| Vontade | `/mapa/vontade/:id` |
 | Responsabilidade | `/mapa/responsabilidade/:id` |
 | Resultado | `/mapa/resultado/:id` (a estratégia é uma parte dele: `#estrategia-:id`) |
 | Avanço | `/mapa/avanco/:id` |

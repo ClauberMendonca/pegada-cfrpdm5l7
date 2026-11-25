@@ -11,6 +11,7 @@ export interface CreateProjectInput {
   /** FATIA 3C1 — vínculo opcional com Responsabilidade: ID nativo; '' remove;
      OMITIR (undefined) em update mantém o vínculo atual. */
   responsibility_id?: string
+  wish_id?: string
 }
 
 export type UpdateProjectInput = Partial<CreateProjectInput>
@@ -56,6 +57,7 @@ export const projectService = {
       prazo: data.deadline || undefined,
       como_sei: data.completion_condition || undefined,
       responsabilidade_id: data.responsibility_id || undefined,
+      vontade_id: data.wish_id || undefined,
       contexto: data.context,
       situacao: status === 'futuro' || status === 'rascunho' ? status : 'ativo',
     })
@@ -73,6 +75,7 @@ export const projectService = {
     if (data.deadline !== undefined) edit.prazo = data.deadline
     if (data.completion_condition !== undefined) edit.como_sei = data.completion_condition
     if (data.responsibility_id !== undefined) edit.responsabilidade_id = data.responsibility_id
+    if (data.wish_id !== undefined) edit.vontade_id = data.wish_id
     if (data.context !== undefined) edit.contexto = data.context
     if (Object.keys(edit).length)
       ops.push({ op: 'editar_resultado', entrada: { resultado_id: id, ...edit } })

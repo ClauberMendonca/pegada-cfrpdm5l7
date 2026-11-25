@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTimer } from '@/contexts/TimeContext'
 import { useToast } from '@/hooks/use-toast'
 import { checkEligibility, isSelectableForFocus } from '@/lib/eligibility'
-import { fichaDaResponsabilidade, fichaDoResultado } from '@/lib/pegada/enderecos'
+import { fichaDaResponsabilidade, fichaDaVontade, fichaDoResultado } from '@/lib/pegada/enderecos'
 import { fioDoAvanco } from '@/lib/pegada/fio'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { actionService, notificarMudanca } from '@/services/actionService'
@@ -98,11 +98,13 @@ export function FichaAvancoPage() {
   const responsabilidade = resultado
     ? (resultado.expand?.responsibility_id ?? null)
     : (avanco.expand?.responsibility_id ?? null)
+  const vontade = resultado?.expand?.wish_id ?? null
   const fio = fioDoAvanco(avanco, user?.life_purpose)
 
   const degraus: Degrau[] = [
     { rotulo: 'Mapa', to: '/mapa' },
-    ...(responsabilidade
+    ...(vontade ? [{ rotulo: vontade.title, to: fichaDaVontade(vontade.id) }] : []),
+    ...(responsabilidade && !vontade
       ? [{ rotulo: responsabilidade.title, to: fichaDaResponsabilidade(responsabilidade.id) }]
       : []),
     ...(resultado ? [{ rotulo: resultado.title, to: fichaDoResultado(resultado.id) }] : []),

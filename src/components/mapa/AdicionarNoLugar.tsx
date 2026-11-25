@@ -9,9 +9,10 @@ import { notificarMudanca } from '@/services/actionService'
 import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
 import { cn } from '@/lib/utils'
 
-export type TipoDeFilho = 'responsabilidade' | 'resultado' | 'estrategia' | 'avanco'
+export type TipoDeFilho = 'vontade' | 'responsabilidade' | 'resultado' | 'estrategia' | 'avanco'
 
 export interface OndeAdicionar {
+  vontadeId?: string
   responsabilidadeId?: string
   resultadoId?: string
   estrategiaId?: string
@@ -29,12 +30,14 @@ interface Props {
 }
 
 const NOME: Record<TipoDeFilho, string> = {
+  vontade: 'Vontade',
   responsabilidade: 'Responsabilidade',
   resultado: 'Resultado',
   estrategia: 'Estratégia',
   avanco: 'Avanço',
 }
 const EXEMPLO: Record<TipoDeFilho, string> = {
+  vontade: 'Algo que você quer, sem ninguém cobrar. Ex.: voltar a tocar violão',
   responsabilidade: 'Algo pelo qual você responde. Ex.: saúde da família',
   resultado: 'o que estará alcançado. Ex.: loja no ar com 10 clientes',
   estrategia: 'o caminho em que você aposta. Ex.: indicações de clientes',
@@ -70,7 +73,7 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
     const espera = window.setTimeout(() => {
       conferirResultado(t)
         .then((r) => {
-          if (vivo && ['responsabilidade', 'estrategia', 'proposito'].includes(r.e)) setCorrecao({ ...r, de: t })
+          if (vivo && ['vontade', 'responsabilidade', 'estrategia', 'proposito'].includes(r.e)) setCorrecao({ ...r, de: t })
         })
         .catch(() => {})
     }, 900)
@@ -81,14 +84,14 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
   }, [aberto, tipo, texto])
   const correcaoVale = correcao && tipo === 'resultado' && correcao.de === texto.trim() ? correcao : null
 
-  const guardarComoResponsabilidade = async () => {
+  const guardarComo = async (operacao: 'criar_vontade' | 'criar_responsabilidade') => {
     const titulo = texto.trim()
     if (!titulo || ocupado) return
     setOcupado(true)
     setErro(null)
     try {
       await op(
-        'criar_responsabilidade',
+        operacao,
         { titulo, contexto: contexto ?? ctx },
         { desfazer: true, onDesfeito: notificarMudanca },
       )
@@ -107,7 +110,8 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
   const escolheContexto =
     !contexto &&
     (tipo === 'responsabilidade' ||
-      (!onde?.responsabilidadeId && !onde?.resultadoId && !onde?.estrategiaId))
+      tipo === 'vontade' ||
+      (!onde?.vontadeId && !onde?.responsabilidadeId && !onde?.resultadoId && !onde?.estrategiaId))
 
   const criar = async () => {
     const titulo = texto.trim()
@@ -117,7 +121,9 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
     const contextoFinal = contexto ?? ctx
     try {
       const opcoes = { desfazer: true, onDesfeito: notificarMudanca }
-      if (tipo === 'responsabilidade') {
+      if (tipo === 'vontade') {
+        await op('criar_vontade', { titulo, contexto: contextoFinal }, opcoes)
+      } else if (tipo === 'responsabilidade') {
         await op('criar_responsabilidade', { titulo, contexto: contextoFinal }, opcoes)
       } else if (tipo === 'resultado') {
         // Sem prazo ainda não é um resultado ativo: fica guardado em "Depois".
@@ -126,6 +132,7 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
           {
             titulo,
             prazo,
+            vontade_id: onde?.vontadeId,
             responsabilidade_id: onde?.responsabilidadeId,
             contexto: contextoFinal,
             situacao: prazo ? 'ativo' : 'futuro',
@@ -280,19 +287,23 @@ export function AdicionarNoLugar({ tipos, onde, contexto, em, onCriado }: Props)
             {correcaoVale.por_que}{' '}
             {correcaoVale.e === 'responsabilidade'
               ? 'Quer guardar como responsabilidade e criar um resultado dentro dela?'
-              : correcaoVale.e === 'estrategia'
+              : correcaoVale.e === 'vontade'
+                ? 'Quer guardar como vontade e criar um resultado dentro dela?'
+                : correcaoVale.e === 'estrategia'
                 ? 'Parece um caminho, não o destino. Para quê você faria isso? A resposta é o resultado.'
                 : 'Parece o seu propósito, que nunca se conclui. Que estado você quer alcançar por causa dele?'}
           </p>
           <div className="flex flex-wrap gap-2">
-            {correcaoVale.e === 'responsabilidade' && (
+            {(correcaoVale.e === 'responsabilidade' || correcaoVale.e === 'vontade') && (
               <button
                 type="button"
                 disabled={ocupado}
-                onClick={() => void guardarComoResponsabilidade()}
+                onClick={() =>
+                  void guardarComo(correcaoVale.e === 'vontade' ? 'criar_vontade' : 'criar_responsabilidade')
+                }
                 className="h-9 rounded-full bg-foreground px-3 text-sm font-medium text-background"
               >
-                Guardar como responsabilidade
+                Guardar como {correcaoVale.e}
               </button>
             )}
             <button

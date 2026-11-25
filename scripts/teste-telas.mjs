@@ -176,7 +176,8 @@ await passo('vontade', async () => {
   await adicionarEm(noDoMapa('vontade', nomes.vontade), nomes.vontade, { prazo: '2027-06-30', texto: nomes.resultadoDaVontade })
   confere('criar resultado embaixo da vontade', (await noDoMapa('vontade', nomes.vontade).innerText()).includes(nomes.resultadoDaVontade))
   await noDoMapa('vontade', nomes.vontade).getByRole('link', { name: new RegExp(nomes.resultadoDaVontade) }).first().click()
-  await ficha().locator('[data-zona="para-que"]').getByText(/Para realizar/).waitFor()
+  // O nome da vontade chega um instante depois da ficha: espera por ele.
+  await ficha().locator('[data-zona="para-que"]').getByText(nomes.vontade).waitFor().catch(() => {})
   confere('ficha do resultado diz a vontade que ele realiza', (await ficha().locator('[data-zona="para-que"]').innerText()).includes(nomes.vontade))
   await botao('Concluir resultado', ficha()).click()
   await botao('Reativar', ficha()).waitFor()

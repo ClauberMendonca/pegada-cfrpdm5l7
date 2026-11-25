@@ -282,6 +282,61 @@ await passo('novo avanço para hoje', async () => {
   await foto('hoje')
 })
 
+// 6b. Hoje em três passos: folha de escolha, três ações por linha e fechar o dia
+await passo('Hoje: escolher, linha e fechar o dia', async () => {
+  await ir('/')
+  const tambem = page.locator('section[aria-label="Também hoje"]')
+  await botao('Adicionar', tambem).click()
+  const folha = page.locator('[data-folha-de-escolha]')
+  await folha.getByRole('button', { name: `Tirar de Hoje: ${nomes.acao}` }).or(folha.getByText('Nenhum avanço aberto')).first().waitFor()
+  const naFolha = await folha.locator('ul button').count()
+  confere('a folha de escolha lista os avanços abertos, por resultado', naFolha >= 1 && (await folha.innerText()).toLowerCase().includes(nomes.resultado.toLowerCase()), await folha.innerText())
+  confere('a folha de escolha conta os escolhidos', /escolhido/.test(await folha.locator('[data-escolhidos]').innerText()))
+  await botao('Pronto', folha).click()
+  await esperaSumir()
+  const linha = tambem.locator('[data-linha-de-hoje]').first()
+  await linha.getByRole('button', { name: /^Opções: / }).click()
+  const acoes = await linha.locator('[data-acoes-da-linha]').innerText()
+  confere('a linha aberta mostra três ações', /Deixar para depois/.test(acoes) && /Estou esperando alguém/.test(acoes) && /Abrir/.test(acoes), acoes)
+  await linha.getByRole('button', { name: /^Opções: / }).click()
+  await botao('Fechar o dia').click()
+  const fechar = page.locator('[data-fechar-o-dia]')
+  await fechar.locator('[data-sobra]').first().waitFor()
+  const sobra = await fechar.locator('[data-sobra]').first().innerText()
+  confere('fechar o dia pergunta: amanhã ou devolver ao Mapa', /Amanhã/.test(sobra) && /Devolver ao Mapa/.test(sobra), sobra)
+  await foto('fechar-o-dia')
+  await botao('Deixar como está', fechar).click()
+  await esperaSumir()
+  confere('Hoje não tem mais a seção Reavaliar', (await page.locator('#reavaliar').count()) === 0)
+  await ir('/revisao')
+  await page.locator('[data-o-que-reavaliar]').waitFor()
+  confere('"O que reavaliar" mora na Revisão', true)
+})
+
+// Caixa: um item por vez. Traz a captura para a frente e devolve o cartão da vez.
+const daVez = () => page.locator('[data-captura-da-vez]')
+async function trazerParaAVez(nome) {
+  await page.locator('[data-caixa]').waitFor()
+  await page.waitForTimeout(600)
+  const todas = page.locator('[data-fila-da-caixa]').getByRole('button', { name: 'Mostrar todas' })
+  if (await todas.count()) await todas.click()
+  const naFila = page.locator('[data-fila-da-caixa] button').filter({ hasText: nome })
+  if (await naFila.count()) await naFila.first().click()
+  await daVez().locator('div').first().getByText(nome).first().waitFor()
+  return daVez().locator('div').first()
+}
+async function pendenteNaCaixa(nome) {
+  await page.locator('[data-caixa]').waitFor()
+  await page.waitForTimeout(800)
+  return (await daVez().count()) > 0 && (await daVez().innerText()).includes(nome)
+}
+async function capturarNaCaixa(textoDaCaptura) {
+  const caixa = page.locator('section[aria-label="Capturar"]')
+  await caixa.locator('textarea').fill(textoDaCaptura)
+  await botao('Capturar', caixa).click()
+  await page.waitForTimeout(1200)
+}
+
 // 7. Capturas: capturar, transformar em avanço, descartar
 await passo('capturar pelo botão do topo', async () => {
   await ir('/')
@@ -295,9 +350,8 @@ await passo('capturar pelo botão do topo', async () => {
 
 await passo('capturar na tela de Capturas', async () => {
   await ir('/caixa')
-  await page.locator('textarea').first().fill(nomes.captura2)
-  await botao('Capturar Ideia').click()
-  await page.waitForTimeout(1200)
+  await capturarNaCaixa(nomes.captura2)
+  confere('a Caixa mostra uma captura por vez, com as outras em "Depois"', (await daVez().locator('[data-fila-da-caixa] button').count()) >= 1)
   confere('captura da caixa de entrada aparece', (await texto('main')).includes(nomes.captura2))
   await foto('capturas')
 })
@@ -319,8 +373,8 @@ const item = (nome) => page.getByRole('menuitem', { name: nome }).first()
 // 8. Processar capturas: uma vira avanço, a outra é descartada e depois volta
 await passo('processar captura em avanço', async () => {
   await ir('/caixa')
-  const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura }).first()
-  await botao('Processar', linha).click()
+  const linha = await trazerParaAVez(nomes.captura)
+  await botao('Decidir', linha).click()
   await item(/^Ação$/).click()
   await page.waitForTimeout(1500)
   await ir('/mapa')
@@ -329,13 +383,12 @@ await passo('processar captura em avanço', async () => {
 
 await passo('descartar captura', async () => {
   await ir('/caixa')
-  const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).first()
-  await botao('Processar', linha).click()
+  const linha = await trazerParaAVez(nomes.captura2)
+  await botao('Decidir', linha).click()
   await item('Descartar').click()
   await page.waitForTimeout(1500)
   await ir('/caixa')
-  const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
-  confere('captura descartada sai das pendentes', pendente === 0)
+  confere('captura descartada sai das pendentes', !(await pendenteNaCaixa(nomes.captura2)))
 })
 
 // 9. Atividade: o histórico mostra o que foi feito e desfaz o último passo
@@ -346,8 +399,7 @@ await passo('atividade e desfazer', async () => {
   await botao('Desfazer', page.locator('main')).click()
   await page.waitForTimeout(1500)
   await ir('/caixa')
-  const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
-  confere('Desfazer devolve a captura descartada', pendente === 1)
+  confere('Desfazer devolve a captura descartada', await pendenteNaCaixa(nomes.captura2))
 })
 
 // 10. Concluir avanços: a Ação direto, o Estudo deixando rastro
@@ -633,10 +685,8 @@ if (process.env.PEGADA_TESTE_IA) {
   await passo('IA em Capturas', async () => {
     const ideia = T('ver uns tênis de corrida qualquer dia')
     await ir('/caixa')
-    await page.locator('textarea').first().fill(ideia)
-    await botao('Capturar Ideia').click()
-    await page.waitForTimeout(1200)
-    const linha = page.locator('div.rounded-xl').filter({ hasText: ideia }).first()
+    await capturarNaCaixa(ideia)
+    const linha = await trazerParaAVez(ideia)
     await botao('Sugerir com IA', linha).click()
     await aceitarAviso()
     await botao('Dispensar', linha).waitFor({ timeout: 45000 })
@@ -644,8 +694,7 @@ if (process.env.PEGADA_TESTE_IA) {
     if (await botao('Usar sugestão', linha).count()) {
       await botao('Usar sugestão', linha).click()
       await page.waitForTimeout(2000)
-      const pendente = await page.locator('div.rounded-xl').filter({ hasText: ideia }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
-      confere('usar a sugestão processa a captura', pendente === 0)
+      confere('usar a sugestão processa a captura', !(await pendenteNaCaixa(ideia)))
     }
   })
   await passo('IA na captura rápida', async () => {

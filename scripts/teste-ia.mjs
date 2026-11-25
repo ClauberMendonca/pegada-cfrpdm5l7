@@ -12,6 +12,12 @@ if (!entra.ok) {
   process.exit(1)
 }
 const { token } = await entra.json()
+// Privacidade: a conta precisa ter lido o aviso e estar com a IA ligada.
+await fetch(BASE + '/backend/v1/pegada/ia/preferencia', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: token },
+  body: JSON.stringify({ aviso_visto: true, desligada: false }),
+})
 const casos = [
   ['avanco', 'ver uns tênis de corrida qualquer dia', ['titulo', 'tipo']],
   ['resultado', 'quero correr 10 km até março do ano que vem', ['titulo']],

@@ -150,15 +150,60 @@ export async function revogarAgente(id: string) {
   return send<{ ok: boolean }>(`/agentes/${id}/revogar`)
 }
 
+// ---- Privacidade da IA -------------------------------------------------
+// O texto de cada pedido vai à Anthropic só para gerar a sugestão. A pessoa
+// lê esse aviso na primeira vez e pode desligar a IA em Configurações.
+export interface EstadoIA {
+  disponivel: boolean
+  desligada: boolean
+  aviso_visto: boolean
+}
+let estadoIA: Promise<EstadoIA> | null = null
+export function lerEstadoIA(forcar = false): Promise<EstadoIA> {
+  if (!estadoIA || forcar) {
+    estadoIA = send<EstadoIA>('/ia/preferencia').catch((e) => {
+      estadoIA = null
+      throw e
+    })
+  }
+  return estadoIA
+}
+export async function gravarEstadoIA(mudanca: { desligada?: boolean; aviso_visto?: true }): Promise<EstadoIA> {
+  const novo = await send<EstadoIA>('/ia/preferencia', mudanca)
+  estadoIA = Promise.resolve(novo)
+  window.dispatchEvent(new Event('pegada:ia-mudou'))
+  return novo
+}
+/** Quem mostra o aviso (AvisoIAHost) se registra aqui; devolve true se a pessoa aceitou. */
+let mostrarAviso: (() => Promise<boolean>) | null = null
+export function registrarAvisoIA(fn: (() => Promise<boolean>) | null) {
+  mostrarAviso = fn
+}
+
+/**
+ * Todo pedido à IA passa por aqui. `automatico` marca os pedidos que a tela faz
+ * sozinha (sugestão ao digitar): eles nunca abrem o aviso, só esperam em silêncio
+ * até a pessoa usar a IA por conta própria uma vez.
+ */
+async function pedirIA<T>(corpo: { tipo: string; texto: string }, automatico = false): Promise<T> {
+  const estado = await lerEstadoIA()
+  if (estado.desligada) throw new Error('A IA está desligada em Configurações.')
+  if (!estado.aviso_visto) {
+    if (automatico || !mostrarAviso) throw new Error('A IA espera você ler o aviso de privacidade.')
+    const aceitou = await mostrarAviso()
+    if (!aceitou) throw new Error('Tudo bem: nada foi enviado à IA.')
+    await gravarEstadoIA({ aviso_visto: true })
+  }
+  return send<T>('/ia/sugerir', corpo)
+}
+
 /** Nível 1: pede uma sugestão à IA embutida (não grava nada). */
 export async function sugerir(
   tipo: 'resultado' | 'avanco' | 'proposito' | 'captura',
   texto: string,
+  automatico = false,
 ) {
-  return send<{ tipo: string; sugestao: Record<string, string>; origem: string }>('/ia/sugerir', {
-    tipo,
-    texto,
-  })
+  return pedirIA<{ tipo: string; sugestao: Record<string, string>; origem: string }>({ tipo, texto }, automatico)
 }
 
 export type NivelDesdobrar = 'papel' | 'responsabilidade' | 'resultado' | 'estrategia'
@@ -172,20 +217,14 @@ export interface SugestaoDesdobrada {
 
 /** Desce um degrau da escada: a IA devolve sugestões selecionáveis (não grava nada). */
 export async function desdobrar(nivel: NivelDesdobrar, texto: string): Promise<SugestaoDesdobrada[]> {
-  const res = await send<{ sugestao: { sugestoes?: SugestaoDesdobrada[] } }>('/ia/sugerir', {
-    tipo: `desdobrar_${nivel}`,
-    texto,
-  })
+  const res = await pedirIA<{ sugestao: { sugestoes?: SugestaoDesdobrada[] } }>({ tipo: `desdobrar_${nivel}`, texto })
   const lista = Array.isArray(res.sugestao?.sugestoes) ? res.sugestao.sugestoes : []
   return lista.filter((x) => x && typeof x.titulo === 'string' && x.titulo.trim()).slice(0, 6)
 }
 
 /** Correção gentil: confere se um texto é mesmo um resultado (não grava nada). */
 export async function conferirResultado(texto: string): Promise<{ e: string; por_que: string }> {
-  const res = await send<{ sugestao: { e?: string; por_que?: string } }>('/ia/sugerir', {
-    tipo: 'conferir_resultado',
-    texto,
-  })
+  const res = await pedirIA<{ sugestao: { e?: string; por_que?: string } }>({ tipo: 'conferir_resultado', texto }, true)
   return { e: String(res.sugestao?.e || ''), por_que: String(res.sugestao?.por_que || '') }
 }
 

@@ -39,6 +39,8 @@ Toda ficha mora embaixo do Mapa e tem endereço próprio (`src/lib/pegada/endere
 
 A ficha (`src/components/Ficha.tsx`) tem sempre três zonas, na ordem da escada: "Para quê" em cima, o item no meio e "Como" embaixo. No celular ela ocupa a tela, com a seta de voltar. No computador ela abre ao lado, e o Mapa continua à vista. Os catálogos antigos (`/resultados`, `/responsabilidades`, `/avancos`) não existem mais: os endereços levam ao Mapa ou à ficha do item.
 
+Toda ficha tem a mesma tríade de ícones, na mesma ordem (`src/components/Triade.tsx`): editar, arquivar e excluir. No avanço, arquivar é cancelar. Excluir mostra o que vai junto (tudo o que está embaixo) e manda para a Lixeira (`/lixeira`, no menu da conta). Na Lixeira dá para restaurar, excluir de vez só o que for marcado, ou esvaziar tudo. Só excluir de vez não tem volta.
+
 Criar o que já tem lugar é sempre pelo "Adicionar" embaixo do item (`AdicionarNoLugar.tsx`). O tipo vem do degrau. No Mapa, o ponto ao lado de cada avanço escolhe o dia: laranja quer dizer que está em Hoje.
 
 ## As onze regras

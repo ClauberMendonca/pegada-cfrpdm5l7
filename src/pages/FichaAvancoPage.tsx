@@ -2,7 +2,7 @@
 // Em cima, a que ele serve (o fio). No meio, o avanço e o que fazer com ele.
 // Embaixo, o que ajuda a fazer: material de referência e notas.
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
@@ -10,6 +10,7 @@ import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { Referencias } from '@/components/Referencias'
 import { TimeControl } from '@/components/TimeControlCompact'
 import { Ficha, FichaNaoEncontrada } from '@/components/Ficha'
+import { Triade } from '@/components/Triade'
 import type { Degrau } from '@/components/Trilha'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTimer } from '@/contexts/TimeContext'
@@ -26,6 +27,7 @@ export function FichaAvancoPage() {
   const { id } = useParams()
   const { user } = useAuth()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const { revision } = useTimer()
   const [avanco, setAvanco] = useState<ActionItem | null>(null)
   const [estado, setEstado] = useState<'carregando' | 'pronto' | 'nao-achou'>('carregando')
@@ -202,6 +204,21 @@ export function FichaAvancoPage() {
                 onChanged={carregarTempos}
               />
             }
+          />
+          <Triade
+            className="mt-3"
+            elemento="avanco"
+            id={avanco.id}
+            titulo={avanco.title}
+            onEditar={() => setEditando(true)}
+            arquivado={avanco.status === 'cancelada'}
+            onArquivar={() =>
+              void gravar('Não foi possível mudar a situação', () =>
+                actionService.updateStatus(avanco.id, avanco.status === 'cancelada' ? 'pronta' : 'cancelada'),
+              )
+            }
+            ocupado={gravando}
+            onExcluido={() => navigate('/mapa')}
           />
         </div>
       </Ficha>

@@ -2,10 +2,11 @@
 // Em cima, o propósito que ela realiza. No meio, a vontade, com Editar e
 // Arquivar. Embaixo, os resultados que nascem dela.
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { Archive, ArchiveRestore, Loader2, Pencil } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { Desdobrar } from '@/components/Desdobrar'
 import { Ficha, FichaNaoEncontrada } from '@/components/Ficha'
+import { Triade } from '@/components/Triade'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,9 +29,6 @@ import { notificarMudanca } from '@/services/actionService'
 import { wishService } from '@/services/wishService'
 import type { Project, Wish } from '@/types/execution'
 
-const BOTAO =
-  'flex h-11 items-center gap-1.5 rounded-full border border-input bg-card px-4 text-sm font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
-
 const SITUACAO: Record<string, string> = {
   rascunho: 'depois',
   futuro: 'depois',
@@ -43,6 +41,7 @@ const SITUACAO: Record<string, string> = {
 export function FichaVontadePage() {
   const { id } = useParams()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [vontade, setVontade] = useState<Wish | null>(null)
   const [resultados, setResultados] = useState<Project[]>([])
   const [estado, setEstado] = useState<'carregando' | 'pronto' | 'nao-achou'>('carregando')
@@ -197,34 +196,22 @@ export function FichaVontadePage() {
             {vontade.description}
           </p>
         ) : null}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={BOTAO}
-            onClick={() => {
-              setTitulo(vontade.title)
-              setDescricao(vontade.description || '')
-              setErro('')
-              setEditando(true)
-            }}
-          >
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-            Editar
-          </button>
-          <button
-            type="button"
-            className={BOTAO}
-            disabled={ocupado}
-            onClick={() => void mudarEstado(arquivada ? 'ativa' : 'arquivada')}
-          >
-            {arquivada ? (
-              <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
-            ) : (
-              <Archive className="h-4 w-4" aria-hidden="true" />
-            )}
-            {arquivada ? 'Reativar' : 'Arquivar'}
-          </button>
-        </div>
+        <Triade
+          className="mt-4"
+          elemento="vontade"
+          id={vontade.id}
+          titulo={vontade.title}
+          onEditar={() => {
+            setTitulo(vontade.title)
+            setDescricao(vontade.description || '')
+            setErro('')
+            setEditando(true)
+          }}
+          arquivado={arquivada}
+          onArquivar={() => void mudarEstado(arquivada ? 'ativa' : 'arquivada')}
+          ocupado={ocupado}
+          onExcluido={() => navigate('/mapa')}
+        />
       </Ficha>
 
       <Dialog open={editando} onOpenChange={setEditando}>

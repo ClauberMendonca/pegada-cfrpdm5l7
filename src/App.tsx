@@ -12,6 +12,7 @@ import { FichaAvancoPage } from '@/pages/FichaAvancoPage'
 import { FichaResultadoPage } from '@/pages/FichaResultadoPage'
 import { FichaResponsabilidadePage } from '@/pages/FichaResponsabilidadePage'
 import { FichaVontadePage } from '@/pages/FichaVontadePage'
+import { LixeiraPage } from '@/pages/LixeiraPage'
 import { fichaDe, type Degrau } from '@/lib/pegada/enderecos'
 import { MapPage } from '@/pages/MapPage'
 import { ReviewPage } from '@/pages/ReviewPage'
@@ -78,6 +79,8 @@ const ProtectedRoutes = () => {
             <Route path="/responsabilidades" element={<RedirecionaFicha degrau="responsabilidade" />} />
             <Route path="/avancos" element={<RedirecionaFicha degrau="avanco" />} />
             <Route path="/acoes" element={<RedirecionaFicha degrau="avanco" />} />
+            {/* O que foi excluído espera na Lixeira, até ser restaurado ou apagado de vez. */}
+            <Route path="/lixeira" element={<LixeiraPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
             {/* Configurações da conta: perfil, fuso e privacidade da IA. */}
             <Route path="/configuracoes" element={<SettingsPage />} />

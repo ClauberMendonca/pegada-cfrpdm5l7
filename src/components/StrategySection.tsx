@@ -22,7 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Archive, ChevronDown, Edit3, Plus, RotateCcw } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
+import { Triade } from '@/components/Triade'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { StrategyModal } from '@/components/StrategyModal'
 import { useProjectStrategies } from '@/hooks/use-project-strategies'
 import { useToast } from '@/hooks/use-toast'
@@ -59,6 +61,8 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
 }) => {
   const { toast } = useToast()
   const strategies = useProjectStrategies(projectId)
+  // Restaurar da Lixeira avisa por aqui: a lista de estratégias volta a ser lida.
+  usePegadaMudou(strategies.reload)
   const helpId = useId()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -269,45 +273,26 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
                     />
                     {isOpen ? 'Ocultar descrição' : 'Ver descrição'}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => openEdit(strategy)}
-                    aria-label={`Editar estratégia ${strategy.title}`}
-                    className="min-h-11 gap-1 text-xs sm:min-h-9"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Editar
-                  </Button>
-                  {isArchived ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => handleSetStatus(strategy, 'ativa')}
-                      aria-label={`Reativar estratégia ${strategy.title}`}
-                      className="min-h-11 gap-1 text-xs sm:min-h-9"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                      Reativar
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => {
+                  <Triade
+                    elemento="estrategia"
+                    id={strategy.id}
+                    titulo={strategy.title}
+                    de={`estratégia ${strategy.title}`}
+                    onEditar={() => openEdit(strategy)}
+                    arquivado={isArchived}
+                    onArquivar={() => {
+                      if (isArchived) void handleSetStatus(strategy, 'ativa')
+                      else {
                         setArchiveError(null)
                         setArchiveTarget(strategy)
-                      }}
-                      aria-label={`Arquivar estratégia ${strategy.title}`}
-                      className="min-h-11 gap-1 text-xs sm:min-h-9"
-                    >
-                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                      Arquivar
-                    </Button>
-                  )}
+                      }
+                    }}
+                    ocupado={busy}
+                    onExcluido={() => {
+                      strategies.reload()
+                      onAvancosCriados?.()
+                    }}
+                  />
                 </div>
                 {isOpen && (
                   <p

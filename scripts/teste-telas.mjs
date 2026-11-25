@@ -700,10 +700,52 @@ if (process.env.PEGADA_TESTE_IA) {
   })
 }
 
+// 14b. Excluir manda para a Lixeira; de lá, restaura ou apaga de vez
+await passo('excluir e Lixeira', async () => {
+  const vontadeX = T('Vontade para excluir')
+  const resultadoX = T('Resultado que vai junto')
+  await ir('/mapa')
+  await adicionarEm(arvore().locator('[data-ramo="vontades"]'), 'Vontades', { texto: vontadeX, contexto: 'vida' })
+  await adicionarEm(noDoMapa('vontade', vontadeX), vontadeX, { prazo: '2027-08-31', texto: resultadoX })
+  await noDoMapa('vontade', vontadeX).getByRole('link', { name: new RegExp(vontadeX) }).first().click()
+  await ficha().getByRole('heading', { name: vontadeX }).waitFor()
+  const nomesDaTriade = await ficha().locator('[data-zona="item"] [data-triade] button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))
+  confere('a ficha tem a tríade de ícones: editar, arquivar e excluir', nomesDaTriade.join(',') === 'Editar,Arquivar,Excluir', nomesDaTriade.join(','))
+  await ficha().locator('[data-zona="item"]').getByRole('button', { name: 'Excluir', exact: true }).click()
+  const aviso = page.locator('[data-confirmar-exclusao]')
+  await aviso.locator('[data-vai-junto]').waitFor()
+  confere('antes de excluir, o Pegada diz o que vai junto', /1 resultado/.test(await aviso.innerText()), await aviso.innerText())
+  await botao('Mandar para a Lixeira', aviso).click()
+  await page.waitForURL(/\/mapa$/)
+  await page.waitForTimeout(800)
+  confere('o excluído some do Mapa', !(await arvore().innerText()).includes(vontadeX))
+  await ir('/lixeira')
+  const lixeira = page.locator('[data-lixeira]')
+  const item = lixeira.locator('[data-item-da-lixeira]').filter({ hasText: vontadeX })
+  confere('a Lixeira guarda o excluído e diz o que foi junto', /com 1 resultado/.test(await item.innerText()), await lixeira.innerText())
+  await item.getByRole('button', { name: new RegExp('^Restaurar') }).click()
+  await item.waitFor({ state: 'detached' })
+  await ir('/mapa')
+  const voltou = await noDoMapa('vontade', vontadeX).innerText()
+  confere('restaurar devolve o item com o que estava embaixo', voltou.includes(vontadeX) && voltou.includes(resultadoX), voltou.slice(0, 200))
+  await noDoMapa('vontade', vontadeX).getByRole('link', { name: new RegExp(vontadeX) }).first().click()
+  await ficha().locator('[data-zona="item"]').getByRole('button', { name: 'Excluir', exact: true }).click()
+  await aviso.locator('[data-vai-junto]').waitFor()
+  await botao('Mandar para a Lixeira', aviso).click()
+  await page.waitForURL(/\/mapa$/)
+  await ir('/lixeira')
+  await item.getByRole('checkbox').check()
+  await botao('Excluir de vez os marcados', lixeira).click()
+  await botao('Excluir de vez', dialogo()).click()
+  await item.waitFor({ state: 'detached' })
+  confere('excluir de vez só o que foi marcado', true)
+  await foto('lixeira')
+})
+
 // 15. Nenhuma tela pode ficar mais larga que o aparelho
 await passo('largura das telas', async () => {
   const largas = []
-  for (const rota of ['/', '/caixa', '/mapa', '/mapa/proposito', enderecoDoResultado || '/mapa', '/historico', '/revisao', '/configuracoes']) {
+  for (const rota of ['/', '/caixa', '/mapa', '/mapa/proposito', enderecoDoResultado || '/mapa', '/historico', '/lixeira', '/revisao', '/configuracoes']) {
     await ir(rota)
     const [sw, cw] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])
     if (sw > cw + 1) largas.push(`${rota} (${sw} em ${cw})`)

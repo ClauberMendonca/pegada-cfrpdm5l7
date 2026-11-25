@@ -12,6 +12,7 @@ import {
   History,
   Settings,
   LogOut,
+  Trash2,
   ChevronDown,
   Check,
 } from 'lucide-react'
@@ -62,6 +63,7 @@ const NAV: ItemNav[] = [
 const CONTA: { to: string; label: string; icon: IconType }[] = [
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
   { to: '/historico', label: 'Histórico', icon: History },
+  { to: '/lixeira', label: 'Lixeira', icon: Trash2 },
 ]
 
 const CONTEXTOS: { id: LifeWorkContext; label: string }[] = [

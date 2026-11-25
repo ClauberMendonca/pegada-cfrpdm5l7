@@ -3,7 +3,8 @@ import { Ficha, Recolhido, FichaNaoEncontrada } from '@/components/Ficha'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
 import { fichaDaResponsabilidade, fichaDaVontade } from '@/lib/pegada/enderecos'
 import { wishService } from '@/services/wishService'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Triade } from '@/components/Triade'
 import { useResponsibilityReference } from '@/hooks/use-responsibility-reference'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { Project, ActionItem, ProgressLog, ActionStatus, ProjectStatus } from '@/types/execution'
@@ -21,7 +22,6 @@ import {
   Plus,
   Flame,
   Trophy,
-  Edit3,
   PauseCircle,
   PlayCircle,
 } from 'lucide-react'
@@ -47,6 +47,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   onProjectUpdated,
 }) => {
   const { toast } = useToast()
+  const navigate = useNavigate()
   // FATIA P1C — fuso de referência para instantes (created/updated) e rótulo "hoje".
   const timeTotals = useProjectTimeTotals(projectId)
   const { running } = useTimer()
@@ -425,10 +426,15 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => setIsProjectModalOpen(true)} className={BOTAO}>
-            <Edit3 className="h-4 w-4" aria-hidden="true" />
-            Editar
-          </button>
+          <Triade
+            elemento="resultado"
+            id={project.id}
+            titulo={project.title}
+            onEditar={() => setIsProjectModalOpen(true)}
+            arquivado={project.status === 'arquivado'}
+            onArquivar={() => handleUpdateProjectStatus(project.status === 'arquivado' ? 'ativo' : 'arquivado')}
+            onExcluido={() => navigate('/mapa')}
+          />
           {project.status === 'ativo' && (
             <button type="button" onClick={() => handleUpdateProjectStatus('pausado')} className={BOTAO}>
               <PauseCircle className="h-4 w-4" aria-hidden="true" />

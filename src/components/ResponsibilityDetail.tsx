@@ -6,19 +6,14 @@
  */
 import { Referencias } from '@/components/Referencias'
 import { Ficha } from '@/components/Ficha'
+import { Triade } from '@/components/Triade'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
 import { fichaDoAvanco, fichaDoResultado } from '@/lib/pegada/enderecos'
 import { Desdobrar } from '@/components/Desdobrar'
 import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import {
-  AlertCircle,
-  Archive,
-  ArchiveRestore,
-  Pencil,
-  Loader2,
-} from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -57,6 +52,7 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
 }) => {
   const { toast } = useToast()
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [hierarchy, setHierarchy] = useState<ResponsibilityHierarchy | null>(null)
   const [hierarchyLoading, setHierarchyLoading] = useState(true)
@@ -123,9 +119,6 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
 
   const totalProjects = hierarchy?.projects.length ?? 0
   const directCount = hierarchy?.directActions.length ?? 0
-  const BOTAO =
-    'flex h-11 items-center gap-1.5 rounded-full border border-input bg-card px-4 text-sm font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
-
   return (
     <>
       <Ficha
@@ -230,28 +223,17 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
             {globalContext === 'trabalho' ? 'Trabalho' : 'Vida'}.
           </p>
         )}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={onEdit} className={BOTAO}>
-            <Pencil className="h-4 w-4" aria-hidden="true" />
-            Editar
-          </button>
-          {archived ? (
-            <button type="button" onClick={() => changeStatus('ativa')} disabled={statusBusy} className={BOTAO}>
-              <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
-              Reativar
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setArchiveConfirmOpen(true)}
-              disabled={statusBusy}
-              className={BOTAO}
-            >
-              <Archive className="h-4 w-4" aria-hidden="true" />
-              Arquivar
-            </button>
-          )}
-        </div>
+        <Triade
+          className="mt-4"
+          elemento="responsabilidade"
+          id={responsibility.id}
+          titulo={responsibility.title}
+          onEditar={onEdit}
+          arquivado={archived}
+          onArquivar={() => (archived ? void changeStatus('ativa') : setArchiveConfirmOpen(true))}
+          ocupado={statusBusy}
+          onExcluido={() => navigate('/mapa')}
+        />
       </Ficha>
 
       {/* Confirmação curta de arquivamento — grava só no confirmar */}

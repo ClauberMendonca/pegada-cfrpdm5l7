@@ -164,6 +164,132 @@ function pegadaRota(e) {
         changes.push({ c: collection, id: rec.id, k: 'update', before: before, after: after })
         return rec
       },
+      // Exclusão física: sai do banco e não volta. O evento guarda só o nome.
+      remove: function (rec) {
+        var collection = rec.collection().name
+        var before = {}
+        var nome = rec.getString('title') || rec.getString('note')
+        if (nome) before.title = String(nome).slice(0, 200)
+        var id = rec.id
+        app.delete(rec)
+        changes.push({ c: collection, id: id, k: 'delete', before: before, after: {} })
+      },
+    }
+  }
+
+  // ---------------------------------------------------------------- excluir
+
+  var EXCLUIVEIS = {
+    vontade: ['wishes', 'Vontade'],
+    responsabilidade: ['responsibilities', 'Responsabilidade'],
+    resultado: ['projects', 'Resultado'],
+    estrategia: ['strategies', 'Estratégia'],
+    avanco: ['actions', 'Avanço'],
+  }
+
+  function todos(app, collection, filter, params) {
+    return app.findRecordsByFilter(collection, filter, '', 0, 0, params)
+  }
+
+  /**
+   * Tudo o que está embaixo de um elemento, na ordem da escada. Devolve os
+   * registros a apagar e a contagem que a pessoa vê antes de confirmar.
+   */
+  function abaixoDe(app, userId, elemento, id) {
+    var def = EXCLUIVEIS[elemento]
+    if (!def)
+      throw rule(
+        'ELEMENTO_INVALIDO',
+        'elemento deve ser vontade, responsabilidade, resultado, estrategia ou avanco.',
+      )
+    var raiz
+    if (elemento === 'estrategia') {
+      try {
+        raiz = app.findRecordById('strategies', id)
+      } catch (_) {
+        throw new NotFoundError('Estratégia não encontrado(a): ' + id)
+      }
+      findOwned(app, 'projects', raiz.getString('project_id'), userId, 'Estratégia')
+    } else raiz = findOwned(app, def[0], id, userId, def[1])
+
+    var projetos = []
+    var estrategias = []
+    var avancos = []
+    var visto = {}
+    var juntaAvancos = function (lista) {
+      for (var i = 0; i < lista.length; i++)
+        if (!visto[lista[i].id]) {
+          visto[lista[i].id] = true
+          avancos.push(lista[i])
+        }
+    }
+    if (elemento === 'vontade')
+      projetos = todos(app, 'projects', 'user_id = {:u} && wish_id = {:id}', { u: userId, id: id })
+    if (elemento === 'responsabilidade') {
+      projetos = todos(app, 'projects', 'user_id = {:u} && responsibility_id = {:id}', { u: userId, id: id })
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && responsibility_id = {:id}', { u: userId, id: id }))
+    }
+    if (elemento === 'resultado') projetos = [raiz]
+    for (var p = 0; p < projetos.length; p++) {
+      estrategias = estrategias.concat(todos(app, 'strategies', 'project_id = {:id}', { id: projetos[p].id }))
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && project_id = {:id}', { u: userId, id: projetos[p].id }))
+    }
+    if (elemento === 'estrategia') {
+      estrategias = [raiz]
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && strategy_id = {:id}', { u: userId, id: id }))
+    }
+    if (elemento === 'avanco') juntaAvancos([raiz])
+
+    // O que vai junto, preso a cada item: notas, tempo registrado e anexos.
+    var notas = []
+    var tempos = []
+    var anexos = []
+    var vistoExtra = {}
+    var junta = function (alvo, lista) {
+      for (var i = 0; i < lista.length; i++)
+        if (!vistoExtra[lista[i].id]) {
+          vistoExtra[lista[i].id] = true
+          alvo.push(lista[i])
+        }
+    }
+    var anexosDe = function (tipo, eid) {
+      junta(anexos, todos(app, 'references', 'user_id = {:u} && element_type = {:t} && element_id = {:id}', { u: userId, t: tipo, id: eid }))
+    }
+    for (var a = 0; a < avancos.length; a++) {
+      junta(notas, todos(app, 'progress_logs', 'action_id = {:id}', { id: avancos[a].id }))
+      junta(tempos, todos(app, 'time_entries', 'action_id = {:id}', { id: avancos[a].id }))
+      anexosDe('avanco', avancos[a].id)
+    }
+    for (var e = 0; e < estrategias.length; e++) anexosDe('estrategia', estrategias[e].id)
+    for (var q = 0; q < projetos.length; q++) {
+      junta(notas, todos(app, 'progress_logs', 'project_id = {:id}', { id: projetos[q].id }))
+      junta(tempos, todos(app, 'time_entries', 'project_id = {:id}', { id: projetos[q].id }))
+      anexosDe('resultado', projetos[q].id)
+    }
+    if (elemento === 'responsabilidade') anexosDe('responsabilidade', id)
+
+    var proprio = function (lista) {
+      var n = 0
+      for (var i = 0; i < lista.length; i++) if (lista[i].id !== raiz.id) n++
+      return n
+    }
+    return {
+      raiz: raiz,
+      nome: def[1],
+      projetos: projetos,
+      estrategias: estrategias,
+      avancos: avancos,
+      notas: notas,
+      tempos: tempos,
+      anexos: anexos,
+      abaixo: {
+        resultados: proprio(projetos),
+        estrategias: proprio(estrategias),
+        avancos: proprio(avancos),
+        notas: notas.length,
+        tempos: tempos.length,
+        anexos: anexos.length,
+      },
     }
   }
 
@@ -2015,6 +2141,218 @@ function pegadaRota(e) {
     },
   }
 
+  var S_EXCLUIR = {
+    type: 'object',
+    required: ['elemento', 'id'],
+    properties: {
+      elemento: { type: 'string', enum: ['vontade', 'responsabilidade', 'resultado', 'estrategia', 'avanco'] },
+      id: S_ID,
+    },
+  }
+
+  OPS.ver_o_que_sai = {
+    scope: 'dono',
+    title: 'Ver o que sai junto ao excluir',
+    description:
+      'Conta o que está embaixo de um elemento e seria apagado junto com ele: resultados, estratégias, avanços, notas, tempo registrado e anexos. Não muda nada.',
+    schema: S_EXCLUIR,
+    run: function (ctx, input) {
+      var t = abaixoDe(ctx.app, ctx.userId, str(input.elemento), str(input.id))
+      return { elemento: str(input.elemento), id: t.raiz.id, titulo: t.raiz.getString('title'), abaixo: t.abaixo }
+    },
+  }
+
+  // Cópia fiel de uma linha, pronta para voltar ao banco como estava.
+  function copiaDaLinha(rec) {
+    var fields = rec.collection().fields
+    var row = {}
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i]
+      var n = f.name
+      var t = f.type()
+      if (t === 'bool') row[n] = rec.getBool(n)
+      else if (t === 'number') row[n] = rec.getFloat(n)
+      else row[n] = rec.getString(n)
+    }
+    return row
+  }
+
+  // Quem cada linha precisa encontrar ao voltar. true = não volta sem ele.
+  var PAIS = {
+    projects: { responsibility_id: ['responsibilities', false], wish_id: ['wishes', false] },
+    strategies: { project_id: ['projects', true] },
+    actions: {
+      project_id: ['projects', false],
+      strategy_id: ['strategies', false],
+      responsibility_id: ['responsibilities', false],
+    },
+    progress_logs: { project_id: ['projects', false], action_id: ['actions', false] },
+    time_entries: { project_id: ['projects', false], action_id: ['actions', false] },
+  }
+
+  function lixoDoDono(app, userId, id) {
+    return findOwned(app, 'trash', id, userId, 'Item da Lixeira')
+  }
+
+  function lixoView(r) {
+    return {
+      id: r.id,
+      elemento: r.getString('element_type'),
+      titulo: r.getString('title'),
+      abaixo: jsonField(r, 'counts', {}),
+      excluido_em: r.getString('created'),
+    }
+  }
+
+  OPS.excluir = {
+    scope: 'dono',
+    write: true,
+    title: 'Excluir (vai para a Lixeira)',
+    description:
+      'Tira do Pegada uma vontade, responsabilidade, resultado, estratégia ou avanço, junto com tudo o que está embaixo, e guarda na Lixeira. De lá o dono restaura ou exclui de vez. Só o dono faz, nunca um agente.',
+    schema: S_EXCLUIR,
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente')
+        throw new ForbiddenError('Só o dono exclui. Um agente pode arquivar ou propor.')
+      var elemento = str(input.elemento)
+      var t = abaixoDe(ctx.app, ctx.userId, elemento, str(input.id))
+      var k
+      for (k = 0; k < t.avancos.length; k++) {
+        var av = t.avancos[k]
+        var series = ctx.app.countRecords('recurrence_series', $dbx.hashExp({ source_action_id: av.id }))
+        if (av.getString('recurrence_series_id') || series > 0)
+          throw rule(
+            'AVANCO_DE_SERIE',
+            'O avanço ' + label(av) + ' faz parte de uma série que se repete. Encerre a série antes de excluir.',
+          )
+      }
+      for (k = 0; k < t.tempos.length; k++)
+        if (t.tempos[k].getString('status') === 'running')
+          throw rule('RELOGIO_LIGADO', 'O relógio está contando tempo aqui. Pare o relógio antes de excluir.')
+
+      // Ordem de volta: primeiro quem está em cima, depois quem depende dele.
+      var titulo = t.raiz.getString('title')
+      var topo = elemento === 'vontade' || elemento === 'responsabilidade' ? [t.raiz] : []
+      var grupos = [topo, t.projetos, t.estrategias, t.avancos, t.notas, t.tempos, t.anexos]
+      var linhas = []
+      for (var g = 0; g < grupos.length; g++)
+        for (k = 0; k < grupos[g].length; k++)
+          linhas.push({ c: grupos[g][k].collection().name, row: copiaDaLinha(grupos[g][k]) })
+      var lixo = ctx.create('trash', {
+        element_type: elemento,
+        element_id: t.raiz.id,
+        title: titulo,
+        counts: t.abaixo,
+        payload: linhas,
+      })
+      // Saída do banco: de baixo para cima.
+      for (g = grupos.length - 1; g >= 0; g--)
+        for (k = 0; k < grupos[g].length; k++) ctx.remove(grupos[g][k])
+      var junto = t.abaixo.resultados + t.abaixo.estrategias + t.abaixo.avancos
+      return {
+        resumo:
+          'Mandou para a Lixeira ' +
+          (elemento === 'avanco' ? 'o avanço' : elemento === 'resultado' ? 'o resultado' : 'a ' + t.nome.toLowerCase()) +
+          ' "' + titulo + '"' +
+          (junto ? ' e ' + junto + (junto === 1 ? ' item' : ' itens') + ' abaixo' : ''),
+        lixeira_id: lixo.id,
+        abaixo: t.abaixo,
+      }
+    },
+  }
+
+  OPS.ver_lixeira = {
+    scope: 'dono',
+    title: 'Ver a Lixeira',
+    description: 'Lista o que foi excluído e ainda pode ser restaurado, do mais recente para o mais antigo.',
+    schema: { type: 'object', properties: {} },
+    run: function (ctx) {
+      var rs = ctx.app.findRecordsByFilter('trash', 'user_id = {:u}', '-created', 0, 0, { u: ctx.userId })
+      return { itens: rs.map(lixoView) }
+    },
+  }
+
+  OPS.restaurar = {
+    scope: 'dono',
+    write: true,
+    title: 'Restaurar da Lixeira',
+    description:
+      'Devolve ao Pegada um item excluído, com tudo o que foi junto. Se o lugar de onde ele veio não existe mais, ele volta solto. Só o dono faz.',
+    schema: { type: 'object', required: ['lixeira_id'], properties: { lixeira_id: S_ID } },
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente') throw new ForbiddenError('Só o dono restaura.')
+      var lixo = lixoDoDono(ctx.app, ctx.userId, str(input.lixeira_id))
+      var linhas = jsonField(lixo, 'payload', [])
+      var dentro = {}
+      var k
+      for (k = 0; k < linhas.length; k++) dentro[linhas[k].c + ':' + linhas[k].row.id] = true
+      var existe = function (c, id) {
+        return !!dentro[c + ':' + id] || !!safeFind(ctx.app, c, id)
+      }
+      var ativos = ctx.app.countRecords('projects', $dbx.hashExp({ user_id: ctx.userId, status: 'ativo' }))
+      var avisos = []
+      for (k = 0; k < linhas.length; k++) {
+        var c = linhas[k].c
+        var row = linhas[k].row
+        if (row.user_id !== ctx.userId) throw new ForbiddenError('Este item não é seu.')
+        if (safeFind(ctx.app, c, row.id)) continue
+        var pais = PAIS[c] || {}
+        for (var campo in pais) {
+          if (!row[campo] || existe(pais[campo][0], row[campo])) continue
+          if (pais[campo][1])
+            throw rule(
+              'SEM_LUGAR_PARA_VOLTAR',
+              'O resultado desta estratégia não existe mais. Restaure o resultado primeiro.',
+            )
+          row[campo] = ''
+          if (c === 'projects' || c === 'actions') avisos.push(row.title)
+        }
+        if (c === 'projects' && row.status === 'ativo') {
+          if (ativos >= MAX_ACTIVE_RESULTS) row.status = 'futuro'
+          else ativos++
+        }
+        if (c === 'actions') {
+          row.is_next_step = false
+          row.is_today_selected = false
+        }
+        ctx.app.db().insert(c, row).execute()
+        ctx.changes.push({ c: c, id: row.id, k: 'restore', before: {}, after: {} })
+      }
+      var titulo = lixo.getString('title')
+      ctx.app.delete(lixo)
+      return {
+        resumo: 'Restaurou da Lixeira "' + titulo + '"',
+        elemento: lixo.getString('element_type'),
+        id: lixo.getString('element_id'),
+        voltaram_soltos: avisos,
+      }
+    },
+  }
+
+  OPS.esvaziar_lixeira = {
+    scope: 'dono',
+    write: true,
+    title: 'Excluir de vez da Lixeira',
+    description:
+      'Apaga para sempre o que está na Lixeira: tudo, ou só os itens informados em "ids". Não tem volta. Só o dono faz.',
+    schema: {
+      type: 'object',
+      properties: { ids: { type: 'array', items: S_ID, description: 'sem ids, esvazia a Lixeira inteira' } },
+    },
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente') throw new ForbiddenError('Só o dono exclui de vez.')
+      var alvo = []
+      if (Array.isArray(input.ids) && input.ids.length) {
+        for (var i = 0; i < input.ids.length; i++) alvo.push(lixoDoDono(ctx.app, ctx.userId, str(input.ids[i])))
+      } else alvo = ctx.app.findRecordsByFilter('trash', 'user_id = {:u}', '', 0, 0, { u: ctx.userId })
+      for (var k = 0; k < alvo.length; k++) ctx.remove(alvo[k])
+      return {
+        resumo: 'Excluiu de vez ' + alvo.length + (alvo.length === 1 ? ' item' : ' itens') + ' da Lixeira',
+        excluidos: alvo.length,
+      }
+    },
+  }
+
   function clearMain(ctx, exceptId) {
     var mains = ctx.app.findRecordsByFilter(
       'actions',
@@ -2309,6 +2647,9 @@ function pegadaRota(e) {
       if (ev.getString('op') === 'desfazer')
         throw conflict('Não é possível desfazer um desfazer. Refaça a operação original.')
       var changes = jsonField(ev, 'changes', [])
+      for (var d = 0; d < changes.length; d++)
+        if (changes[d].k === 'delete' || changes[d].k === 'restore')
+          throw conflict('Isto se resolve na Lixeira: restaure o item por lá.')
       var ctx = makeCtx(tx, { type: actor.type, userId: actor.userId, agent: actor.agent })
       for (var i = changes.length - 1; i >= 0; i--) {
         var ch = changes[i]

@@ -15,6 +15,7 @@ const LUGARES: { prefixo: string; lugar: Lugar }[] = [
   { prefixo: '/caixa', lugar: { destino: 'caixa', titulo: 'Caixa' } },
   { prefixo: '/revisao', lugar: { destino: 'revisao', titulo: 'Revisão' } },
   { prefixo: '/historico', lugar: { destino: 'conta', titulo: 'Histórico' } },
+  { prefixo: '/lixeira', lugar: { destino: 'conta', titulo: 'Lixeira' } },
   { prefixo: '/configuracoes', lugar: { destino: 'conta', titulo: 'Configurações' } },
 ]
 

@@ -6,6 +6,17 @@ import http from 'node:http'
 
 const PORTA = Number(process.env.SIMULADOR_PORTA || 8787)
 
+// A resposta muda conforme o tipo de sugestão pedido, lido da instrução enviada.
+function respostaPara(pedido) {
+  if (pedido.includes('Classifique a captura'))
+    return { destino: 'avanco', tipo: 'acao', titulo: 'Pedir o relatório de caixa', por_que: 'É algo a fazer.' }
+  if (pedido.includes('Reescreva como AVANÇO'))
+    return { titulo: 'Estudar a planilha de treino', tipo: 'estudo', por_que: 'Começa por verbo.' }
+  if (pedido.includes('frase de propósito'))
+    return { texto: 'Eu existo para cuidar de quem amo, para que todos cresçam.', por_que: 'Formato do método.' }
+  return { titulo: 'Correr 10 km em menos de uma hora', prazo: '', por_que: 'Um estado verificável.' }
+}
+
 http
   .createServer((req, res) => {
     let corpo = ''
@@ -35,7 +46,7 @@ http
           stop_reason: 'end_turn',
           content: [
             { type: 'thinking', thinking: '', signature: 'x' },
-            { type: 'text', text: '{"titulo": "Correr 10 km em menos de uma hora", "prazo": "", "por_que": "Um estado verificável."}' },
+            { type: 'text', text: JSON.stringify(respostaPara(JSON.stringify(pedido))) },
           ],
           usage: { input_tokens: 10, output_tokens: 20 },
         }),

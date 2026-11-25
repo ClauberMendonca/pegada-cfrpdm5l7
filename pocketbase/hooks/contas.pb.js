@@ -213,8 +213,37 @@ function contaRota(e) {
       throw new BadRequestError('Senha incorreta. A conta não foi excluída.')
     if (String(bE.confirmo || '') !== 'EXCLUIR')
       throw new BadRequestError('Digite EXCLUIR para confirmar.')
+    // Resultado compartilhado: o que é da pessoa não some com o trabalho dos outros.
+    var divididos = app.findRecordsByFilter('projects', 'user_id = {:u} && member_ids:length > 0', '', 1, 0, {
+      u: alvoE.id,
+    })
+    if (divididos.length)
+      throw new BadRequestError(
+        'Você tem resultados compartilhados com outras pessoas. Tire as pessoas deles antes de excluir a conta.',
+      )
     var nomesE = colecoesDaPessoa()
     app.runInTransaction(function (tx) {
+      // Nos resultados dos outros, o que estava com a pessoa volta para quem criou.
+      var deOutros = tx.findRecordsByFilter('projects', 'member_ids ~ {:u} && user_id != {:u}', '', 0, 0, {
+        u: alvoE.id,
+      })
+      for (var oi = 0; oi < deOutros.length; oi++) {
+        var pr = deOutros[oi]
+        tx.db()
+          .newQuery(
+            "UPDATE actions SET user_id = {:dono}, delegated_by = '', is_next_step = 0, is_today_selected = 0 WHERE project_id = {:p} AND user_id = {:u}",
+          )
+          .bind({ dono: pr.getString('user_id'), p: pr.id, u: alvoE.id })
+          .execute()
+        pr.set(
+          'member_ids',
+          pr.getStringSlice('member_ids').filter(function (m) {
+            return m !== alvoE.id
+          }),
+        )
+        tx.save(pr)
+      }
+      tx.db().newQuery("UPDATE actions SET delegated_by = '' WHERE delegated_by = {:u}").bind({ u: alvoE.id }).execute()
       for (var ei = 0; ei < nomesE.length; ei++) {
         tx.db()
           .newQuery('DELETE FROM `' + nomesE[ei] + '` WHERE user_id = {:u}')

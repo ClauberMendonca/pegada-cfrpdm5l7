@@ -241,6 +241,224 @@ async function contas({ t, suToken, donoId, login2 }) {
   )
 }
 
+// Resultado compartilhado, delegação e avisos: três pessoas, um resultado.
+async function compartilhado({ suToken }) {
+  const senha = 'Teste-' + Math.random().toString(36).slice(2) + '-9Z'
+  const cria = async (apelido, nome) => {
+    const email = apelido + '-' + Date.now() + '@pegada.teste'
+    const c = await http('POST', '/api/collections/users/records', {
+      token: suToken,
+      body: { email, name: nome, password: senha, passwordConfirm: senha, verified: true, timezone: 'America/Sao_Paulo' },
+    })
+    const l = await http('POST', '/api/collections/users/auth-with-password', { body: { identity: email, password: senha } })
+    const token = l.json?.token
+    return {
+      id: c.json?.id,
+      email,
+      token,
+      op: (nome, entrada = {}) => http('POST', '/backend/v1/pegada/op/' + nome, { token, body: entrada }),
+      ler: (colecao, filtro = '') =>
+        http('GET', '/api/collections/' + colecao + '/records?perPage=200' + (filtro ? '&filter=' + encodeURIComponent(filtro) : ''), { token }),
+    }
+  }
+  const ana = await cria('ana', 'Ana Dona')
+  const bia = await cria('bia', 'Bia Colega')
+  const caio = await cria('caio', 'Caio de Fora')
+
+  await ana.op('definir_proposito', { texto: 'Eu existo para construir coisas que duram.' })
+  const respAna = acharId((await ana.op('criar_responsabilidade', { titulo: 'Segredo da Ana', contexto: 'trabalho', escolhida_por: 'mim' })).json?.resultado)
+  const res = await ana.op('criar_resultado', { titulo: 'Loja no ar', prazo: emDias(45), contexto: 'trabalho', responsabilidade_id: respAna })
+  const resId = acharId(res.json?.resultado)
+  const estId = acharId((await ana.op('criar_estrategia', { resultado_id: resId, titulo: 'Lançar pequeno' })).json?.resultado)
+  const avAna = acharId((await ana.op('criar_avanco', { titulo: 'Escolher a plataforma', tipo: 'acao', estrategia_id: estId })).json?.resultado)
+  const avSolto = acharId((await ana.op('criar_avanco', { titulo: 'Coisa só da Ana', tipo: 'acao' })).json?.resultado)
+
+  // --- convite ---
+  const semConta = await ana.op('compartilhar_resultado', { resultado_id: resId, email: 'ninguem-' + Date.now() + '@pegada.teste' })
+  confere('compartilhar: e-mail sem conta é recusado', semConta.status >= 400, semConta)
+  const deFora = await bia.op('compartilhar_resultado', { resultado_id: resId, email: caio.email })
+  confere('compartilhar: quem não é dono não convida', deFora.status >= 400, deFora)
+  const convite = await ana.op('compartilhar_resultado', { resultado_id: resId, email: bia.email.toUpperCase() })
+  const conviteId = convite.json?.resultado?.convite_id
+  confere('compartilhar: a dona convida pelo e-mail', convite.status === 200 && conviteId, convite)
+  const duplo = await ana.op('compartilhar_resultado', { resultado_id: resId, email: bia.email })
+  confere('compartilhar: convite repetido é recusado', duplo.status >= 400, duplo)
+  const antes = await bia.ler('projects')
+  confere('compartilhar: convidada ainda não lê o resultado', antes.status === 200 && (antes.json?.items || []).length === 0, antes)
+  const avisosBia = await bia.op('listar_avisos')
+  confere(
+    'avisos: o convite aparece para a convidada',
+    avisosBia.json?.resultado?.novos === 1 && avisosBia.json?.resultado?.convites?.[0]?.resultado?.titulo === 'Loja no ar',
+    avisosBia,
+  )
+  const alheioConv = await caio.op('responder_convite', { convite_id: conviteId, aceitar: true })
+  confere('compartilhar: ninguém responde ao convite de outra pessoa', alheioConv.status >= 400, alheioConv)
+  const respBia = acharId((await bia.op('criar_responsabilidade', { titulo: 'Renda da Bia', contexto: 'trabalho', escolhida_por: 'mim' })).json?.resultado)
+  const porqueAlheio = await bia.op('responder_convite', { convite_id: conviteId, aceitar: true, responsabilidade_id: respAna })
+  confere('compartilhar: o porquê tem de ser da própria pessoa', porqueAlheio.status >= 400, porqueAlheio)
+  const aceita = await bia.op('responder_convite', { convite_id: conviteId, aceitar: true, responsabilidade_id: respBia })
+  confere('compartilhar: a convidada aceita com o seu porquê', aceita.status === 200 && aceita.json?.resultado?.aceito === true, aceita)
+
+  // --- leitura: o que é do resultado aparece; o que é da pessoa, não ---
+  const projBia = await bia.ler('projects')
+  confere('leitura: participante lê o resultado', (projBia.json?.items || []).some((p) => p.id === resId), projBia)
+  const estBia = await bia.ler('strategies')
+  confere('leitura: participante lê as estratégias', (estBia.json?.items || []).some((s) => s.id === estId), estBia)
+  const actBia = await bia.ler('actions')
+  const idsBia = (actBia.json?.items || []).map((a) => a.id)
+  confere('leitura: participante lê os avanços do resultado e só eles', idsBia.includes(avAna) && !idsBia.includes(avSolto), actBia)
+  const respsBia = await bia.ler('responsibilities')
+  confere('leitura: responsabilidades da dona seguem invisíveis', (respsBia.json?.items || []).every((r) => r.id !== respAna), respsBia)
+  const usersBia = await bia.ler('users')
+  confere('leitura: participante não lê o propósito nem o cadastro da dona', !JSON.stringify(usersBia.json || {}).includes('coisas que duram'), usersBia)
+  const mapaBia = await bia.op('ver_mapa')
+  const noMapa = (mapaBia.json?.resultado?.resultados || []).find((r) => r.id === resId)
+  confere(
+    'mapa: o resultado entra no mapa da participante sob o porquê DELA',
+    noMapa && noMapa.meu === false && noMapa.responsabilidade_id === respBia && noMapa.dono?.nome === 'Ana Dona' && !JSON.stringify(mapaBia.json).includes('Segredo da Ana'),
+    mapaBia,
+  )
+  const mapaAna = await ana.op('ver_mapa')
+  const noMapaAna = (mapaAna.json?.resultado?.resultados || []).find((r) => r.id === resId)
+  confere('mapa: para a dona o resultado segue sob o porquê dela', noMapaAna?.responsabilidade_id === respAna && noMapaAna?.compartilhado === true && !JSON.stringify(mapaAna.json).includes('Renda da Bia'), mapaAna)
+  const projCaio = await caio.ler('projects')
+  const actCaio = await caio.ler('actions')
+  const estCaio = await caio.ler('strategies')
+  const vincCaio = await caio.ler('result_members')
+  confere(
+    'isolamento: quem não participa não lê nada do resultado',
+    [projCaio, actCaio, estCaio, vincCaio].every((r) => r.status === 200 && (r.json?.items || []).length === 0),
+    { projCaio, actCaio },
+  )
+  const direto = await http('GET', '/api/collections/projects/records/' + resId, { token: caio.token })
+  confere('isolamento: nem pelo id', direto.status === 404, direto)
+  const escritaDireta = await http('PATCH', '/api/collections/projects/records/' + resId, { token: bia.token, body: { title: 'invadido', member_ids: [bia.id, caio.id] } })
+  confere('isolamento: participante não escreve direto no banco', escritaDireta.status >= 400, escritaDireta)
+  const vincDireto = await http('POST', '/api/collections/result_members/records', { token: caio.token, body: { project_id: resId, user_id: caio.id, status: 'ativo' } })
+  confere('isolamento: ninguém se inclui em um resultado', vincDireto.status >= 400, vincDireto)
+
+  // --- trabalho lado a lado ---
+  const editaRes = await bia.op('editar_resultado', { resultado_id: resId, titulo: 'outro' })
+  confere('papéis: só a dona muda o estado e o prazo do resultado', editaRes.status >= 400, editaRes)
+  const estNova = await bia.op('criar_estrategia', { resultado_id: resId, titulo: 'Vender para conhecidos' })
+  const estNovaId = acharId(estNova.json?.resultado)
+  confere('lado a lado: participante cria estratégia', estNova.status === 200 && estNovaId, estNova)
+  const avBia = await bia.op('criar_avanco', { titulo: 'Listar dez conhecidos', tipo: 'acao', estrategia_id: estNovaId, para_hoje: true })
+  const avBiaId = acharId(avBia.json?.resultado)
+  confere('lado a lado: participante cria avanço com o SEU fio', avBia.status === 200 && avBia.json?.resultado?.fio?.responsabilidade?.id === respBia, avBia)
+  const hojeAna = await ana.op('ver_fio_de_hoje')
+  confere('hoje: o avanço da colega não entra no Hoje da dona', !JSON.stringify(hojeAna.json).includes('Listar dez conhecidos'), hojeAna)
+  const listaAna = await ana.op('listar_avancos', { resultado_id: resId })
+  const daBia = (listaAna.json?.resultado?.avancos || []).find((a) => a.id === avBiaId)
+  confere(
+    'lado a lado: a dona vê o avanço da colega, com o nome e sem o porquê dela',
+    daBia?.responsavel?.nome === 'Bia Colega' && daBia?.fio?.responsabilidade?.id === respAna && !JSON.stringify(listaAna.json).includes('Renda da Bia'),
+    listaAna,
+  )
+  const mexeAlheio = await ana.op('editar_avanco', { avanco_id: avBiaId, titulo: 'mexi' })
+  confere('papéis: cada avanço é editado por quem está com ele', mexeAlheio.status >= 400, mexeAlheio)
+  const est1 = await bia.ler('strategies', "id = '" + estId + "'")
+  const versao = est1.json?.items?.[0]?.updated
+  const edAna = await ana.op('editar_estrategia', { estrategia_id: estId, titulo: 'Lançar bem pequeno', versao })
+  const edBia = await bia.op('editar_estrategia', { estrategia_id: estId, titulo: 'Lançar grande', versao })
+  confere('sem conflito: edição sobre versão antiga da estratégia é recusada', edAna.status === 200 && edBia.status === 409, { edAna, edBia })
+
+  // --- delegação ---
+  const passaFora = await ana.op('passar_avanco', { avanco_id: avAna, pessoa_id: caio.id })
+  confere('delegação: só para quem participa do resultado', passaFora.status >= 400, passaFora)
+  const passaSolto = await ana.op('passar_avanco', { avanco_id: avSolto, pessoa_id: bia.id })
+  confere('delegação: avanço sem resultado não se passa', passaSolto.status >= 400, passaSolto)
+  const passa = await ana.op('passar_avanco', { avanco_id: avAna, pessoa_id: bia.id })
+  confere('delegação: a dona passa um avanço', passa.status === 200 && passa.json?.resultado?.responsavel?.nome === 'Bia Colega', passa)
+  const desfaz = await http('POST', '/backend/v1/pegada/desfazer/' + passa.json?.evento_id, { token: ana.token })
+  confere('delegação: não se desfaz pelo botão, só devolvendo ou pegando de volta', desfaz.status >= 400, desfaz)
+  const listaBia = await bia.op('listar_avancos', { resultado_id: resId, so_meus: true })
+  const recebido = (listaBia.json?.resultado?.avancos || []).find((a) => a.id === avAna)
+  confere('delegação: o avanço entra direto na lista de quem recebeu', recebido?.passado_por?.nome === 'Ana Dona', listaBia)
+  const avisos2 = await bia.op('listar_avisos')
+  confere('avisos: quem recebeu é avisado', (avisos2.json?.resultado?.avisos || []).some((a) => a.tipo === 'avanco_recebido' && a.avanco_id === avAna), avisos2)
+  const semana = await ana.op('ver_resumo_semana')
+  confere('delegação: o que passei aparece nas minhas esperas', (semana.json?.resultado?.passados_adiante || []).some((a) => a.id === avAna && a.com?.nome === 'Bia Colega'), semana)
+  const devolve = await bia.op('devolver_avanco', { avanco_id: avAna, motivo: 'Sem acesso à conta' })
+  confere('delegação: quem recebeu devolve com o motivo', devolve.status === 200, devolve)
+  const avisosAna = await ana.op('listar_avisos')
+  confere('avisos: a devolução chega com o motivo', (avisosAna.json?.resultado?.avisos || []).some((a) => a.tipo === 'avanco_devolvido' && a.texto.includes('Sem acesso')), avisosAna)
+  const lidos = await ana.op('marcar_avisos_lidos')
+  const avisosAna2 = await ana.op('listar_avisos')
+  confere('avisos: marcar como lidos zera os novos', lidos.status === 200 && avisosAna2.json?.resultado?.novos === 0, avisosAna2)
+  const criaPara = await ana.op('criar_avanco', { titulo: 'Fotografar os produtos', tipo: 'acao', resultado_id: resId, responsavel_id: bia.id })
+  const avPara = acharId(criaPara.json?.resultado)
+  const conclui = await bia.op('concluir_avanco', { avanco_id: avPara })
+  const avisosAna3 = await ana.op('listar_avisos')
+  confere(
+    'delegação: criar já para a pessoa, e a conclusão avisa quem passou',
+    criaPara.status === 200 && conclui.status === 200 && (avisosAna3.json?.resultado?.avisos || []).some((a) => a.tipo === 'avanco_concluido' && a.avanco_id === avPara),
+    { criaPara, conclui },
+  )
+  const puxa = await ana.op('passar_avanco', { avanco_id: avBiaId, pessoa_id: ana.id })
+  confere('delegação: a dona pega um avanço de volta', puxa.status === 200, puxa)
+  await ana.op('passar_avanco', { avanco_id: avBiaId, pessoa_id: bia.id })
+
+  // --- notas, tempo e histórico ---
+  const nota = await http('POST', '/api/collections/progress_logs/records', { token: bia.token, body: { user_id: bia.id, project_id: resId, date: emDias(0), log_type: 'executei', text: 'Primeira venda feita' } })
+  const notasAna = await ana.ler('progress_logs', "project_id = '" + resId + "'")
+  confere('notas: a nota de quem participa aparece para a dona', nota.status === 200 && (notasAna.json?.items || []).some((n) => n.id === nota.json?.id), { nota, notasAna })
+  const notaFora = await http('POST', '/api/collections/progress_logs/records', { token: caio.token, body: { user_id: caio.id, project_id: resId, date: emDias(0), log_type: 'executei', text: 'intruso' } })
+  confere('notas: quem não participa não anota', notaFora.status >= 400, notaFora)
+  const hist = await bia.op('ver_historico', { resultado_id: resId })
+  const quem = new Set((hist.json?.resultado?.eventos || []).map((e) => e.pessoa))
+  confere('histórico: o do resultado mostra quem fez o quê', quem.has('Ana Dona') && quem.has('Bia Colega'), hist)
+  const histFora = await caio.op('ver_historico', { resultado_id: resId })
+  confere('histórico: fechado para quem não participa', histFora.status >= 400, histFora)
+  const gente = await ana.op('ver_participantes', { resultado_id: resId })
+  confere(
+    'participantes: a lista mostra papéis e avanços de cada pessoa',
+    gente.json?.resultado?.sou_dono === true && (gente.json?.resultado?.pessoas || []).some((p) => p.papel === 'participa' && p.nome === 'Bia Colega' && p.avancos_abertos >= 1),
+    gente,
+  )
+  const conhecidas = await bia.op('pessoas_conhecidas')
+  confere('pessoas: só quem já divide um resultado comigo é sugerido', (conhecidas.json?.resultado?.pessoas || []).length === 1 && conhecidas.json?.resultado?.pessoas?.[0]?.nome === 'Ana Dona', conhecidas)
+  const semLista = await caio.op('pessoas_conhecidas')
+  confere('pessoas: não existe lista aberta de contas', (semLista.json?.resultado?.pessoas || []).length === 0, semLista)
+
+  // --- excluir e sair ---
+  const excluiComp = await ana.op('excluir', { elemento: 'resultado', id: resId })
+  confere('excluir: resultado compartilhado não vai para a Lixeira', excluiComp.status >= 400, excluiComp)
+  const excluiConta = await http('POST', '/backend/v1/pegada/conta/excluir', { token: ana.token, body: { senha, confirmo: 'EXCLUIR' } })
+  confere('conta: quem divide um resultado seu não exclui a conta sem antes encerrar', excluiConta.status === 400, excluiConta)
+  const sai = await bia.op('sair_do_resultado', { resultado_id: resId })
+  confere('sair: a participante sai e os avanços voltam para a dona', sai.status === 200 && sai.json?.resultado?.avancos_que_voltaram >= 1, sai)
+  const depois = await bia.ler('projects')
+  const depoisAct = await bia.ler('actions')
+  const depoisEst = await bia.ler('strategies')
+  const depoisNotas = await bia.ler('progress_logs', "project_id = '" + resId + "'")
+  confere(
+    'sair: quem saiu perde o acesso na hora',
+    [depois, depoisAct, depoisEst].every((r) => (r.json?.items || []).length === 0) && (depoisNotas.json?.items || []).every((n) => n.user_id === bia.id),
+    { depois, depoisAct },
+  )
+  const orfas = await ana.ler('actions', "project_id = '" + resId + "'")
+  confere('sair: nada fica órfão no resultado', (orfas.json?.items || []).length >= 3 && (orfas.json?.items || []).every((a) => a.user_id === ana.id), orfas)
+  const escreveDepois = await bia.op('criar_avanco', { titulo: 'voltei', tipo: 'acao', resultado_id: resId })
+  confere('sair: quem saiu não escreve mais', escreveDepois.status >= 400, escreveDepois)
+
+  // --- tirar alguém e encerrar ---
+  const conv2 = await ana.op('compartilhar_resultado', { resultado_id: resId, email: caio.email })
+  const cancela = await ana.op('remover_participante', { resultado_id: resId, pessoa_id: caio.id })
+  const tarde = await caio.op('responder_convite', { convite_id: conv2.json?.resultado?.convite_id, aceitar: true })
+  confere('convite: cancelado deixa de valer', cancela.status === 200 && tarde.status >= 400, { cancela, tarde })
+  const conv3 = await ana.op('compartilhar_resultado', { resultado_id: resId, pessoa_id: bia.id })
+  confere('convite: quem já trabalhou comigo pode ser chamada de novo sem e-mail', conv3.status === 200, conv3)
+  await bia.op('responder_convite', { convite_id: conv3.json?.resultado?.convite_id, aceitar: true })
+  const tira = await ana.op('remover_participante', { resultado_id: resId, pessoa_id: bia.id })
+  const projBia2 = await bia.ler('projects')
+  confere('tirar: a pessoa tirada perde o acesso na hora', tira.status === 200 && (projBia2.json?.items || []).length === 0, { tira, projBia2 })
+  const exclui = await ana.op('excluir', { elemento: 'resultado', id: resId })
+  confere('excluir: sem ninguém, o resultado volta a poder ser excluído', exclui.status === 200, exclui)
+  const volta = await ana.op('restaurar', { lixeira_id: exclui.json?.resultado?.lixeira_id })
+  confere('restaurar: e volta inteiro da Lixeira', volta.status === 200, volta)
+}
+
 async function main() {
   console.log('Pegada: teste da API em ' + BASE)
 
@@ -545,6 +763,7 @@ async function main() {
   const leituraAlheia = await http('GET', '/api/collections/projects/records', { token: login2.json?.token })
   confere('outra pessoa não lê os registros do dono', leituraAlheia.status === 200 && (leituraAlheia.json?.items || []).length === 0, leituraAlheia)
 
+  await compartilhado({ suToken })
   await contas({ t, suToken, donoId: login.json?.record?.id, login2 })
 
   console.log(`\n${total - falhas} de ${total} verificações passaram.`)

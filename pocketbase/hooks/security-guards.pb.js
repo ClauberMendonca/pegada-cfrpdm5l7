@@ -210,7 +210,11 @@ onRecordCreateRequest((e) => {
         }
       })()
     : null
-  if (project && project.getString('user_id') !== e.auth.id) {
+  if (
+    project &&
+    project.getString('user_id') !== e.auth.id &&
+    project.getStringSlice('member_ids').indexOf(e.auth.id) < 0
+  ) {
     throw new ForbiddenError('Projeto relacionado pertence a outro usuário.')
   }
   if (action && action.getString('user_id') !== e.auth.id) {
@@ -247,7 +251,11 @@ onRecordUpdateRequest((e) => {
         }
       })()
     : null
-  if (project && project.getString('user_id') !== e.auth.id) {
+  if (
+    project &&
+    project.getString('user_id') !== e.auth.id &&
+    project.getStringSlice('member_ids').indexOf(e.auth.id) < 0
+  ) {
     throw new ForbiddenError('Projeto relacionado pertence a outro usuário.')
   }
   if (action && action.getString('user_id') !== e.auth.id) {

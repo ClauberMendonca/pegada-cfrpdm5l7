@@ -10,6 +10,8 @@
 //   a app transacional corrente (e.app), respeitando o contrato void de
 //   runInTransaction do hook capture-convert.
 // - Estratégia amarra-se a UM Resultado FIXO:
+//   * (resultado compartilhado: a estratégia é sempre do dono do Resultado; o
+//     avanço de um participante pode ligar-se a ela, basta ser do mesmo Resultado)
 //   * user_id e project_id são IMUTÁVEIS em qualquer caminho de persistência
 //     (mesmo sem Avanços vinculados): para outro Resultado, criar outro grupo.
 //   * Criação exige Resultado existente e do MESMO dono.
@@ -144,9 +146,6 @@ onRecordCreate((e) => {
     } catch (_) {
       throw new BadRequestError('Estratégia vinculada não existe.')
     }
-    if (strategy.getString('user_id') !== rec.getString('user_id')) {
-      throw new ForbiddenError('Estratégia vinculada pertence a outro usuário.')
-    }
     if (strategy.getString('project_id') !== projectId) {
       throw new BadRequestError('Estratégia vinculada pertence a outro Resultado.')
     }
@@ -183,9 +182,6 @@ onRecordUpdate((e) => {
       strategy = e.app.findRecordById('strategies', nextStrategyId)
     } catch (_) {
       throw new BadRequestError('Estratégia vinculada não existe.')
-    }
-    if (strategy.getString('user_id') !== rec.getString('user_id')) {
-      throw new ForbiddenError('Estratégia vinculada pertence a outro usuário.')
     }
     if (strategy.getString('project_id') !== nextProjectId) {
       throw new BadRequestError('Estratégia vinculada pertence a outro Resultado.')

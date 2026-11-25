@@ -116,6 +116,182 @@ function pegadaRota(e) {
     return rec
   }
 
+  // ---------------------------------------------------------------- resultado compartilhado
+  //
+  // O dono do resultado é projects.user_id; os participantes ativos ficam em
+  // projects.member_ids. Quem participa lê e trabalha no resultado, nas
+  // estratégias e nos avanços dele. O porquê de cada um (Responsabilidade ou
+  // Vontade) é pessoal e fica em result_members.
+
+  function membrosDe(project) {
+    try {
+      return project.getStringSlice('member_ids') || []
+    } catch (_) {
+      return []
+    }
+  }
+
+  function participa(project, userId) {
+    return project.getString('user_id') === userId || membrosDe(project).indexOf(userId) >= 0
+  }
+
+  function compartilhado(project) {
+    return membrosDe(project).length > 0
+  }
+
+  /** O resultado, para quem é dono ou participa dele. */
+  function findResultado(app, id, userId, label) {
+    label = label || 'Resultado'
+    if (!id) throw rule('ID_OBRIGATORIO', label + ': informe o id.')
+    var rec = safeFind(app, 'projects', id)
+    if (!rec || !participa(rec, userId)) throw new NotFoundError(label + ' não encontrado(a): ' + id)
+    return rec
+  }
+
+  /** A estratégia de um resultado meu ou de que participo. */
+  function findEstrategia(app, id, userId) {
+    if (!id) throw rule('ID_OBRIGATORIO', 'Estratégia: informe o id.')
+    var s = safeFind(app, 'strategies', id)
+    var r = s ? safeFind(app, 'projects', s.getString('project_id')) : null
+    if (!s || !r || !participa(r, userId)) throw new NotFoundError('Estratégia não encontrado(a): ' + id)
+    return s
+  }
+
+  /** Resultados em que a pessoa participa sem ser a dona. */
+  function resultadosDeOutros(app, userId, extra) {
+    try {
+      return app.findRecordsByFilter(
+        'projects',
+        'member_ids ~ {:u} && user_id != {:u}' + (extra ? ' && (' + extra + ')' : ''),
+        'deadline',
+        0,
+        0,
+        { u: userId },
+      )
+    } catch (_) {
+      return []
+    }
+  }
+
+  /** Avanços dos colegas nos resultados compartilhados que a pessoa enxerga. */
+  function avancosDosColegas(app, userId, projects, extra) {
+    var out = []
+    for (var i = 0; i < projects.length; i++) {
+      if (!compartilhado(projects[i])) continue
+      out = out.concat(
+        todos(app, 'actions', 'project_id = {:p} && user_id != {:u}' + (extra ? ' && ' + extra : ''), {
+          p: projects[i].id,
+          u: userId,
+        }),
+      )
+    }
+    return out
+  }
+
+  function estrategiasDe(app, userId, projects, extra) {
+    var out = todos(app, 'strategies', 'user_id = {:u}' + (extra ? ' && ' + extra : ''), { u: userId })
+    for (var i = 0; i < projects.length; i++) {
+      if (projects[i].getString('user_id') === userId) continue
+      out = out.concat(
+        todos(app, 'strategies', 'project_id = {:p}' + (extra ? ' && ' + extra : ''), { p: projects[i].id }),
+      )
+    }
+    return out
+  }
+
+  var PORPRAZO = function (a, b) {
+    var x = a.getString('deadline') || '9999'
+    var y = b.getString('deadline') || '9999'
+    return x < y ? -1 : x > y ? 1 : 0
+  }
+
+  /** O vínculo pessoal de alguém com um resultado que não é dele. */
+  function vinculoDe(app, projectId, userId) {
+    try {
+      return app.findFirstRecordByFilter('result_members', 'project_id = {:p} && user_id = {:u}', {
+        p: projectId,
+        u: userId,
+      })
+    } catch (_) {
+      return null
+    }
+  }
+
+  function nomeDe(app, userId) {
+    var u = safeFind(app, 'users', userId)
+    if (!u) return 'Alguém'
+    return u.getString('name') || String(u.getString('email')).split('@')[0] || 'Alguém'
+  }
+
+  function pessoaView(app, userId) {
+    var u = safeFind(app, 'users', userId)
+    if (!u) return { id: userId, nome: 'Conta removida', foto: '' }
+    return {
+      id: u.id,
+      nome: u.getString('name') || String(u.getString('email')).split('@')[0],
+      foto: u.getString('avatar'),
+    }
+  }
+
+  /** Aviso discreto para uma pessoa. Nunca derruba a operação. */
+  function avisar(app, paraId, kind, text, extra) {
+    if (!paraId) return
+    try {
+      var n = new Record(app.findCollectionByNameOrId('notices'))
+      n.set('user_id', paraId)
+      n.set('kind', kind)
+      n.set('text', String(text).slice(0, 500))
+      extra = extra || {}
+      if (extra.ator) n.set('actor_name', String(extra.ator).slice(0, 120))
+      if (extra.projeto) n.set('project_id', extra.projeto)
+      if (extra.avanco) n.set('action_id', extra.avanco)
+      if (extra.vinculo) n.set('member_id', extra.vinculo)
+      app.save(n)
+    } catch (err) {
+      try {
+        app.logger().warn('aviso não gravado', 'kind', kind, 'erro', String(err))
+      } catch (_) {}
+    }
+  }
+
+  /** Marca no histórico algo que não se desfaz pelo botão Desfazer. */
+  function marcar(ctx, projectId) {
+    ctx.projectId = projectId
+    ctx.changes.push({ c: 'projects', id: projectId, k: 'share', before: {}, after: {} })
+  }
+
+  /**
+   * Quem deixa de participar entrega ao dono os avanços que tinha no
+   * resultado: nada fica órfão e o histórico guarda quem fez o quê.
+   */
+  function entregarAoDono(app, project, userId) {
+    var dono = project.getString('user_id')
+    var acts = todos(app, 'actions', 'project_id = {:p} && user_id = {:u}', { p: project.id, u: userId })
+    for (var i = 0; i < acts.length; i++) {
+      acts[i].set('user_id', dono)
+      acts[i].set('delegated_by', '')
+      acts[i].set('is_next_step', false)
+      acts[i].set('is_today_selected', false)
+      app.save(acts[i])
+    }
+    // O que essa pessoa tinha passado adiante segue com quem está fazendo.
+    var passados = todos(app, 'actions', 'project_id = {:p} && delegated_by = {:u}', { p: project.id, u: userId })
+    for (var j = 0; j < passados.length; j++) {
+      passados[j].set('delegated_by', '')
+      app.save(passados[j])
+    }
+    return acts.length
+  }
+
+  function tirarParticipante(app, project, userId) {
+    var ids = membrosDe(project).filter(function (m) {
+      return m !== userId
+    })
+    project.set('member_ids', ids)
+    app.save(project)
+    return entregarAoDono(app, project, userId)
+  }
+
   function label(rec) {
     var n = rec.getInt ? rec.getInt('sequence_number') : 0
     return (n ? '#' + n + ' ' : '') + '"' + rec.getString('title') + '"'
@@ -232,13 +408,27 @@ function pegadaRota(e) {
     if (elemento === 'resultado') projetos = [raiz]
     for (var p = 0; p < projetos.length; p++) {
       estrategias = estrategias.concat(todos(app, 'strategies', 'project_id = {:id}', { id: projetos[p].id }))
-      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && project_id = {:id}', { u: userId, id: projetos[p].id }))
+      juntaAvancos(todos(app, 'actions', 'project_id = {:id}', { id: projetos[p].id }))
     }
     if (elemento === 'estrategia') {
       estrategias = [raiz]
-      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && strategy_id = {:id}', { u: userId, id: id }))
+      juntaAvancos(todos(app, 'actions', 'strategy_id = {:id}', { id: id }))
     }
     if (elemento === 'avanco') juntaAvancos([raiz])
+
+    // Resultado compartilhado não vai para a Lixeira com o trabalho dos outros.
+    for (var pc = 0; pc < projetos.length; pc++)
+      if (compartilhado(projetos[pc]))
+        throw rule(
+          'RESULTADO_COMPARTILHADO',
+          'O resultado ' + label(projetos[pc]) + ' está compartilhado. Pare de compartilhar antes de excluir.',
+        )
+    for (var ac = 0; ac < avancos.length; ac++)
+      if (avancos[ac].getString('user_id') !== userId)
+        throw rule(
+          'AVANCO_DE_OUTRA_PESSOA',
+          'Há avanços de outras pessoas aqui. Peça para devolverem ou pare de compartilhar antes de excluir.',
+        )
 
     // O que vai junto, preso a cada item: notas, tempo registrado e anexos.
     var notas = []
@@ -316,8 +506,9 @@ function pegadaRota(e) {
    * Monta a frase do porquê: "Faço X, pela estratégia S, para alcançar R,
    * porque P." Avanço sem ligação devolve fio vazio e sem_fio=true.
    */
-  function fioOf(app, action, purpose, cache) {
+  function fioOf(app, action, purpose, cache, viewer) {
     cache = cache || {}
+    viewer = viewer || action.getString('user_id')
     var get = function (c, id) {
       var key = c + ':' + id
       if (!(key in cache)) cache[key] = safeFind(app, c, id)
@@ -326,9 +517,18 @@ function pegadaRota(e) {
     var title = action.getString('title')
     var result = get('projects', action.getString('project_id'))
     var strategy = get('strategies', action.getString('strategy_id'))
-    var directResp = get('responsibilities', action.getString('responsibility_id'))
-    var resp = result ? get('responsibilities', result.getString('responsibility_id')) : directResp
-    var wish = result ? get('wishes', result.getString('wish_id')) : null
+    var directResp =
+      action.getString('user_id') === viewer ? get('responsibilities', action.getString('responsibility_id')) : null
+    // De onde o resultado nasce é de cada um: quem participa de um resultado
+    // de outra pessoa vê o SEU porquê, nunca o do dono.
+    var origem = result
+    if (result && result.getString('user_id') !== viewer) {
+      var vk = 'vinculo:' + result.id + ':' + viewer
+      if (!(vk in cache)) cache[vk] = vinculoDe(app, result.id, viewer)
+      origem = cache[vk]
+    }
+    var resp = result ? (origem ? get('responsibilities', origem.getString('responsibility_id')) : null) : directResp
+    var wish = result && origem ? get('wishes', origem.getString('wish_id')) : null
     var parts = ['Faço "' + title + '"']
     if (strategy) parts.push('pela estratégia "' + strategy.getString('title') + '"')
     if (result) {
@@ -346,7 +546,9 @@ function pegadaRota(e) {
     return {
       frase: semFio ? '' : parts.join(', ') + '.',
       sem_fio: semFio,
-      resultado: result ? { id: result.id, titulo: result.getString('title') } : null,
+      resultado: result
+        ? { id: result.id, titulo: result.getString('title'), compartilhado: compartilhado(result) }
+        : null,
       estrategia: strategy ? { id: strategy.id, titulo: strategy.getString('title') } : null,
       responsabilidade: resp ? { id: resp.id, titulo: resp.getString('title') } : null,
       vontade: wish ? { id: wish.id, titulo: wish.getString('title') } : null,
@@ -356,9 +558,12 @@ function pegadaRota(e) {
     }
   }
 
-  function actionView(app, a, purpose, cache) {
+  function actionView(app, a, purpose, cache, viewer) {
     var kind = a.getString('kind') || 'acao'
+    var passou = a.getString('delegated_by')
     return {
+      responsavel_id: a.getString('user_id'),
+      passado_por: passou ? pessoaView(app, passou) : null,
       id: a.id,
       numero: a.getInt('sequence_number') || null,
       titulo: a.getString('title'),
@@ -373,12 +578,25 @@ function pegadaRota(e) {
       hora_planejada: a.getString('planned_time'),
       aguardando: a.getString('waiting_for'),
       rastro: a.getString('trail'),
-      fio: fioOf(app, a, purpose, cache),
+      fio: fioOf(app, a, purpose, cache, viewer),
     }
   }
 
-  function resultView(r) {
+  function resultView(r, app, viewer) {
+    var respId = r.getString('responsibility_id')
+    var wishId = r.getString('wish_id')
+    var meu = !viewer || r.getString('user_id') === viewer
+    if (!meu) {
+      var v = vinculoDe(app, r.id, viewer)
+      respId = v ? v.getString('responsibility_id') : ''
+      wishId = v ? v.getString('wish_id') : ''
+    }
+    var membros = membrosDe(r)
     return {
+      meu: meu,
+      compartilhado: membros.length > 0,
+      dono: app && membros.length > 0 ? pessoaView(app, r.getString('user_id')) : null,
+      participantes: membros.length,
       id: r.id,
       numero: r.getInt('sequence_number') || null,
       titulo: r.getString('title'),
@@ -386,8 +604,8 @@ function pegadaRota(e) {
       como_sei: r.getString('completion_condition'),
       status: r.getString('status'),
       contexto: r.getString('context'),
-      responsabilidade_id: r.getString('responsibility_id') || null,
-      vontade_id: r.getString('wish_id') || null,
+      responsabilidade_id: respId || null,
+      vontade_id: wishId || null,
     }
   }
 
@@ -466,8 +684,10 @@ function pegadaRota(e) {
 
     var strategy = null
     if (strategyId) {
-      strategy = findOwned(app, 'strategies', strategyId, userId, 'Estratégia')
+      strategy = safeFind(app, 'strategies', strategyId)
+      if (!strategy) throw new NotFoundError('Estratégia não encontrado(a): ' + strategyId)
       var sp = strategy.getString('project_id')
+      findResultado(app, sp, userId, 'Estratégia')
       if (projectId && projectId !== sp) {
         throw rule(
           'ESTRATEGIA_DE_OUTRO_RESULTADO',
@@ -485,7 +705,7 @@ function pegadaRota(e) {
     var result = null
     var context = ''
     if (projectId) {
-      result = findOwned(app, 'projects', projectId, userId, 'Resultado')
+      result = findResultado(app, projectId, userId, 'Resultado')
       context = result.getString('context')
       respId = '' // a responsabilidade é herdada do resultado
     } else if (respId) {
@@ -610,22 +830,32 @@ function pegadaRota(e) {
           0,
           { u: u },
         )
-        var strategies = app.findRecordsByFilter(
-          'strategies',
-          "user_id = {:u} && status = 'ativa'",
-          'created',
-          0,
-          0,
-          { u: u },
-        )
-        var openActions = app.findRecordsByFilter(
-          'actions',
-          "user_id = {:u} && status != 'feita' && status != 'cancelada'",
-          '',
-          0,
-          0,
-          { u: u },
-        )
+        // Resultados de outras pessoas em que participo entram no meu mapa.
+        results = results
+          .concat(
+            resultadosDeOutros(
+              app,
+              u,
+              "status = 'ativo' || status = 'futuro' || status = 'pausado' || status = 'rascunho'",
+            ),
+          )
+          .sort(PORPRAZO)
+        var strategies = estrategiasDe(app, u, results, "status = 'ativa'")
+        var openActions = app
+          .findRecordsByFilter(
+            'actions',
+            "user_id = {:u} && status != 'feita' && status != 'cancelada'",
+            '',
+            0,
+            0,
+            { u: u },
+          )
+          .concat(avancosDosColegas(app, u, results, "status != 'feita' && status != 'cancelada'"))
+        var pessoas = {}
+        var pessoa = function (id) {
+          if (!pessoas[id]) pessoas[id] = pessoaView(app, id)
+          return pessoas[id]
+        }
         var countBy = {}
         var semFio = 0
         for (var i = 0; i < openActions.length; i++) {
@@ -634,14 +864,11 @@ function pegadaRota(e) {
           else if (!openActions[i].getString('responsibility_id')) semFio++
         }
         // Progresso de cada resultado e os avanços abertos de cada estratégia.
-        var doneActions = app.findRecordsByFilter(
-          'actions',
-          "user_id = {:u} && status = 'feita' && project_id != ''",
-          '',
-          0,
-          0,
-          { u: u },
-        )
+        var doneActions = app
+          .findRecordsByFilter('actions', "user_id = {:u} && status = 'feita' && project_id != ''", '', 0, 0, {
+            u: u,
+          })
+          .concat(avancosDosColegas(app, u, results, "status = 'feita'"))
         var doneBy = {}
         for (var d = 0; d < doneActions.length; d++) {
           var dp = doneActions[d].getString('project_id')
@@ -665,6 +892,12 @@ function pegadaRota(e) {
             principal: oa.getBool('is_next_step'),
             rotina: !!oa.getString('recurrence_series_id'),
             prazo: oa.getString('deadline'),
+            meu: oa.getString('user_id') === u,
+            responsavel: oa.getString('user_id') === u ? null : pessoa(oa.getString('user_id')),
+            passado_por:
+              oa.getString('delegated_by') && oa.getString('delegated_by') !== u
+                ? pessoa(oa.getString('delegated_by'))
+                : null,
           }
           var sid = oa.getString('strategy_id')
           var opid = oa.getString('project_id')
@@ -675,7 +908,7 @@ function pegadaRota(e) {
           else openFree.push(item)
         }
         var resultsOut = results.map(function (r) {
-          var v = resultView(r)
+          var v = resultView(r, app, u)
           v.avancos_feitos = doneBy[r.id] || 0
           v.avancos_total = (doneBy[r.id] || 0) + (countBy[r.id] || 0)
           v.avancos_sem_estrategia = openLoose[r.id] || []
@@ -787,19 +1020,27 @@ function pegadaRota(e) {
           0,
           { u: u },
         )
+        actives = actives.concat(resultadosDeOutros(app, u, "status = 'ativo'")).sort(PORPRAZO)
         var parados = actives
           .filter(function (r) {
             return !porResultado[r.id]
           })
-          .map(resultView)
-        var strategies = app.findRecordsByFilter(
-          'strategies',
-          "user_id = {:u} && status = 'ativa'",
-          '',
-          0,
-          0,
-          { u: u },
-        )
+          .map(function (r) {
+            return resultView(r, app, u)
+          })
+        var strategies = estrategiasDe(app, u, actives, "status = 'ativa'")
+        // O que passei para outra pessoa e ainda está aberto: é uma espera minha.
+        var passados = []
+        try {
+          passados = app.findRecordsByFilter(
+            'actions',
+            "delegated_by = {:u} && user_id != {:u} && status != 'feita' && status != 'cancelada'",
+            'delegated_at',
+            0,
+            0,
+            { u: u },
+          )
+        } catch (_) {}
         var esperas = app.findRecordsByFilter(
           'actions',
           "user_id = {:u} && kind = 'espera' && status != 'feita' && status != 'cancelada'",
@@ -815,11 +1056,11 @@ function pegadaRota(e) {
         var ativos = actives.map(function (r) {
           var acts = app.findRecordsByFilter(
             'actions',
-            "user_id = {:u} && project_id = {:p} && status != 'cancelada'",
+            "project_id = {:p} && status != 'cancelada'",
             '',
             0,
             0,
-            { u: u, p: r.id },
+            { p: r.id },
           )
           var feitos = 0
           var ultimo = ''
@@ -829,7 +1070,7 @@ function pegadaRota(e) {
             var c = String(acts[j].get('completed_at') || '')
             if (c > ultimo) ultimo = c
           }
-          var v = resultView(r)
+          var v = resultView(r, app, u)
           v.avancos_total = acts.length
           v.avancos_feitos = feitos
           v.feitos_no_periodo = porResultado[r.id] ? porResultado[r.id].concluidos.length : 0
@@ -880,6 +1121,17 @@ function pegadaRota(e) {
               aguardando: a.getString('waiting_for'),
               desde: String(a.get('created')).slice(0, 10),
               pergunta: 'Preciso cobrar alguém?',
+            }
+          }),
+          passados_adiante: passados.map(function (a) {
+            var pr = safeFind(app, 'projects', a.getString('project_id'))
+            return {
+              id: a.id,
+              titulo: a.getString('title'),
+              com: pessoaView(app, a.getString('user_id')),
+              resultado: pr ? { id: pr.id, titulo: pr.getString('title') } : null,
+              desde: String(a.get('delegated_at') || a.get('created')).slice(0, 10),
+              pergunta: 'Preciso conversar com essa pessoa?',
             }
           }),
           capturas_pendentes: app.findRecordsByFilter(
@@ -949,12 +1201,25 @@ function pegadaRota(e) {
             description: 'padrão: abertos',
           },
           sem_fio: { type: 'boolean' },
+          so_meus: { type: 'boolean', description: 'em resultado compartilhado, só os avanços comigo' },
           limite: { type: 'integer', minimum: 1, maximum: 200 },
         },
       },
       run: function (ctx, input) {
         var f = ['user_id = {:u}']
         var p = { u: ctx.userId }
+        // Dentro de um resultado (ou de uma estratégia dele) a lista é de todos
+        // que participam; fora dele, só os avanços da própria pessoa.
+        var pidDoFiltro = str(input.resultado_id)
+        if (!pidDoFiltro && str(input.estrategia_id)) {
+          var est = safeFind(ctx.app, 'strategies', str(input.estrategia_id))
+          pidDoFiltro = est ? est.getString('project_id') : ''
+        }
+        if (pidDoFiltro) {
+          var doFiltro = safeFind(ctx.app, 'projects', pidDoFiltro)
+          if (doFiltro && participa(doFiltro, ctx.userId) && input.so_meus !== true) f = ['user_id != {:nenhum}']
+          p.nenhum = ''
+        }
         var sit = str(input.situacao) || 'abertos'
         if (sit === 'abertos') f.push("status != 'feita' && status != 'cancelada'")
         if (sit === 'feitos') f.push("status = 'feita'")
@@ -987,7 +1252,10 @@ function pegadaRota(e) {
         var cache = {}
         return {
           avancos: list.map(function (a) {
-            return actionView(ctx.app, a, purpose, cache)
+            var v = actionView(ctx.app, a, purpose, cache, ctx.userId)
+            v.meu = a.getString('user_id') === ctx.userId
+            v.responsavel = v.meu ? null : pessoaView(ctx.app, a.getString('user_id'))
+            return v
           }),
         }
       },
@@ -1001,9 +1269,38 @@ function pegadaRota(e) {
         'Mostra quem fez o quê, mais recente primeiro: a pessoa, a IA embutida ou cada agente. Cada item pode ser desfeito enquanto ninguém mexeu de novo no mesmo registro.',
       schema: {
         type: 'object',
-        properties: { limite: { type: 'integer', minimum: 1, maximum: 200 } },
+        properties: {
+          limite: { type: 'integer', minimum: 1, maximum: 200 },
+          resultado_id: { type: 'string', description: 'o histórico de um resultado, de todos que participam' },
+        },
       },
       run: function (ctx, input) {
+        if (str(input.resultado_id)) {
+          var pr = findResultado(ctx.app, str(input.resultado_id), ctx.userId)
+          var evs = ctx.app.findRecordsByFilter(
+            'audit_events',
+            'project_id = {:p}',
+            '-created',
+            Math.min(200, parseInt(input.limite, 10) || 50),
+            0,
+            { p: pr.id },
+          )
+          var nomes = {}
+          return {
+            eventos: evs.map(function (ev) {
+              var quem = ev.getString('user_id')
+              if (!nomes[quem]) nomes[quem] = nomeDe(ctx.app, quem)
+              return {
+                id: ev.id,
+                pessoa: nomes[quem],
+                meu: quem === ctx.userId,
+                operacao: ev.getString('op'),
+                resumo: ev.getString('summary'),
+                quando: String(ev.get('created')),
+              }
+            }),
+          }
+        }
         var list = ctx.app.findRecordsByFilter(
           'audit_events',
           'user_id = {:u}',
@@ -1194,6 +1491,10 @@ function pegadaRota(e) {
           aguardando: { type: 'string', description: 'para Espera: de quem ou do quê' },
           para_hoje: { type: 'boolean' },
           principal: { type: 'boolean', description: 'torna este o avanço principal do dia' },
+          responsavel_id: {
+            type: 'string',
+            description: 'em resultado compartilhado: a pessoa que fica com o avanço (padrão: você)',
+          },
         },
       },
       run: function (ctx, input) {
@@ -1201,6 +1502,16 @@ function pegadaRota(e) {
         if (!title) throw rule('TITULO_OBRIGATORIO', 'O avanço precisa de um título.')
         var kind = resolveKind(input.tipo, '')
         var links = resolveLinks(ctx, input, null)
+        var paraOutro = str(input.responsavel_id) && str(input.responsavel_id) !== ctx.userId ? str(input.responsavel_id) : ''
+        if (paraOutro) {
+          if (ctx.actor && ctx.actor.type === 'agente')
+            throw new ForbiddenError('Só a própria pessoa passa um avanço para alguém.')
+          var doAvanco = links.project_id ? safeFind(ctx.app, 'projects', links.project_id) : null
+          if (!doAvanco || !participa(doAvanco, paraOutro))
+            throw rule('PESSOA_DE_FORA', 'Essa pessoa não participa deste resultado.')
+          input.principal = false
+          input.para_hoje = false
+        }
         if (kind === 'espera' && !str(input.aguardando))
           throw rule(
             'ESPERA_SEM_QUEM',
@@ -1235,10 +1546,21 @@ function pegadaRota(e) {
           waiting_for: str(input.aguardando) || undefined,
           is_next_step: input.principal === true,
           is_today_selected: input.principal === true || input.para_hoje === true,
+          user_id: paraOutro || undefined,
+          delegated_by: paraOutro ? ctx.userId : undefined,
+          delegated_at: paraOutro ? new DateTime().string() : undefined,
         })
-        var fio = fioOf(ctx.app, rec, purposeOf(ctx.app, ctx.userId))
+        if (paraOutro) {
+          var quemCriou = nomeDe(ctx.app, ctx.userId)
+          avisar(ctx.app, paraOutro, 'avanco_recebido', quemCriou + ' passou para você o avanço "' + title + '".', {
+            ator: quemCriou,
+            projeto: links.project_id,
+            avanco: rec.id,
+          })
+        }
+        var fio = fioOf(ctx.app, rec, purposeOf(ctx.app, ctx.userId), null, ctx.userId)
         return {
-          resumo: 'Criou ' + KIND_LABEL[kind] + ' ' + label(rec),
+          resumo: 'Criou ' + KIND_LABEL[kind] + ' ' + label(rec) + (paraOutro ? ' para ' + nomeDe(ctx.app, paraOutro) : ''),
           avanco_id: rec.id,
           fio: fio,
           aviso: fio.sem_fio
@@ -1339,6 +1661,7 @@ function pegadaRota(e) {
           input.estrategia_id = ''
         var links = resolveLinks(ctx, input, a)
         ctx.update(a, {
+          delegated_by: links.project_id !== a.getString('project_id') ? '' : undefined,
           project_id: links.project_id,
           strategy_id: links.strategy_id,
           responsibility_id: links.responsibility_id,
@@ -1399,6 +1722,15 @@ function pegadaRota(e) {
           } catch (_) {
             // Sem a coleção (servidor ainda não migrado), a conclusão segue valendo.
           }
+        }
+        var passou = a.getString('delegated_by')
+        if (passou && passou !== ctx.userId) {
+          var quemFez = nomeDe(ctx.app, ctx.userId)
+          avisar(ctx.app, passou, 'avanco_concluido', quemFez + ' concluiu o avanço "' + a.getString('title') + '".', {
+            ator: quemFez,
+            projeto: projId,
+            avanco: a.id,
+          })
         }
         return { resumo: 'Concluiu ' + KIND_LABEL[kind] + ' ' + label(a), avanco_id: a.id }
       },
@@ -2049,7 +2381,20 @@ function pegadaRota(e) {
           checkResultShape(r.getString('title'), r.getString('deadline'))
           aviso = checkActiveLimit(ctx.app, ctx.userId, r.id)
         }
+        var antes = r.getString('status')
         ctx.update(r, { status: to })
+        if (to !== antes && (to === 'concluido' || to === 'abandonado' || to === 'arquivado')) {
+          var dono = nomeDe(ctx.app, ctx.userId)
+          var ms = membrosDe(r)
+          for (var mi = 0; mi < ms.length; mi++)
+            avisar(
+              ctx.app,
+              ms[mi],
+              'resultado_encerrado',
+              dono + (to === 'concluido' ? ' marcou como alcançado' : ' encerrou') + ' o resultado "' + r.getString('title') + '".',
+              { ator: dono, projeto: r.id },
+            )
+        }
         return { resumo: 'Resultado ' + label(r) + ' → ' + to, resultado_id: r.id, aviso: aviso }
       },
     },
@@ -2072,10 +2417,11 @@ function pegadaRota(e) {
         },
       },
       run: function (ctx, input) {
-        var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
+        var r = findResultado(ctx.app, str(input.resultado_id), ctx.userId, 'Resultado')
         if (!str(input.titulo))
           throw rule('TITULO_OBRIGATORIO', 'A estratégia precisa de um título.')
         var s = ctx.create('strategies', {
+          user_id: r.getString('user_id'),
           project_id: r.id,
           title: str(input.titulo),
           status: 'ativa',
@@ -2104,10 +2450,14 @@ function pegadaRota(e) {
           titulo: { type: 'string' },
           sinal_de_teste: { type: 'string' },
           descricao: { type: 'string' },
+          versao: { type: 'string', description: 'o "updated" lido; se outra pessoa mudou depois, a edição é recusada' },
         },
       },
       run: function (ctx, input) {
-        var s = findOwned(ctx.app, 'strategies', str(input.estrategia_id), ctx.userId, 'Estratégia')
+        var s = findEstrategia(ctx.app, str(input.estrategia_id), ctx.userId)
+        // Duas pessoas editando a mesma aposta: a segunda é avisada, não atropela.
+        if (str(input.versao) && str(input.versao) !== String(s.get('updated')))
+          throw conflict('Outra pessoa mudou esta estratégia agora há pouco. Abra de novo para ver como ficou.')
         var patch = {}
         if (has(input, 'titulo')) patch.title = str(input.titulo)
         if (has(input, 'sinal_de_teste')) patch.test_signal = str(input.sinal_de_teste)
@@ -2130,7 +2480,7 @@ function pegadaRota(e) {
         properties: { estrategia_id: S_ID, reativar: { type: 'boolean' } },
       },
       run: function (ctx, input) {
-        var s = findOwned(ctx.app, 'strategies', str(input.estrategia_id), ctx.userId, 'Estratégia')
+        var s = findEstrategia(ctx.app, str(input.estrategia_id), ctx.userId)
         var back = input.reativar === true
         ctx.update(s, { status: back ? 'ativa' : 'arquivada' })
         return {
@@ -2350,6 +2700,519 @@ function pegadaRota(e) {
         resumo: 'Excluiu de vez ' + alvo.length + (alvo.length === 1 ? ' item' : ' itens') + ' da Lixeira',
         excluidos: alvo.length,
       }
+    },
+  }
+
+  // ======================= RESULTADO COMPARTILHADO =======================
+  //
+  // Só o Resultado e o que está abaixo dele (estratégias e avanços) se
+  // compartilha. Propósito, Vontades e Responsabilidades são de cada pessoa.
+  // Estas operações são da própria pessoa: agentes não convidam nem delegam.
+
+  var S_ORIGEM = {
+    responsabilidade_id: { type: 'string', description: 'a SUA responsabilidade em que este resultado se encaixa' },
+    vontade_id: { type: 'string', description: 'a SUA vontade em que este resultado se encaixa (ou a responsabilidade; nunca as duas)' },
+  }
+
+  function origemPessoal(ctx, input) {
+    var respId = str(input.responsabilidade_id)
+    var wishId = str(input.vontade_id)
+    if (respId && wishId)
+      throw rule('ORIGEM_UNICA', 'Escolha uma Vontade ou uma Responsabilidade, não as duas.')
+    if (respId) findOwned(ctx.app, 'responsibilities', respId, ctx.userId, 'Responsabilidade')
+    if (wishId) findOwned(ctx.app, 'wishes', wishId, ctx.userId, 'Vontade')
+    return { responsibility_id: respId, wish_id: wishId }
+  }
+
+  function vinculoView(app, v) {
+    var pr = safeFind(app, 'projects', v.getString('project_id'))
+    return {
+      id: v.id,
+      resultado: pr
+        ? {
+            id: pr.id,
+            titulo: pr.getString('title'),
+            prazo: pr.getString('deadline'),
+            como_sei: pr.getString('completion_condition'),
+          }
+        : null,
+      de: pessoaView(app, v.getString('invited_by') || (pr ? pr.getString('user_id') : '')),
+      quando: String(v.get('created')),
+    }
+  }
+
+  OPS.compartilhar_resultado = {
+    scope: 'dono',
+    write: true,
+    title: 'Compartilhar um resultado',
+    description:
+      'Convida uma pessoa que já tem conta no Pegada, pelo e-mail, para buscar um resultado junto. Ela vê o resultado, as estratégias e os avanços dele; nunca o seu propósito, as suas vontades ou responsabilidades. Só quem criou o resultado convida.',
+    schema: {
+      type: 'object',
+      required: ['resultado_id'],
+      properties: { resultado_id: S_ID, email: { type: 'string' }, pessoa_id: S_ID },
+    },
+    run: function (ctx, input) {
+      var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
+      var st = r.getString('status')
+      if (st === 'concluido' || st === 'abandonado' || st === 'arquivado')
+        throw rule('RESULTADO_ENCERRADO', 'Este resultado já foi encerrado.')
+      var alvo = null
+      var email = str(input.email).toLowerCase()
+      if (str(input.pessoa_id)) alvo = safeFind(ctx.app, 'users', str(input.pessoa_id))
+      else if (email) {
+        try {
+          alvo = ctx.app.findFirstRecordByFilter('users', 'email = {:e}', { e: email })
+        } catch (_) {}
+      } else throw rule('EMAIL_OBRIGATORIO', 'Escreva o e-mail da pessoa.')
+      if (!alvo || alvo.getBool('disabled'))
+        throw rule(
+          'PESSOA_SEM_CONTA',
+          'Não encontrei uma conta com este e-mail. A pessoa precisa já usar o Pegada.',
+        )
+      if (alvo.id === ctx.userId) throw rule('VOCE_MESMO', 'Este resultado já é seu.')
+      // Por id, só quem já trabalha comigo: não há lista aberta de pessoas.
+      if (str(input.pessoa_id) && !conhecidos(ctx.app, ctx.userId)[alvo.id])
+        throw rule('PESSOA_SEM_CONTA', 'Convide pelo e-mail da pessoa.')
+      if (membrosDe(r).length >= 50) throw rule('LIMITE_PESSOAS', 'Um resultado comporta até 50 pessoas.')
+      var v = vinculoDe(ctx.app, r.id, alvo.id)
+      if (v && v.getString('status') === 'ativo')
+        throw rule('JA_PARTICIPA', nomeDe(ctx.app, alvo.id) + ' já participa deste resultado.')
+      if (v && v.getString('status') === 'convidado')
+        throw rule('JA_CONVIDADO', nomeDe(ctx.app, alvo.id) + ' já foi convidado(a) e ainda não respondeu.')
+      if (!v) {
+        v = new Record(ctx.app.findCollectionByNameOrId('result_members'))
+        v.set('project_id', r.id)
+        v.set('user_id', alvo.id)
+      }
+      v.set('invited_by', ctx.userId)
+      v.set('status', 'convidado')
+      v.set('responsibility_id', '')
+      v.set('wish_id', '')
+      ctx.app.save(v)
+      var eu = nomeDe(ctx.app, ctx.userId)
+      avisar(ctx.app, alvo.id, 'convite', eu + ' convidou você para o resultado "' + r.getString('title') + '".', {
+        ator: eu,
+        projeto: r.id,
+        vinculo: v.id,
+      })
+      marcar(ctx, r.id)
+      return {
+        resumo: 'Convidou ' + nomeDe(ctx.app, alvo.id) + ' para o resultado ' + label(r),
+        resultado_id: r.id,
+        convite_id: v.id,
+        pessoa: pessoaView(ctx.app, alvo.id),
+      }
+    },
+  }
+
+  /** Pessoas com quem já divido algum resultado (id → true). */
+  function conhecidos(app, userId) {
+    var out = {}
+    var meus = todos(app, 'projects', 'user_id = {:u}', { u: userId })
+    for (var i = 0; i < meus.length; i++) {
+      var ms = membrosDe(meus[i])
+      for (var j = 0; j < ms.length; j++) out[ms[j]] = true
+    }
+    var outros = resultadosDeOutros(app, userId, '')
+    for (var k = 0; k < outros.length; k++) {
+      out[outros[k].getString('user_id')] = true
+      var os = membrosDe(outros[k])
+      for (var m = 0; m < os.length; m++) out[os[m]] = true
+    }
+    // Quem já dividiu um resultado comigo continua conhecido depois de sair.
+    try {
+      var meusV = todos(app, 'result_members', "user_id = {:u} && status != 'recusado' && status != 'convidado'", { u: userId })
+      for (var a = 0; a < meusV.length; a++) {
+        var pa = safeFind(app, 'projects', meusV[a].getString('project_id'))
+        if (pa) out[pa.getString('user_id')] = true
+      }
+      var delesV = todos(app, 'result_members', "project_id.user_id = {:u} && status != 'recusado' && status != 'convidado'", { u: userId })
+      for (var b = 0; b < delesV.length; b++) out[delesV[b].getString('user_id')] = true
+    } catch (_) {}
+    delete out[userId]
+    return out
+  }
+
+  OPS.pessoas_conhecidas = {
+    scope: 'dono',
+    title: 'Pessoas com quem já trabalho',
+    description: 'Lista as pessoas com quem você já divide algum resultado, para convidar de novo sem digitar o e-mail.',
+    schema: { type: 'object', properties: {} },
+    run: function (ctx) {
+      var ids = Object.keys(conhecidos(ctx.app, ctx.userId))
+      return {
+        pessoas: ids.map(function (id) {
+          var v = pessoaView(ctx.app, id)
+          var u = safeFind(ctx.app, 'users', id)
+          v.email = u ? u.getString('email') : ''
+          return v
+        }),
+      }
+    },
+  }
+
+  OPS.listar_convites = {
+    scope: 'dono',
+    title: 'Convites para resultados',
+    description: 'Lista os convites que você recebeu para participar de resultados de outras pessoas e ainda não respondeu.',
+    schema: { type: 'object', properties: {} },
+    run: function (ctx) {
+      var vs = todos(ctx.app, 'result_members', "user_id = {:u} && status = 'convidado'", { u: ctx.userId })
+      return {
+        convites: vs.map(function (v) {
+          return vinculoView(ctx.app, v)
+        }),
+      }
+    },
+  }
+
+  OPS.responder_convite = {
+    scope: 'dono',
+    write: true,
+    title: 'Responder a um convite',
+    description:
+      'Aceita ou recusa participar de um resultado. Ao aceitar, diga em qual Responsabilidade ou Vontade SUA ele se encaixa (pode deixar para depois): esse é o seu porquê, e só você vê.',
+    schema: {
+      type: 'object',
+      required: ['convite_id', 'aceitar'],
+      properties: Object.assign({ convite_id: S_ID, aceitar: { type: 'boolean' } }, S_ORIGEM),
+    },
+    run: function (ctx, input) {
+      var v = safeFind(ctx.app, 'result_members', str(input.convite_id))
+      if (!v || v.getString('user_id') !== ctx.userId || v.getString('status') !== 'convidado')
+        throw new NotFoundError('Convite não encontrado. Ele pode ter sido cancelado.')
+      var r = safeFind(ctx.app, 'projects', v.getString('project_id'))
+      if (!r) throw new NotFoundError('Este resultado não existe mais.')
+      var eu = nomeDe(ctx.app, ctx.userId)
+      if (input.aceitar !== true) {
+        v.set('status', 'recusado')
+        ctx.app.save(v)
+        avisar(ctx.app, r.getString('user_id'), 'convite_recusado', eu + ' não vai participar de "' + r.getString('title') + '".', {
+          ator: eu,
+          projeto: r.id,
+        })
+        marcar(ctx, r.id)
+        return { resumo: 'Recusou o convite para ' + label(r), aceito: false }
+      }
+      var origem = origemPessoal(ctx, input)
+      var ids = membrosDe(r)
+      if (ids.indexOf(ctx.userId) < 0) ids.push(ctx.userId)
+      r.set('member_ids', ids)
+      ctx.app.save(r)
+      v.set('status', 'ativo')
+      v.set('responsibility_id', origem.responsibility_id)
+      v.set('wish_id', origem.wish_id)
+      ctx.app.save(v)
+      avisar(ctx.app, r.getString('user_id'), 'convite_aceito', eu + ' agora participa de "' + r.getString('title') + '".', {
+        ator: eu,
+        projeto: r.id,
+      })
+      marcar(ctx, r.id)
+      return { resumo: 'Entrou no resultado ' + label(r), aceito: true, resultado_id: r.id }
+    },
+  }
+
+  OPS.ligar_resultado_compartilhado = {
+    scope: 'dono',
+    write: true,
+    title: 'Dizer o meu porquê em um resultado de outra pessoa',
+    description:
+      "Liga um resultado de que você participa a uma Responsabilidade ou Vontade SUA. Só você vê. Envie '' para desligar.",
+    schema: { type: 'object', required: ['resultado_id'], properties: Object.assign({ resultado_id: S_ID }, S_ORIGEM) },
+    run: function (ctx, input) {
+      var r = findResultado(ctx.app, str(input.resultado_id), ctx.userId)
+      if (r.getString('user_id') === ctx.userId)
+        throw rule('RESULTADO_SEU', 'Este resultado é seu: mude a origem na própria ficha.')
+      var v = vinculoDe(ctx.app, r.id, ctx.userId)
+      if (!v) throw new NotFoundError('Resultado não encontrado(a): ' + r.id)
+      var origem = origemPessoal(ctx, input)
+      v.set('responsibility_id', origem.responsibility_id)
+      v.set('wish_id', origem.wish_id)
+      ctx.app.save(v)
+      return { resumo: 'Ligou o resultado ' + label(r) + ' ao seu porquê', resultado_id: r.id }
+    },
+  }
+
+  OPS.ver_participantes = {
+    scope: 'dono',
+    title: 'Quem participa de um resultado',
+    description: 'Mostra quem criou o resultado, quem participa, quem ainda não respondeu ao convite e quantos avanços cada pessoa tem.',
+    schema: { type: 'object', required: ['resultado_id'], properties: { resultado_id: S_ID } },
+    run: function (ctx, input) {
+      var app = ctx.app
+      var r = findResultado(app, str(input.resultado_id), ctx.userId)
+      var acts = todos(app, 'actions', "project_id = {:p} && status != 'cancelada'", { p: r.id })
+      var conta = {}
+      for (var i = 0; i < acts.length; i++) {
+        var uid = acts[i].getString('user_id')
+        conta[uid] = conta[uid] || { abertos: 0, feitos: 0 }
+        if (acts[i].getString('status') === 'feita') conta[uid].feitos++
+        else conta[uid].abertos++
+      }
+      var linha = function (uid, papel, vinculoId) {
+        var v = pessoaView(app, uid)
+        v.papel = papel
+        v.eu = uid === ctx.userId
+        v.vinculo_id = vinculoId || null
+        v.avancos_abertos = (conta[uid] || {}).abertos || 0
+        v.avancos_feitos = (conta[uid] || {}).feitos || 0
+        return v
+      }
+      var pessoas = [linha(r.getString('user_id'), 'criou')]
+      var vs = todos(app, 'result_members', "project_id = {:p} && (status = 'ativo' || status = 'convidado')", {
+        p: r.id,
+      })
+      for (var k = 0; k < vs.length; k++)
+        pessoas.push(
+          linha(vs[k].getString('user_id'), vs[k].getString('status') === 'ativo' ? 'participa' : 'convidado', vs[k].id),
+        )
+      var meu = vinculoDe(app, r.id, ctx.userId)
+      return {
+        resultado_id: r.id,
+        sou_dono: r.getString('user_id') === ctx.userId,
+        pessoas: pessoas,
+        meu_porque:
+          r.getString('user_id') === ctx.userId
+            ? null
+            : {
+                responsabilidade_id: meu ? meu.getString('responsibility_id') || null : null,
+                vontade_id: meu ? meu.getString('wish_id') || null : null,
+              },
+      }
+    },
+  }
+
+  OPS.remover_participante = {
+    scope: 'dono',
+    write: true,
+    title: 'Tirar uma pessoa de um resultado',
+    description:
+      'Tira uma pessoa do resultado ou cancela um convite ainda sem resposta. Ela deixa de ver o resultado na hora, e os avanços que estavam com ela voltam para quem criou o resultado.',
+    schema: { type: 'object', required: ['resultado_id', 'pessoa_id'], properties: { resultado_id: S_ID, pessoa_id: S_ID } },
+    run: function (ctx, input) {
+      var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
+      var alvo = str(input.pessoa_id)
+      var v = vinculoDe(ctx.app, r.id, alvo)
+      if (!v || (v.getString('status') !== 'ativo' && v.getString('status') !== 'convidado'))
+        throw new NotFoundError('Esta pessoa não participa do resultado.')
+      var ativo = v.getString('status') === 'ativo'
+      v.set('status', 'removido')
+      ctx.app.save(v)
+      var voltaram = 0
+      if (ativo) {
+        voltaram = tirarParticipante(ctx.app, r, alvo)
+        avisar(ctx.app, alvo, 'removido', 'Você não participa mais do resultado "' + r.getString('title') + '".', {
+          ator: nomeDe(ctx.app, ctx.userId),
+        })
+      }
+      marcar(ctx, r.id)
+      return {
+        resumo: (ativo ? 'Tirou ' : 'Cancelou o convite de ') + nomeDe(ctx.app, alvo) + (ativo ? ' do resultado ' : ' para ') + label(r),
+        resultado_id: r.id,
+        avancos_que_voltaram: voltaram,
+      }
+    },
+  }
+
+  OPS.sair_do_resultado = {
+    scope: 'dono',
+    write: true,
+    title: 'Sair de um resultado compartilhado',
+    description:
+      'Você deixa de participar de um resultado de outra pessoa. Os avanços que estavam com você voltam para quem criou o resultado.',
+    schema: { type: 'object', required: ['resultado_id'], properties: { resultado_id: S_ID } },
+    run: function (ctx, input) {
+      var r = findResultado(ctx.app, str(input.resultado_id), ctx.userId)
+      if (r.getString('user_id') === ctx.userId)
+        throw rule('RESULTADO_SEU', 'Este resultado é seu. Para encerrar a parceria, tire as pessoas dele.')
+      var v = vinculoDe(ctx.app, r.id, ctx.userId)
+      if (v) {
+        v.set('status', 'saiu')
+        ctx.app.save(v)
+      }
+      var titulo = label(r)
+      var voltaram = tirarParticipante(ctx.app, r, ctx.userId)
+      var eu = nomeDe(ctx.app, ctx.userId)
+      avisar(ctx.app, r.getString('user_id'), 'saiu', eu + ' saiu do resultado "' + r.getString('title') + '".' + (voltaram ? ' ' + voltaram + (voltaram === 1 ? ' avanço voltou' : ' avanços voltaram') + ' para você.' : ''), {
+        ator: eu,
+        projeto: r.id,
+      })
+      marcar(ctx, r.id)
+      return { resumo: 'Saiu do resultado ' + titulo, avancos_que_voltaram: voltaram }
+    },
+  }
+
+  // ======================= DELEGAÇÃO =======================
+
+  function avancoDoResultado(ctx, id) {
+    var a = safeFind(ctx.app, 'actions', id)
+    var r = a ? safeFind(ctx.app, 'projects', a.getString('project_id')) : null
+    if (!a || !r || !participa(r, ctx.userId)) {
+      // Avanço meu, sem resultado: existe, mas não tem com quem dividir.
+      if (a && a.getString('user_id') === ctx.userId)
+        throw rule('AVANCO_SEM_RESULTADO', 'Só dá para passar um avanço que está em um resultado compartilhado.')
+      throw new NotFoundError('Avanço não encontrado(a): ' + id)
+    }
+    return { a: a, r: r }
+  }
+
+  OPS.passar_avanco = {
+    scope: 'dono',
+    write: true,
+    title: 'Passar um avanço para outra pessoa',
+    description:
+      'Em um resultado compartilhado, passa um avanço para outra pessoa que participa. Ele entra direto na lista dela, que pode devolver. Quem está com o avanço, quem passou e quem criou o resultado podem passar (ou pegar de volta, passando para si).',
+    schema: { type: 'object', required: ['avanco_id', 'pessoa_id'], properties: { avanco_id: S_ID, pessoa_id: S_ID } },
+    run: function (ctx, input) {
+      var x = avancoDoResultado(ctx, str(input.avanco_id))
+      var a = x.a
+      var r = x.r
+      var de = a.getString('user_id')
+      var para = str(input.pessoa_id)
+      var pode = de === ctx.userId || r.getString('user_id') === ctx.userId || a.getString('delegated_by') === ctx.userId
+      if (!pode) throw rule('NAO_ESTA_COM_VOCE', 'Este avanço está com outra pessoa. Só ela, quem passou ou quem criou o resultado pode passar adiante.')
+      if (!participa(r, para)) throw rule('PESSOA_DE_FORA', 'Essa pessoa não participa deste resultado.')
+      if (para === de) throw rule('JA_ESTA_COM_ELA', 'O avanço já está com essa pessoa.')
+      var st = a.getString('status')
+      if (st === 'feita' || st === 'cancelada') throw rule('AVANCO_ENCERRADO', 'Este avanço já foi encerrado.')
+      if (
+        a.getString('recurrence_series_id') ||
+        ctx.app.countRecords('recurrence_series', $dbx.hashExp({ source_action_id: a.id })) > 0
+      )
+        throw rule('AVANCO_DE_SERIE', 'Um avanço que se repete fica com quem o criou.')
+      if (ctx.app.countRecords('time_entries', $dbx.hashExp({ action_id: a.id, status: 'running' })) > 0)
+        throw rule('RELOGIO_LIGADO', 'O relógio está contando tempo neste avanço. Pare o relógio antes de passar.')
+      a.set('user_id', para)
+      a.set('delegated_by', para === ctx.userId ? '' : ctx.userId)
+      a.set('delegated_at', new DateTime())
+      a.set('is_next_step', false)
+      a.set('is_today_selected', false)
+      ctx.app.save(a)
+      var eu = nomeDe(ctx.app, ctx.userId)
+      var extra = { ator: eu, projeto: r.id, avanco: a.id }
+      if (para !== ctx.userId)
+        avisar(ctx.app, para, 'avanco_recebido', eu + ' passou para você o avanço "' + a.getString('title') + '".', extra)
+      if (de !== ctx.userId)
+        avisar(
+          ctx.app,
+          de,
+          'avanco_retomado',
+          eu + (para === ctx.userId ? ' pegou de volta' : ' passou para outra pessoa') + ' o avanço "' + a.getString('title') + '".',
+          extra,
+        )
+      marcar(ctx, r.id)
+      return {
+        resumo:
+          para === ctx.userId
+            ? 'Pegou de volta o avanço ' + label(a)
+            : 'Passou o avanço ' + label(a) + ' para ' + nomeDe(ctx.app, para),
+        avanco_id: a.id,
+        responsavel: pessoaView(ctx.app, para),
+      }
+    },
+  }
+
+  OPS.devolver_avanco = {
+    scope: 'dono',
+    write: true,
+    title: 'Devolver um avanço que me passaram',
+    description: 'Devolve um avanço para quem passou, com um motivo opcional. Sem culpa: devolver é melhor que deixar parado.',
+    schema: {
+      type: 'object',
+      required: ['avanco_id'],
+      properties: { avanco_id: S_ID, motivo: { type: 'string', maxLength: 300 } },
+    },
+    run: function (ctx, input) {
+      var x = avancoDoResultado(ctx, str(input.avanco_id))
+      var a = x.a
+      var r = x.r
+      if (a.getString('user_id') !== ctx.userId) throw new NotFoundError('Avanço não encontrado(a): ' + a.id)
+      var para = a.getString('delegated_by')
+      if (!para) throw rule('NINGUEM_PASSOU', 'Ninguém passou este avanço para você: ele já nasceu seu.')
+      if (!participa(r, para)) para = r.getString('user_id')
+      if (ctx.app.countRecords('time_entries', $dbx.hashExp({ action_id: a.id, status: 'running' })) > 0)
+        throw rule('RELOGIO_LIGADO', 'O relógio está contando tempo neste avanço. Pare o relógio antes de devolver.')
+      a.set('user_id', para)
+      a.set('delegated_by', '')
+      a.set('delegated_at', new DateTime())
+      a.set('is_next_step', false)
+      a.set('is_today_selected', false)
+      ctx.app.save(a)
+      var eu = nomeDe(ctx.app, ctx.userId)
+      var motivo = str(input.motivo)
+      avisar(
+        ctx.app,
+        para,
+        'avanco_devolvido',
+        eu + ' devolveu o avanço "' + a.getString('title') + '".' + (motivo ? ' Motivo: ' + motivo : ''),
+        { ator: eu, projeto: r.id, avanco: a.id },
+      )
+      marcar(ctx, r.id)
+      return { resumo: 'Devolveu o avanço ' + label(a) + ' para ' + nomeDe(ctx.app, para), avanco_id: a.id }
+    },
+  }
+
+  // ======================= AVISOS =======================
+
+  OPS.listar_avisos = {
+    scope: 'dono',
+    title: 'Ver os avisos',
+    description: 'Avisos discretos: convites, avanços que passaram para você, devolvidos ou concluídos, e resultados encerrados.',
+    schema: { type: 'object', properties: { limite: { type: 'integer', minimum: 1, maximum: 100 } } },
+    run: function (ctx, input) {
+      var list = ctx.app.findRecordsByFilter(
+        'notices',
+        'user_id = {:u}',
+        '-created',
+        Math.min(100, parseInt(input.limite, 10) || 30),
+        0,
+        { u: ctx.userId },
+      )
+      var convites = todos(ctx.app, 'result_members', "user_id = {:u} && status = 'convidado'", { u: ctx.userId })
+      var novos = 0
+      var avisos = list.map(function (n) {
+        var lido = String(n.get('read_at') || '')
+        if (!lido) novos++
+        return {
+          id: n.id,
+          tipo: n.getString('kind'),
+          texto: n.getString('text'),
+          de: n.getString('actor_name'),
+          resultado_id: n.getString('project_id') || null,
+          avanco_id: n.getString('action_id') || null,
+          convite_id: n.getString('member_id') || null,
+          lido: !!lido,
+          quando: String(n.get('created')),
+        }
+      })
+      return {
+        avisos: avisos,
+        novos: novos,
+        convites: convites.map(function (v) {
+          return vinculoView(ctx.app, v)
+        }),
+      }
+    },
+  }
+
+  OPS.marcar_avisos_lidos = {
+    scope: 'dono',
+    write: true,
+    title: 'Marcar avisos como lidos',
+    description: 'Marca como lidos todos os avisos, ou só os informados em "ids".',
+    schema: { type: 'object', properties: { ids: { type: 'array', items: S_ID } } },
+    run: function (ctx, input) {
+      var list = todos(ctx.app, 'notices', "user_id = {:u} && read_at = ''", { u: ctx.userId })
+      var so = Array.isArray(input.ids) && input.ids.length ? input.ids : null
+      var n = 0
+      for (var i = 0; i < list.length; i++) {
+        if (so && so.indexOf(list[i].id) < 0) continue
+        list[i].set('read_at', new DateTime())
+        ctx.app.save(list[i])
+        n++
+      }
+      return { resumo: 'Marcou ' + n + ' avisos como lidos', lidos: n }
     },
   }
 
@@ -2573,10 +3436,29 @@ function pegadaRota(e) {
       ev.set('summary', String(res.resumo || name).slice(0, 1000))
       ev.set('changes', ctx.changes)
       if (opts.batchId) ev.set('batch_id', opts.batchId)
+      var doResultado = ctx.projectId || resultadoDasMudancas(tx, ctx.changes)
+      if (doResultado) ev.set('project_id', doResultado)
       tx.save(ev)
       out = { ok: true, operacao: name, resultado: res, evento_id: ev.id }
     })
     return out
+  }
+
+  /** A qual resultado um evento pertence, para o histórico de quem participa. */
+  function resultadoDasMudancas(app, changes) {
+    for (var i = 0; i < changes.length; i++) {
+      var ch = changes[i]
+      if (ch.c === 'projects') return ch.id
+      if (ch.c === 'actions' || ch.c === 'strategies') {
+        var pid = (ch.after && ch.after.project_id) || ''
+        if (!pid) {
+          var rec = safeFind(app, ch.c, ch.id)
+          pid = rec ? rec.getString('project_id') : ''
+        }
+        if (pid) return pid
+      }
+    }
+    return ''
   }
 
   function summarizeInput(input) {
@@ -2650,6 +3532,9 @@ function pegadaRota(e) {
       for (var d = 0; d < changes.length; d++)
         if (changes[d].k === 'delete' || changes[d].k === 'restore')
           throw conflict('Isto se resolve na Lixeira: restaure o item por lá.')
+      for (var sh = 0; sh < changes.length; sh++)
+        if (changes[sh].k === 'share')
+          throw conflict('Isto se resolve na ficha do resultado, em Pessoas.')
       var ctx = makeCtx(tx, { type: actor.type, userId: actor.userId, agent: actor.agent })
       for (var i = changes.length - 1; i >= 0; i--) {
         var ch = changes[i]

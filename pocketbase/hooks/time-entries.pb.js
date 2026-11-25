@@ -257,7 +257,7 @@ routerAdd('POST', '/backend/v1/time/start', (e) => {
     } catch (_) {
       throw new NotFoundError('Alvo não encontrado.')
     }
-    if (target.getString('user_id') !== userId) {
+    if (target.getString('user_id') !== userId && !(targetType !== 'action' && target.getStringSlice('member_ids').indexOf(userId) >= 0)) {
       throw new ForbiddenError('Alvo pertence a outro usuário.')
     }
     let project = null
@@ -270,7 +270,7 @@ routerAdd('POST', '/backend/v1/time/start', (e) => {
         } catch (_) {
           throw new NotFoundError('O projeto pai da ação não existe mais.')
         }
-        if (project.getString('user_id') !== userId) {
+        if (project.getString('user_id') !== userId && project.getStringSlice('member_ids').indexOf(userId) < 0) {
           throw new ForbiddenError('O projeto pai da ação pertence a outro usuário.')
         }
         if (requireEligible && allowedProject.indexOf(project.getString('status')) === -1) {
@@ -762,7 +762,7 @@ routerAdd('POST', '/backend/v1/time/resume', (e) => {
     } catch (_) {
       throw new NotFoundError('Alvo do intervalo não existe mais; revise o tempo registrado.')
     }
-    if (target.getString('user_id') !== userId)
+    if (target.getString('user_id') !== userId && !(targetType !== 'action' && target.getStringSlice('member_ids').indexOf(userId) >= 0))
       throw new ForbiddenError('Alvo pertence a outro usuário.')
     let projectId = ''
     let project = null
@@ -774,7 +774,7 @@ routerAdd('POST', '/backend/v1/time/resume', (e) => {
         } catch (_) {
           throw new NotFoundError('O projeto pai da ação não existe mais.')
         }
-        if (project.getString('user_id') !== userId)
+        if (project.getString('user_id') !== userId && project.getStringSlice('member_ids').indexOf(userId) < 0)
           throw new ForbiddenError('O projeto pai da ação pertence a outro usuário.')
         if (allowedProject.indexOf(project.getString('status')) === -1)
           throw new ApiError(409, 'O projeto pai não está elegível para retomar dedicação.')
@@ -1039,7 +1039,7 @@ routerAdd('POST', '/backend/v1/time/manual', (e) => {
     } catch (_) {
       throw new NotFoundError('Alvo não encontrado.')
     }
-    if (target.getString('user_id') !== userId)
+    if (target.getString('user_id') !== userId && !(targetType !== 'action' && target.getStringSlice('member_ids').indexOf(userId) >= 0))
       throw new ForbiddenError('Alvo pertence a outro usuário.')
     let projectId = ''
     if (targetType === 'action') {
@@ -1051,7 +1051,7 @@ routerAdd('POST', '/backend/v1/time/manual', (e) => {
         } catch (_) {
           throw new NotFoundError('O projeto pai da ação não existe mais.')
         }
-        if (project.getString('user_id') !== userId)
+        if (project.getString('user_id') !== userId && project.getStringSlice('member_ids').indexOf(userId) < 0)
           throw new ForbiddenError('O projeto pai da ação pertence a outro usuário.')
       }
     } else {

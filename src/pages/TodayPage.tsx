@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { dayInZone, todayInZone, ownerTimezone } from '@/lib/datetime'
 import { PegadaSimbolo } from '@/components/PegadaSimbolo'
+import { FioESemana } from '@/components/FioESemana'
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -402,7 +403,8 @@ export const TodayPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start lg:gap-10">
+    <div className="min-w-0 space-y-8">
       {/* Cabeçalho do desenho: a data, o título e o propósito em uma linha. */}
       <div className="space-y-3">
         <div>
@@ -840,6 +842,13 @@ export const TodayPage: React.FC = () => {
         action={logModalAction}
         onSaved={loadData}
       />
+    </div>
+    <FioESemana
+      actions={actions}
+      hoje={todayStr}
+      timezone={timezone}
+      className="hidden lg:sticky lg:top-6 lg:flex"
+    />
     </div>
   )
 }

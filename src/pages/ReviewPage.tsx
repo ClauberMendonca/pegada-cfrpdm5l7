@@ -36,6 +36,7 @@ import {
 import { EntityNumberBadge } from "@/components/EntityNumberBadge";
 import { formatEntityTitle } from "@/lib/entityNumber";
 import { GuidedReview } from "@/components/GuidedReview";
+import { OQueReavaliar } from "@/components/OQueReavaliar";
 
 /**
  * BLOCO 3 — Revisão acionável.
@@ -161,6 +162,10 @@ export const ReviewPage: React.FC = () => {
 
       {/* PEGADA — Revisão guiada, passo a passo, sobre ver_resumo_semana */}
       <GuidedReview onChanged={retry} />
+
+      {!isLoading && !loadError && (
+        <OQueReavaliar actions={actions} hoje={referenceDate} />
+      )}
 
       {/* BLOCO 3(a) — carregando */}
       {isLoading && (

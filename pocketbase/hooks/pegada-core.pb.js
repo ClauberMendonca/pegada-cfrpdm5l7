@@ -27,6 +27,7 @@ function pegadaRota(e) {
 
   var VERSION = '0.1.0'
   var MAX_ACTIVE_RESULTS = 7
+  var REF_ELEMENTS = ['responsabilidade', 'resultado', 'estrategia', 'avanco']
   var SUGGESTED_ACTIVE_RESULTS = 5
   var KINDS = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia', 'espera']
   var KIND_LABEL = {
@@ -1240,7 +1241,124 @@ function pegadaRota(e) {
           )
         }
         ctx.update(a, { status: 'feita', trail: trail || undefined, is_next_step: false })
+        // A conclusão de um Estudo ou de uma Reflexão vira uma nota presa ao
+        // resultado: o que a pessoa aprendeu ou decidiu não se perde.
+        var projId = a.getString('project_id')
+        if ((kind === 'estudo' || kind === 'reflexao') && trail && projId) {
+          try {
+            ctx.create('references', {
+              element_type: 'resultado',
+              element_id: projId,
+              kind: 'nota',
+              title: (kind === 'estudo' ? 'Conclusão do estudo: ' : 'Decisão da reflexão: ') + a.getString('title'),
+              body: trail,
+              source_action_id: a.id,
+              status: 'ativa',
+            })
+          } catch (_) {
+            // Sem a coleção (servidor ainda não migrado), a conclusão segue valendo.
+          }
+        }
         return { resumo: 'Concluiu ' + KIND_LABEL[kind] + ' ' + label(a), avanco_id: a.id }
+      },
+    },
+
+    // ======================= MATERIAL DE REFERÊNCIA =======================
+    listar_referencias: {
+      scope: 'ler',
+      write: false,
+      title: 'Listar material de referência',
+      description:
+        'Lista os anexos leves (notas, links, contatos, documentos) de um elemento. O Pegada não tem arquivo geral: o material aparece só onde é usado.',
+      schema: {
+        type: 'object',
+        required: ['elemento_tipo', 'elemento_id'],
+        properties: {
+          elemento_tipo: { type: 'string', enum: REF_ELEMENTS },
+          elemento_id: S_ID,
+        },
+      },
+      run: function (ctx, input) {
+        var recs = ctx.app.findRecordsByFilter(
+          'references',
+          "user_id = {:u} && element_type = {:t} && element_id = {:e} && status = 'ativa'",
+          '-created',
+          200,
+          0,
+          { u: ctx.userId, t: str(input.elemento_tipo), e: str(input.elemento_id) },
+        )
+        return {
+          referencias: recs.map(function (r) {
+            return {
+              id: r.id,
+              tipo: r.getString('kind'),
+              titulo: r.getString('title'),
+              texto: r.getString('body'),
+              endereco: r.getString('url'),
+              do_avanco_id: r.getString('source_action_id') || null,
+              criada_em: r.getString('created'),
+            }
+          }),
+        }
+      },
+    },
+    anexar_referencia: {
+      scope: 'avancos',
+      write: true,
+      title: 'Anexar material de referência',
+      description:
+        'Prende uma nota, um link, um contato ou um documento (pelo endereço) a uma responsabilidade, um resultado, uma estratégia ou um avanço.',
+      schema: {
+        type: 'object',
+        required: ['elemento_tipo', 'elemento_id', 'tipo'],
+        properties: {
+          elemento_tipo: { type: 'string', enum: REF_ELEMENTS },
+          elemento_id: S_ID,
+          tipo: { type: 'string', enum: ['nota', 'link', 'contato', 'documento'] },
+          titulo: { type: 'string', maxLength: 300 },
+          texto: { type: 'string', maxLength: 5000 },
+          endereco: { type: 'string', maxLength: 2000 },
+        },
+      },
+      run: function (ctx, input) {
+        var et = str(input.elemento_tipo)
+        var col = { responsabilidade: 'responsibilities', resultado: 'projects', estrategia: 'strategies', avanco: 'actions' }[et]
+        if (!col) throw rule('ELEMENTO_INVALIDO', 'elemento_tipo deve ser responsabilidade, resultado, estrategia ou avanco.')
+        var kind = str(input.tipo)
+        if (['nota', 'link', 'contato', 'documento'].indexOf(kind) < 0)
+          throw rule('TIPO_INVALIDO', 'tipo deve ser nota, link, contato ou documento.')
+        var el
+        if (et === 'estrategia') {
+          el = ctx.app.findRecordById('strategies', str(input.elemento_id))
+          findOwned(ctx.app, 'projects', el.getString('project_id'), ctx.userId, 'Resultado')
+        } else el = findOwned(ctx.app, col, str(input.elemento_id), ctx.userId, 'Elemento')
+        var url = str(input.endereco)
+        if (url && !/^(https?:\/\/|mailto:|tel:)/i.test(url)) url = 'https://' + url
+        var title = str(input.titulo)
+        var body = str(input.texto)
+        if (!title && !body && !url) throw rule('REFERENCIA_VAZIA', 'Escreva a nota ou informe o endereço.')
+        var r = ctx.create('references', {
+          element_type: et,
+          element_id: el.id,
+          kind: kind,
+          title: title || undefined,
+          body: body || undefined,
+          url: url || undefined,
+          status: 'ativa',
+        })
+        return { resumo: 'Anexou ' + kind + ' a ' + et, referencia_id: r.id }
+      },
+    },
+    remover_referencia: {
+      scope: 'avancos',
+      write: true,
+      title: 'Remover material de referência',
+      description: 'Tira um anexo do elemento. Dá para desfazer.',
+      schema: { type: 'object', required: ['referencia_id'], properties: { referencia_id: S_ID } },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'references', str(input.referencia_id), ctx.userId, 'Referência')
+        ctx.update(r, { status: 'removida' })
+        return { resumo: 'Removeu um anexo', referencia_id: r.id }
       },
     },
 

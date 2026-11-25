@@ -1,3 +1,4 @@
+import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { TimeEntry } from '@/services/timeService'
@@ -742,6 +743,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           ) : null}
         </div>
 
+        <Referencias elemento="resultado" id={project.id} recarregar={actions} />
         <div id="como-chegar" className="scroll-mt-20" />
         <StrategySection
           projectId={project.id}

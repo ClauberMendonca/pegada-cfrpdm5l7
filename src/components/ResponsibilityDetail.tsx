@@ -7,6 +7,7 @@
  * (destinos atuais); sem callbacks de execução, foco, logs, Hoje ou
  * cronômetro nesta visão. Sem botão Excluir.
  */
+import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
 import { Desdobrar } from '@/components/Desdobrar'
 import { op as pegadaOp } from '@/lib/pegada/api'
@@ -237,6 +238,7 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
       ) : null}
 
       {/* Hierarquia real (somente leitura) */}
+      <Referencias elemento="responsabilidade" id={responsibility.id} />
       <Escada
         paraQue={{ to: '/mapa', nome: 'o seu propósito' }}
         como={{ ancora: 'como-sustentar', nome: 'os resultados e avanços desta responsabilidade' }}

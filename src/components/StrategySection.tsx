@@ -8,6 +8,7 @@
  *   seguem na apresentação atual, não agrupada. A falha não afeta a ficha.
  * Nenhuma ação de grupo seleciona/conclui/cria Avanço ou muda o Resultado.
  */
+import { Referencias } from '@/components/Referencias'
 import { Desdobrar } from '@/components/Desdobrar'
 import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -321,6 +322,7 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
                     )}
                   </p>
                 )}
+                {isOpen && <Referencias elemento="estrategia" id={strategy.id} />}
               </li>
             )
           })}

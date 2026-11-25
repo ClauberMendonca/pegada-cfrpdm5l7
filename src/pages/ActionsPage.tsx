@@ -1,3 +1,4 @@
+import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -918,6 +919,7 @@ export const ActionsPage: React.FC = () => {
                             }
                           />
                           {renderActionRow(action, isDest)}
+                          <Referencias elemento="avanco" id={action.id} />
                         </div>
                       )}
                     </li>

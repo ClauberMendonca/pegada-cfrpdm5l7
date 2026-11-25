@@ -34,6 +34,17 @@ export interface Acesso {
   quando: string
 }
 
+export interface Uso {
+  id: string
+  nome: string
+  dias_com_uso_7: number
+  dias_com_uso_28: number
+  operacoes_28: number
+  com_ia_28: number
+  por_agentes_28: number
+  mais_usadas: { operacao: string; vezes: number }[]
+}
+
 /** Mensagem do servidor em português, ou uma frase padrão. */
 export function mensagemDe(err: unknown, padrao = 'Não deu certo. Tente de novo.'): string {
   if (err instanceof ClientResponseError) {
@@ -69,6 +80,9 @@ export const conta = {
   reativar: (id: string) => post<{ ok: boolean }>('/pessoas/' + id + '/reativar'),
   acessosDeTodos: () => get<{ acessos: Acesso[] }>('/acessos'),
   sairDeTodos: () => post<{ ok: boolean; token: string }>('/sair-de-todos'),
+  exportar: () => get<Record<string, unknown>>('/exportar'),
+  excluir: (senha: string, confirmo: string) => post<{ ok: boolean }>('/excluir', { senha, confirmo }),
+  uso: () => get<{ janela_dias: number; uso: Uso[] }>('/uso'),
 }
 
 /** Os últimos acessos da própria pessoa (a coleção só mostra os dela). */

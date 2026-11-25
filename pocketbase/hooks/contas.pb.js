@@ -16,6 +16,9 @@
 //   POST pessoas/{id}/reativar      admin
 //   GET  acessos                    admin: registro de acesso de todos
 //   POST sair-de-todos              a pessoa encerra as outras sessões
+//   GET  exportar                   a pessoa baixa tudo o que é dela
+//   POST excluir                    a pessoa exclui a conta (pede a senha)
+//   GET  uso                        admin: contagens de uso, sem conteúdo
 //
 // NOTA JSVM: cada callback roda isolado; a lógica comum vem de lib/contas.js,
 // carregada dentro de cada um.
@@ -149,6 +152,138 @@ function contaRota(e) {
     contas.registrar(app, e, rec.id, 'sessoes_encerradas', '')
     // Esta sessão continua, com um token novo; as outras caem.
     return e.json(200, { ok: true, token: rec.newAuthToken() })
+  }
+
+  // Coleções que guardam dados de uma pessoa: todas as que têm user_id.
+  function colecoesDaPessoa() {
+    var nomes = []
+    var todas = app.findAllCollections('base')
+    for (var ci = 0; ci < todas.length; ci++) {
+      if (todas[ci].fields.getByName('user_id')) nomes.push(todas[ci].name)
+    }
+    return nomes.sort()
+  }
+
+  // Exportar meus dados: tudo o que é da pessoa, em JSON legível.
+  if (metodo === 'GET' && p[0] === 'exportar' && p.length === 1) {
+    var dona = app.findRecordById('users', pessoa().id)
+    var dados = {}
+    var nomesCol = colecoesDaPessoa()
+    for (var ni = 0; ni < nomesCol.length; ni++) {
+      var linhas = []
+      var pagina = 0
+      for (;;) {
+        var lote = app.findRecordsByFilter(nomesCol[ni], 'user_id = {:u}', 'created', 500, pagina * 500, {
+          u: dona.id,
+        })
+        for (var li = 0; li < lote.length; li++) linhas.push(lote[li].publicExport())
+        if (lote.length < 500) break
+        pagina++
+      }
+      dados[nomesCol[ni]] = linhas
+    }
+    contas.registrar(app, e, dona.id, 'dados_exportados', '')
+    return e.json(200, {
+      pegada: 'exportação dos meus dados',
+      exportado_em: new Date().toISOString(),
+      conta: {
+        id: dona.id,
+        nome: dona.getString('name'),
+        email: dona.getString('email'),
+        fuso: dona.getString('timezone'),
+        proposito: dona.getString('life_purpose'),
+        criada_em: dona.getString('created'),
+      },
+      // Nomes das coleções como estão no banco: projects = resultados,
+      // actions = avanços, strategies = estratégias, wishes = vontades,
+      // responsibilities = responsabilidades, captures = capturas.
+      dados: dados,
+    })
+  }
+
+  // Excluir a conta: apaga tudo o que é da pessoa. Pede a senha de novo.
+  if (metodo === 'POST' && p[0] === 'excluir' && p.length === 1) {
+    var alvoE = app.findRecordById('users', pessoa().id)
+    var bE = corpo()
+    if (alvoE.getString('role') === 'admin')
+      throw new BadRequestError(
+        'Esta conta administra o Pegada. Passe a administração a outra pessoa, pelo painel, antes de excluir.',
+      )
+    if (!alvoE.validatePassword(String(bE.senha || '')))
+      throw new BadRequestError('Senha incorreta. A conta não foi excluída.')
+    if (String(bE.confirmo || '') !== 'EXCLUIR')
+      throw new BadRequestError('Digite EXCLUIR para confirmar.')
+    var nomesE = colecoesDaPessoa()
+    app.runInTransaction(function (tx) {
+      for (var ei = 0; ei < nomesE.length; ei++) {
+        tx.db()
+          .newQuery('DELETE FROM `' + nomesE[ei] + '` WHERE user_id = {:u}')
+          .bind({ u: alvoE.id })
+          .execute()
+      }
+      tx.delete(alvoE)
+    })
+    contas.registrar(app, e, '', 'conta_excluida', 'pela própria pessoa')
+    return e.json(200, { ok: true })
+  }
+
+  // Uso agregado, só para quem administra: contagens por pessoa, tiradas do
+  // histórico do método. Nenhum conteúdo é lido.
+  if (metodo === 'GET' && p[0] === 'uso' && p.length === 1) {
+    admin()
+    var agora = Date.now()
+    var d7 = new Date(agora - 7 * 86400000).toISOString().replace('T', ' ')
+    var d28 = new Date(agora - 28 * 86400000).toISOString().replace('T', ' ')
+    var linhasUso = arrayOf(
+      new DynamicModel({ user_id: '', dias7: 0, dias28: 0, ops28: 0, ia28: 0, agente28: 0 }),
+    )
+    app
+      .db()
+      .newQuery(
+        'SELECT user_id, ' +
+          'COUNT(DISTINCT CASE WHEN created >= {:d7} THEN substr(created, 1, 10) END) AS dias7, ' +
+          'COUNT(DISTINCT substr(created, 1, 10)) AS dias28, ' +
+          'COUNT(*) AS ops28, ' +
+          "SUM(CASE WHEN actor_type = 'ia_embutida' THEN 1 ELSE 0 END) AS ia28, " +
+          "SUM(CASE WHEN actor_type = 'agente' THEN 1 ELSE 0 END) AS agente28 " +
+          'FROM audit_events WHERE created >= {:d28} GROUP BY user_id',
+      )
+      .bind({ d7: d7, d28: d28 })
+      .all(linhasUso)
+    var porOp = arrayOf(new DynamicModel({ user_id: '', op: '', n: 0 }))
+    app
+      .db()
+      .newQuery(
+        'SELECT user_id, op, COUNT(*) AS n FROM audit_events WHERE created >= {:d28} ' +
+          'GROUP BY user_id, op ORDER BY n DESC',
+      )
+      .bind({ d28: d28 })
+      .all(porOp)
+    var mapaUso = {}
+    for (var ui = 0; ui < linhasUso.length; ui++) mapaUso[linhasUso[ui].user_id] = linhasUso[ui]
+    var mapaOps = {}
+    for (var oi = 0; oi < porOp.length; oi++) {
+      var uo = porOp[oi].user_id
+      if (!mapaOps[uo]) mapaOps[uo] = []
+      if (mapaOps[uo].length < 3) mapaOps[uo].push({ operacao: porOp[oi].op, vezes: porOp[oi].n })
+    }
+    var gente = app.findRecordsByFilter('users', "id != ''", 'created', 500, 0)
+    return e.json(200, {
+      janela_dias: 28,
+      uso: gente.map(function (u) {
+        var m = mapaUso[u.id]
+        return {
+          id: u.id,
+          nome: u.getString('name') || u.getString('email'),
+          dias_com_uso_7: m ? m.dias7 : 0,
+          dias_com_uso_28: m ? m.dias28 : 0,
+          operacoes_28: m ? m.ops28 : 0,
+          com_ia_28: m ? m.ia28 : 0,
+          por_agentes_28: m ? m.agente28 : 0,
+          mais_usadas: mapaOps[u.id] || [],
+        }
+      }),
+    })
   }
 
   // ---------------------------------------------------------------- admin
@@ -322,6 +457,9 @@ routerAdd('GET', '/backend/v1/pegada/conta/pessoas', contaRota)
 routerAdd('POST', '/backend/v1/pegada/conta/pessoas/{id}/{acao}', contaRota)
 routerAdd('GET', '/backend/v1/pegada/conta/acessos', contaRota)
 routerAdd('POST', '/backend/v1/pegada/conta/sair-de-todos', contaRota)
+routerAdd('GET', '/backend/v1/pegada/conta/exportar', contaRota)
+routerAdd('POST', '/backend/v1/pegada/conta/excluir', contaRota)
+routerAdd('GET', '/backend/v1/pegada/conta/uso', contaRota)
 
 // ---------------------------------------------------------------- entrada
 // Registra entradas e falhas. Na falha, a resposta ao navegador continua a

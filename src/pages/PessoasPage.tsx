@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Copy, Users } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { Acesso, Convite, Pessoa, conta, mensagemDe, navegadorCurto, nomeDoAcesso, quandoCurto } from '@/lib/pegada/conta'
+import { Acesso, Convite, Pessoa, Uso, conta, mensagemDe, navegadorCurto, nomeDoAcesso, quandoCurto } from '@/lib/pegada/conta'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,7 @@ export const PessoasPage: React.FC = () => {
   const [pessoas, setPessoas] = useState<Pessoa[]>([])
   const [convites, setConvites] = useState<Convite[]>([])
   const [acessos, setAcessos] = useState<Acesso[]>([])
+  const [uso, setUso] = useState<Uso[]>([])
   const [temEmail, setTemEmail] = useState(false)
   const [email, setEmail] = useState('')
   const [convidando, setConvidando] = useState(false)
@@ -33,7 +34,8 @@ export const PessoasPage: React.FC = () => {
 
   const carregar = useCallback(async () => {
     try {
-      const [p, c, a] = await Promise.all([conta.pessoas(), conta.convites(), conta.acessosDeTodos()])
+      const [p, c, a, u] = await Promise.all([conta.pessoas(), conta.convites(), conta.acessosDeTodos(), conta.uso()])
+      setUso(u.uso)
       setPessoas(p.pessoas)
       setConvites(c.convites)
       setTemEmail(c.email)
@@ -214,6 +216,43 @@ export const PessoasPage: React.FC = () => {
                       Desativar
                     </Button>
                   ))}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border bg-card">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-medium text-foreground">Uso</CardTitle>
+          <CardDescription>
+            Contagens dos últimos 28 dias, tiradas do histórico. O conteúdo de ninguém é lido.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="divide-y divide-border" aria-label="Uso por pessoa">
+            {uso.map((u) => (
+              <li key={u.id} className="space-y-1 py-3">
+                <p className="flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
+                  <span className="font-medium text-foreground">{u.nome}</span>
+                  <span className="text-muted-foreground">
+                    {u.dias_com_uso_7} de 7 dias · {u.dias_com_uso_28} de 28 dias
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {u.operacoes_28 === 0
+                    ? 'Sem uso no período.'
+                    : [
+                        `${u.operacoes_28} ${u.operacoes_28 === 1 ? 'operação' : 'operações'}`,
+                        u.com_ia_28 ? `${u.com_ia_28} com sugestão da IA` : '',
+                        u.por_agentes_28 ? `${u.por_agentes_28} por agentes` : '',
+                        u.mais_usadas.length
+                          ? 'mais usadas: ' + u.mais_usadas.map((m) => `${m.operacao.replace(/_/g, ' ')} (${m.vezes})`).join(', ')
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                </p>
               </li>
             ))}
           </ul>

@@ -148,6 +148,37 @@ async function contas({ t, suToken, donoId, login2 }) {
   const todos = await http('GET', C + '/acessos', { token: t })
   confere('acesso: só quem administra vê o registro de todos', todosNegado.status === 403 && todos.status === 200 && (todos.json?.acessos || []).length > 0, { negado: todosNegado.status, todos: todos.status })
 
+  // Exportar, uso agregado e excluir conta
+  const exp = await http('GET', C + '/exportar', { token: tc3 })
+  const expTexto = JSON.stringify(exp.json || {})
+  confere('conta: a pessoa exporta os próprios dados', exp.status === 200 && expTexto.includes('Primeira captura da convidada') && exp.json?.conta?.email === emailConv, { status: exp.status })
+  confere('conta: a exportação não traz senha, token nem dados de outra pessoa', !expTexto.includes('tokenKey') && !expTexto.includes('token_hash') && !expTexto.includes('password') && !expTexto.includes(donoId), null)
+  const usoNegado = await http('GET', C + '/uso', { token: tc3 })
+  const uso = await http('GET', C + '/uso', { token: t })
+  const usoDono = (uso.json?.uso || []).find((x) => x.id === donoId)
+  const usoConv = (uso.json?.uso || []).find((x) => x.id === idConv)
+  confere('uso: só quem administra vê as contagens', usoNegado.status === 403 && uso.status === 200, { negado: usoNegado.status, uso: uso.status })
+  confere('uso: conta dias e operações por pessoa, sem conteúdo', usoDono?.operacoes_28 > 5 && usoDono?.dias_com_uso_7 === 1 && usoConv?.operacoes_28 >= 1 && !JSON.stringify(uso.json).includes('Primeira captura'), { dono: usoDono, conv: usoConv })
+  {
+    const emailSai = 'vai-sair-' + Date.now() + '@pegada.teste'
+    const cv = await http('POST', C + '/convites', { token: t, body: { email: emailSai } })
+    const tk = (cv.json?.link || '').split('/convite/')[1]
+    const senhaSai = 'tijolo-nuvem-cadeira'
+    await http('POST', C + '/convite/' + tk + '/aceitar', { body: { nome: 'Vai Sair', senha: senhaSai, aceito_aviso: true } })
+    const ls = await http('POST', U + '/auth-with-password', { body: { identity: emailSai, password: senhaSai } })
+    const ts = ls.json?.token
+    await http('POST', '/backend/v1/pegada/op/capturar', { token: ts, body: { texto: 'Captura que vai embora' } })
+    const semSenha = await http('POST', C + '/excluir', { token: ts, body: { senha: 'errada-errada', confirmo: 'EXCLUIR' } })
+    const semPalavra = await http('POST', C + '/excluir', { token: ts, body: { senha: senhaSai } })
+    confere('conta: excluir exige a senha e a confirmação', semSenha.status === 400 && semPalavra.status === 400, { senha: semSenha.status, palavra: semPalavra.status })
+    const exclui = await http('POST', C + '/excluir', { token: ts, body: { senha: senhaSai, confirmo: 'EXCLUIR' } })
+    const naoEntra = await http('POST', U + '/auth-with-password', { body: { identity: emailSai, password: senhaSai } })
+    const sobras = await http('GET', '/api/collections/captures/records?filter=' + encodeURIComponent(`user_id="${ls.json?.record?.id}"`), { token: suToken })
+    confere('conta: excluir apaga a conta e tudo o que era dela', exclui.status === 200 && naoEntra.status >= 400 && (sobras.json?.items || []).length === 0, { exclui: exclui.status, entra: naoEntra.status, sobras: sobras.json?.items?.length })
+    const adminSai = await http('POST', C + '/excluir', { token: t, body: { senha: 'qualquer', confirmo: 'EXCLUIR' } })
+    confere('conta: quem administra não se exclui por engano', adminSai.status === 400, adminSai)
+  }
+
   // Desativar e reativar
   const pessoas = await http('GET', C + '/pessoas', { token: t })
   confere('conta: admin lista as pessoas sem conteúdo do método', pessoas.status === 200 && (pessoas.json?.pessoas || []).some((x) => x.id === idConv), pessoas)

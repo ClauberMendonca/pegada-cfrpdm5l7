@@ -7,6 +7,7 @@ import { PrivacidadeIA } from '@/components/PrivacidadeIA'
 import { PerfilCard } from '@/components/conta/PerfilCard'
 import { EntradaCard } from '@/components/conta/EntradaCard'
 import { SegurancaCard } from '@/components/conta/SegurancaCard'
+import { MeusDadosCard } from '@/components/conta/MeusDadosCard'
 import { AvisoPrivacidade } from '@/components/conta/AvisoPrivacidade'
 
 /**
@@ -61,6 +62,7 @@ export default function SettingsPage() {
       </Card>
 
       <SegurancaCard />
+      <MeusDadosCard />
     </div>
   )
 }

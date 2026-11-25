@@ -2482,11 +2482,12 @@ function pegadaRota(e) {
     }
     var sugestao = null
     try {
-      sugestao = JSON.parse(
-        String(content)
-          .replace(/^```(json)?|```$/g, '')
-          .trim(),
-      )
+      // Só o trecho entre a primeira "{" e a última "}": a IA às vezes
+      // escreve uma frase ou uma cerca de código em volta do JSON.
+      var bruto = String(content)
+      var ini = bruto.indexOf('{')
+      var fim = bruto.lastIndexOf('}')
+      sugestao = JSON.parse(ini >= 0 && fim > ini ? bruto.slice(ini, fim + 1) : bruto.trim())
     } catch (_) {
       sugestao = null
     }

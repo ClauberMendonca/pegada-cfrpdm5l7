@@ -2436,8 +2436,20 @@ function pegadaRota(e) {
         'Proponha uma frase de propósito no formato "Eu existo para [verbo] [quem ou o quê], para que [mudança]." Responda JSON {"texto": "...", "por_que": "uma frase"}.',
       captura:
         'Classifique a captura: destino entre avanco, resultado, responsabilidade, estrategia; se avanco, o tipo. Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
+      // Desdobrar: descer um degrau da escada, sempre como sugestões selecionáveis.
+      desdobrar_papel:
+        'A pessoa descreve um PAPEL que vive (pai, sócia, líder). Traduza em 3 a 5 RESPONSABILIDADES: compromissos contínuos, com padrão a manter e sem linha de chegada, escritos como "Cuidar de…" ou "Zelar por…". Para cada uma, o contexto: vida ou trabalho. Responda JSON {"sugestoes": [{"titulo": "...", "contexto": "vida ou trabalho", "por_que": "uma frase"}]}.',
+      desdobrar_responsabilidade:
+        'A pessoa informa uma RESPONSABILIDADE. Proponha 2 a 4 RESULTADOS que nascem dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
+      desdobrar_resultado:
+        'A pessoa informa um RESULTADO. Proponha 2 a 3 ESTRATÉGIAS: apostas diferentes sobre o caminho, escritas como "Por meio de…", que podem ser trocadas sem mudar o resultado. Responda JSON {"sugestoes": [{"titulo": "...", "por_que": "uma frase"}]}.',
+      desdobrar_estrategia:
+        'A pessoa informa uma ESTRATÉGIA e o resultado a que ela serve. Proponha 3 a 5 AVANÇOS concretos: título curto começando por verbo e o tipo entre acao, compromisso, estudo, reflexao, ideia, espera. Responda JSON {"sugestoes": [{"titulo": "...", "tipo": "...", "por_que": "uma frase"}]}.',
+      // Correção gentil: confere se o texto é mesmo um resultado.
+      conferir_resultado:
+        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, responsabilidade (padrão a manter, sem linha de chegada), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
     }[tipo]
-    if (!guide) throw new BadRequestError('tipo deve ser resultado, avanco, proposito ou captura.')
+    if (!guide) throw new BadRequestError('tipo de sugestão desconhecido.')
     var baseUrl = ($os.getenv('PEGADA_IA_URL') || 'https://api.anthropic.com').replace(/\/$/, '')
     var modelo = $os.getenv('PEGADA_IA_MODELO') || 'claude-sonnet-5-5'
     var res = null

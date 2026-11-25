@@ -8,6 +8,8 @@
  *   seguem na apresentação atual, não agrupada. A falha não afeta a ficha.
  * Nenhuma ação de grupo seleciona/conclui/cria Avanço ou muda o Resultado.
  */
+import { Desdobrar } from '@/components/Desdobrar'
+import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +41,8 @@ export interface StrategySectionProps {
      Estratégia: recarrega SOMENTE esta lista de grupos (hook82), sem tocar
      logs/tempo/handlers. Opcional — chamadores antigos continuam compatíveis. */
   refreshTick?: number
+  /** Avisa a ficha quando o desdobrar criou avanços, para ela recarregar a lista. */
+  onAvancosCriados?: () => void
 }
 
 const ARCHIVE_HINT =
@@ -50,6 +54,7 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
   actions,
   renderActions,
   refreshTick,
+  onAvancosCriados,
 }) => {
   const { toast } = useToast()
   const strategies = useProjectStrategies(projectId)
@@ -168,6 +173,16 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
         </Button>
       </div>
 
+      <Desdobrar
+        nivel="resultado"
+        texto={projectLabel}
+        rotulo="Desdobrar em estratégias"
+        onCriar={async (s) => {
+          await pegadaOp('criar_estrategia', { resultado_id: projectId, titulo: s.titulo })
+        }}
+        onCriados={() => strategies.reload()}
+      />
+
       {strategies.loading && (
         <p role="status" className="text-xs text-muted-foreground">
           Carregando estratégias…
@@ -219,6 +234,28 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
                     {isArchived ? 'Arquivada' : 'Ativa'}
                   </Badge>
                 </div>
+                {!isArchived && (
+                  <Desdobrar
+                    nivel="estrategia"
+                    texto={`Estratégia: ${strategy.title}. Resultado: ${projectLabel}`}
+                    rotulo="Desdobrar em avanços"
+                    onCriar={async (s) => {
+                      const tipo = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia', 'espera'].includes(
+                        s.tipo || '',
+                      )
+                        ? s.tipo
+                        : 'acao'
+                      await pegadaOp('criar_avanco', {
+                        titulo: s.titulo,
+                        tipo,
+                        resultado_id: projectId,
+                        estrategia_id: strategy.id,
+                        ...(tipo === 'espera' ? { aguardando: 'A definir' } : {}),
+                      })
+                    }}
+                    onCriados={() => onAvancosCriados?.()}
+                  />
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"

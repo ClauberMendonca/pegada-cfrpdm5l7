@@ -1,3 +1,4 @@
+import { Escada } from '@/components/Escada'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
@@ -899,7 +900,26 @@ export const ActionsPage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      {aberto && <div className="border-t border-border p-2">{renderActionRow(action, isDest)}</div>}
+                      {aberto && (
+                        <div className="space-y-2 border-t border-border p-2">
+                          <Escada
+                            paraQue={
+                              action.project_id
+                                ? {
+                                    to: `/resultados?id=${encodeURIComponent(action.project_id)}`,
+                                    nome: 'o resultado a que este avanço serve',
+                                  }
+                                : action.responsibility_id
+                                  ? {
+                                      to: `/responsabilidades?id=${encodeURIComponent(action.responsibility_id)}`,
+                                      nome: 'a responsabilidade que este avanço sustenta',
+                                    }
+                                  : undefined
+                            }
+                          />
+                          {renderActionRow(action, isDest)}
+                        </div>
+                      )}
                     </li>
                   )
                 })}

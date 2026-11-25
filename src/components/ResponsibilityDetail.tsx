@@ -7,6 +7,9 @@
  * (destinos atuais); sem callbacks de execução, foco, logs, Hoje ou
  * cronômetro nesta visão. Sem botão Excluir.
  */
+import { Escada } from '@/components/Escada'
+import { Desdobrar } from '@/components/Desdobrar'
+import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -234,8 +237,40 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
       ) : null}
 
       {/* Hierarquia real (somente leitura) */}
-      <section aria-label="Itens vinculados a esta responsabilidade" className="space-y-4">
+      <Escada
+        paraQue={{ to: '/mapa', nome: 'o seu propósito' }}
+        como={{ ancora: 'como-sustentar', nome: 'os resultados e avanços desta responsabilidade' }}
+      />
+      <section
+        id="como-sustentar"
+        aria-label="Itens vinculados a esta responsabilidade"
+        className="scroll-mt-20 space-y-4"
+      >
         <h3 className="text-lg font-semibold text-foreground">Itens vinculados</h3>
+        {responsibility.status === 'ativa' && (
+          <div className="space-y-1">
+            <Desdobrar
+              nivel="responsabilidade"
+              texto={responsibility.title}
+              rotulo="Desdobrar em resultados"
+              onCriar={async (s) => {
+                await pegadaOp('criar_resultado', {
+                  titulo: s.titulo,
+                  prazo: /^\d{4}-\d{2}-\d{2}$/.test(s.prazo || '') ? s.prazo : '',
+                  responsabilidade_id: responsibility.id,
+                  situacao: 'futuro',
+                })
+              }}
+              onCriados={() => {
+                void loadHierarchy(responsibility.id)
+                onChanged?.()
+              }}
+            />
+            <p className="px-2 text-xs text-muted-foreground">
+              Os resultados escolhidos entram na lista de futuros. Você ativa quando for a hora.
+            </p>
+          </div>
+        )}
 
         {hierarchyLoading ? (
           <div className="p-6 text-center text-muted-foreground flex items-center justify-center gap-2">

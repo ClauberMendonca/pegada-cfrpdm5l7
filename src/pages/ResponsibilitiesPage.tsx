@@ -1,3 +1,5 @@
+import { Desdobrar } from '@/components/Desdobrar'
+import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -381,6 +383,21 @@ export const ResponsibilitiesPage: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Papéis são a porta de entrada: a pessoa diz o papel, o Pegada sugere as responsabilidades. */}
+      <Desdobrar
+        nivel="papel"
+        rotulo="Partir de um papel que você vive"
+        pergunta="Que papel você vive? Conte do seu jeito."
+        exemplo="Sou pai de uma filha de 9 anos e outra de 16."
+        onCriar={async (s) => {
+          await pegadaOp('criar_responsabilidade', {
+            titulo: s.titulo,
+            contexto: s.contexto === 'trabalho' ? 'trabalho' : 'vida',
+          })
+        }}
+        onCriados={() => void loadResponsibilities()}
+      />
 
       {/* Recorte local de status (Ativas inicial) */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">

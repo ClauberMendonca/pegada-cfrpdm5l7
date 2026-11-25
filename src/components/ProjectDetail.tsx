@@ -1,3 +1,4 @@
+import { Escada } from '@/components/Escada'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { TimeEntry } from '@/services/timeService'
 import { Project, ActionItem, ProgressLog, ActionStatus, ProjectStatus } from '@/types/execution'
@@ -470,6 +471,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           {/* 3C1 — Responsabilidade do Resultado confirmado: leitura autenticada
               por ID ( ResponsibilitySelect ), discreta e secundária ao título. */}
           <ResponsibilityReference id={project.responsibility_id || null} />
+          <Escada
+            paraQue={
+              project.responsibility_id
+                ? {
+                    to: `/responsabilidades?id=${encodeURIComponent(project.responsibility_id)}`,
+                    nome: 'a responsabilidade de onde este resultado nasce',
+                  }
+                : { to: '/mapa', nome: 'o seu propósito' }
+            }
+            como={{ ancora: 'como-chegar', nome: 'as estratégias e os avanços' }}
+          />
         </div>
 
         {/* Separação Pragmática: Aspiração vs Entrega Controlável */}
@@ -730,12 +742,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           ) : null}
         </div>
 
+        <div id="como-chegar" className="scroll-mt-20" />
         <StrategySection
           projectId={project.id}
           projectLabel={formatEntityTitle('project', project.sequence_number, project.title)}
           actions={actions}
           renderActions={renderActionBlocks}
           refreshTick={inlineStrategyTick}
+          onAvancosCriados={() => void loadData()}
         />
 
         {actions.length === 0 && (

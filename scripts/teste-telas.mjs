@@ -680,6 +680,19 @@ await passo('largura das telas', async () => {
   confere('nenhuma tela passa da largura do aparelho', largas.length === 0, largas.join(', '))
 })
 
+// 16. Fechar o fio: concluir o resultado, para a conta de teste não acumular ativos
+await passo('concluir o resultado', async () => {
+  await abrirResultado()
+  await botao('Concluir resultado', ficha()).click()
+  await botao('Reativar', ficha()).waitFor()
+  await ir('/mapa')
+  await arvore().getByRole('button', { name: 'Encerrados' }).click().catch(() => {})
+  const guardado = arvore().locator('[data-ramo="encerrados"]').getByText(nomes.resultado)
+  if (!(await guardado.count())) await arvore().getByRole('button', { name: 'Encerrados' }).click()
+  await guardado.first().waitFor()
+  confere('resultado concluído sai da escada e fica em Encerrados', true)
+})
+
 console.log(`\n${total - falhas} de ${total} verificações passaram.`)
 if (erros.length) {
   console.log('\nErros de JavaScript nas telas:')

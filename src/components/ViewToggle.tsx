@@ -162,15 +162,13 @@ export function actionSummaryLine(
 }
 
 /**
- * BLOCO 4C — UMA linha de contexto do projeto: entrega controlável e prazo,
+ * BLOCO 4C — UMA linha de contexto do resultado: o prazo,
  * SOMENTE quando presentes nos dados já carregados (nunca "Nenhum definido").
  */
 export function projectSummaryLine(
-  project: Pick<Project, 'controllable_delivery' | 'deadline'>,
+  project: Pick<Project, 'deadline'>,
 ): string {
   const parts: string[] = []
-  const delivery = (project.controllable_delivery || '').trim()
-  if (delivery !== '') parts.push(delivery)
   if (project.deadline) parts.push(`Prazo: ${formatCalendarDay(project.deadline)}`)
   return parts.join(' · ')
 }

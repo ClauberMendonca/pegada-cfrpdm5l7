@@ -36,11 +36,6 @@ interface ProjectModalProps {
 
 // PEGADA — formulário mínimo do Resultado: título, situação (ativo/futuro/
 // rascunho), prazo, "como vou saber que cheguei" e origem (Responsabilidade).
-// Os campos do modelo antigo (aspiração, entrega, aprendizado e os oito Rs)
-// saíram da interface, MAS os dados continuam na coleção: na edição este
-// formulário simplesmente NÃO envia essas chaves — projectService.update só
-// grava o que vier definido, então o servidor preserva os valores atuais
-// (inclusive as cópias em _legado). Nada é apagado.
 const STATUS_ATUAL_LABEL: Partial<Record<ProjectStatus, string>> = {
   pausado: 'Pausado',
   concluido: 'Concluído',

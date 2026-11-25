@@ -298,33 +298,6 @@ function pegadaRota(e) {
       : ''
   }
 
-  // Campos do modelo antigo (antes do método). Aceitos só para não quebrar
-  // telas antigas; não aparecem no catálogo nem no MCP. Remover quando o
-  // formulário de Resultado for simplificado.
-  var LEGACY_RESULT_FIELDS = [
-    'aspiration',
-    'controllable_delivery',
-    'learning_asset',
-    'r_resultado',
-    'r_razao',
-    'r_referencia',
-    'r_rumo',
-    'r_recursos',
-    'r_restricoes',
-    'r_riscos',
-    'r_responsavel',
-  ]
-  function legacyResultPatch(input) {
-    var out = {}
-    var d = input && input._legado
-    if (!d || typeof d !== 'object') return out
-    for (var i = 0; i < LEGACY_RESULT_FIELDS.length; i++) {
-      var f = LEGACY_RESULT_FIELDS[i]
-      if (has(d, f)) out[f] = str(d[f])
-    }
-    return out
-  }
-
   function checkResultShape(title, deadline) {
     if (!title)
       throw rule(
@@ -1688,8 +1661,7 @@ function pegadaRota(e) {
             'Responsabilidade',
           ).getString('context')
         if (context !== 'vida' && context !== 'trabalho') context = 'trabalho'
-        var data = legacyResultPatch(input)
-        data.title = title
+        var data = { title: title }
         var r = ctx.create(
           'projects',
           Object.assign(data, {
@@ -1729,7 +1701,7 @@ function pegadaRota(e) {
       },
       run: function (ctx, input) {
         var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
-        var patch = legacyResultPatch(input)
+        var patch = {}
         if (has(input, 'titulo')) patch.title = str(input.titulo)
         if (has(input, 'contexto') && !has(input, 'responsabilidade_id')) {
           var cx = str(input.contexto)

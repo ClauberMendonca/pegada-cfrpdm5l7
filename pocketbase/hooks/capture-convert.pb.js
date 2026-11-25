@@ -266,10 +266,6 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
       project.set('title', title)
       project.set('context', context)
       project.set('status', 'rascunho')
-      if (str(data.aspiration)) project.set('aspiration', str(data.aspiration))
-      if (str(data.controllable_delivery)) {
-        project.set('controllable_delivery', str(data.controllable_delivery))
-      }
       if (str(data.completion_condition)) {
         project.set('completion_condition', str(data.completion_condition))
       }
@@ -415,8 +411,6 @@ routerAdd('POST', '/backend/v1/pc/captures/{captureId}/convert', (e) => {
           context: expanded.getString('context'),
           status: expanded.getString('status'),
           sequence_number: expanded.getInt('sequence_number'),
-          aspiration: expanded.getString('aspiration'),
-          controllable_delivery: expanded.getString('controllable_delivery'),
           completion_condition: expanded.getString('completion_condition'),
           responsibility_id: expanded.getString('responsibility_id') || undefined,
           created: expanded.getString('created'),

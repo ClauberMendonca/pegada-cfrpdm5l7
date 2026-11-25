@@ -109,20 +109,8 @@ export interface Project {
   title: string
   context: EntityContext
   status: ProjectStatus
-  aspiration?: string // o que quero alcançar
-  controllable_delivery?: string // o que vou entregar (controlável)
   completion_condition?: string // condição de término
   deadline?: string // YYYY-MM-DD
-  learning_asset?: string // possível aprendizado ou ativo durável
-  // Oito Rs opcionais:
-  r_resultado?: string
-  r_razao?: string
-  r_referencia?: string
-  r_rumo?: string
-  r_recursos?: string
-  r_restricoes?: string
-  r_riscos?: string
-  r_responsavel?: string
   // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
   sequence_number?: number
   // FATIA 3A — Responsabilidade do Resultado: 0..1, opcional, vazio por padrão.

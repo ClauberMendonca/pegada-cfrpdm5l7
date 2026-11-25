@@ -1,4 +1,8 @@
 import { AiSuggest } from '@/components/AiSuggest'
+import { fioCurto } from '@/lib/pegada/fioCurto'
+import { formatCalendarDay, ownerTimezone, todayInZone } from '@/lib/datetime'
+import { cn } from '@/lib/utils'
+import { ChevronDown } from 'lucide-react'
 import React, { useState, useEffect, useId } from 'react'
 import {
   ActionItem,
@@ -72,6 +76,10 @@ interface ActionModalProps {
   /** 4B2 — FICHA: recarrega os grupos do Resultado após criação inline confirmada. */
   onStrategyCreated?: (saved: Strategy) => void
 }
+
+const CHIP = 'h-11 rounded-full px-3.5 text-sm font-medium transition-colors disabled:opacity-70'
+const CHIP_ON = 'bg-foreground text-background'
+const CHIP_OFF = 'border border-input bg-card text-foreground hover:bg-secondary'
 
 export const ActionModal: React.FC<ActionModalProps> = ({
   isOpen,
@@ -747,6 +755,46 @@ export const ActionModal: React.FC<ActionModalProps> = ({
     }
   }, [isOpen, actionToEdit, selectedPaused, defaultProjectId, projectId])
 
+  // Desenho do Novo avanço: quatro decisões à vista e o resto em "Mais detalhes".
+  const [maisDetalhes, setMaisDetalhes] = useState(false)
+  useEffect(() => {
+    if (isOpen) setMaisDetalhes(Boolean(actionToEdit))
+  }, [isOpen, actionToEdit])
+  // Espera pede "de quem ou do quê": esse campo mora nos detalhes, então eles abrem.
+  useEffect(() => {
+    if (kind === 'espera') setMaisDetalhes(true)
+  }, [kind])
+  const hojeLocal = todayInZone(ownerTimezone(user?.timezone))
+  const somaDias = (dia: string, n: number) => {
+    const d = new Date(`${dia}T12:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + n)
+    return d.toISOString().slice(0, 10)
+  }
+  const diaAmanha = somaDias(hojeLocal, 1)
+  // Domingo desta semana; se hoje já é sábado ou domingo, o da semana seguinte.
+  const diaDaSemana = new Date(`${hojeLocal}T12:00:00Z`).getUTCDay()
+  const fimDaSemana = somaDias(hojeLocal, diaDaSemana === 0 ? 7 : diaDaSemana === 6 ? 8 : 7 - diaDaSemana)
+  const planejarPara = (dia: string) => {
+    setPlannedPendingInvalid(false)
+    setPlannedError(null)
+    if (!dia) {
+      setPlanned(EMPTY_PLANNED)
+      setPlannedUtcFallback(false)
+      return
+    }
+    if (planned.timezone === '') {
+      const tz = plannedTimezoneOrFallback(user?.timezone ?? '')
+      setPlanned({ date: dia, time: '', timezone: tz.timezone })
+      setPlannedUtcFallback(tz.usedFallback)
+    } else {
+      setPlanned({ ...planned, date: dia })
+    }
+  }
+  const fioAoVivo = fioCurto(
+    selectedProject ? { resultado: { titulo: selectedProject.title } } : null,
+    user?.life_purpose,
+  )
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
@@ -754,7 +802,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           <DialogTitle className="text-xl font-semibold text-foreground">
             {actionToEdit ? 'Editar avanço' : 'Novo avanço'}
           </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground">
+          <DialogDescription className="sr-only">
             {actionToEdit
               ? 'Ajuste os dados deste avanço. As alterações são gravadas somente ao confirmar.'
               : 'Preencha os dados do avanço. Ele é gravado somente ao confirmar.'}
@@ -764,7 +812,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
           <div className="space-y-2">
             <Label htmlFor={ids.title} className="text-sm font-medium text-foreground">
-              Título do avanço
+              O que você vai fazer?
             </Label>
             <Input
               id={ids.title}
@@ -799,25 +847,131 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                 />
                 <span className="text-sm text-foreground">{actionToEdit.title}</span>
               </span>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">Número atribuído ao salvar</span>
-            )}
+            ) : null}
           </div>
 
+
           <div className="space-y-1.5">
-            <Label className="text-sm font-medium text-foreground">Tipo de avanço</Label>
-            <Select value={kind} onValueChange={(val) => setKind(val as ActionKind)}>
-              <SelectTrigger className="border-input bg-card text-base text-foreground sm:text-sm">
-                <SelectValue />
+            <Label htmlFor={ids.project} className="text-sm font-medium text-foreground">
+              Para alcançar o quê?
+            </Label>
+            {/* FATIA 4B2 — transições de pai + ESTRATÉGIA (nunca persiste provisório) */}
+            <Select
+              value={projectId}
+              onValueChange={(v) => handleProjectChange(v === 'none' ? '' : v)}
+            >
+              <SelectTrigger
+                id={ids.project}
+                className="truncate border-input bg-card text-base text-foreground sm:text-sm"
+              >
+                <SelectValue placeholder="Avanço solto (sem resultado)" />
               </SelectTrigger>
-              <SelectContent className="border-border bg-popover text-popover-foreground">
-                {(Object.keys(ACTION_KIND_LABEL) as ActionKind[]).map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {ACTION_KIND_LABEL[k]}
+              <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
+                <SelectItem value="none">Avanço solto (sem resultado)</SelectItem>
+                {/* Novos vínculos: apenas projetos permitidos pela regra atual.
+                   NUMERAÇÃO PERMANENTE: P-N real vem do sequence_number do
+                   banco; o value segue sendo o ID do projeto. */}
+                {selectableProjects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    [{p.context}] {formatEntityTitle('project', p.sequence_number, p.title)}
                   </SelectItem>
                 ))}
+                {/* B5 — vínculo atual fora da lista continua legível, com status. */}
+                {linkedOutsideSelectable && (
+                  <SelectItem value={projectId} disabled>
+                    {(() => {
+                      const linked = projects.find((p) => p.id === projectId)
+                      return linked
+                        ? `[${linked.context}] ${formatEntityTitle('project', linked.sequence_number, linked.title)} (${linked.status})`
+                        : 'Resultado vinculado (indisponível)'
+                    })()}
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* A frase do fio, ao vivo: o porquê deste avanço enquanto se escolhe. */}
+          <p
+            className="rounded-2xl px-3.5 py-3 text-sm leading-snug"
+            style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink-muted)' }}
+            data-fio
+          >
+            {fioAoVivo ? (
+              <>
+                Faço isto <span style={{ color: 'var(--pegada-on-ink)' }}>{fioAoVivo}</span>
+              </>
+            ) : (
+              'Avanço livre: ainda sem porquê. Escolha um resultado para dar um fio a ele.'
+            )}
+          </p>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Quando?</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Quando">
+              <button
+                type="button"
+                aria-pressed={isTodaySelected || isNextStep}
+                disabled={isNextStep}
+                onClick={() => {
+                  const marcar = !isTodaySelected
+                  if (marcar && !validateFocusChoice()) return
+                  setFocusNotice(null)
+                  setIsTodaySelected(marcar)
+                }}
+                className={cn(CHIP, isTodaySelected || isNextStep ? CHIP_ON : CHIP_OFF)}
+              >
+                Hoje
+              </button>
+              {(
+                [
+                  ['Amanhã', diaAmanha],
+                  ['Esta semana', fimDaSemana],
+                ] as const
+              ).map(([nome, dia]) => (
+                <button
+                  key={nome}
+                  type="button"
+                  aria-pressed={planned.date === dia}
+                  onClick={() => planejarPara(planned.date === dia ? '' : dia)}
+                  className={cn(CHIP, planned.date === dia ? CHIP_ON : CHIP_OFF)}
+                >
+                  {nome}
+                </button>
+              ))}
+              <button
+                type="button"
+                aria-pressed={Boolean(planned.date) && planned.date !== diaAmanha && planned.date !== fimDaSemana}
+                onClick={() => setMaisDetalhes(true)}
+                className={cn(
+                  CHIP,
+                  planned.date && planned.date !== diaAmanha && planned.date !== fimDaSemana
+                    ? CHIP_ON
+                    : CHIP_OFF,
+                )}
+              >
+                {planned.date && planned.date !== diaAmanha && planned.date !== fimDaSemana
+                  ? formatCalendarDay(planned.date)
+                  : 'Data'}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Que tipo de avanço é?</p>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Tipo de avanço">
+              {(Object.keys(ACTION_KIND_LABEL) as ActionKind[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={kind === k}
+                  onClick={() => setKind(k)}
+                  className={cn(CHIP, kind === k ? CHIP_ON : CHIP_OFF)}
+                >
+                  {ACTION_KIND_LABEL[k]}
+                </button>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground">
               {
                 {
@@ -832,6 +986,25 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </p>
           </div>
 
+          <button
+            type="button"
+            aria-expanded={maisDetalhes}
+            onClick={() => setMaisDetalhes((v) => !v)}
+            className="flex min-h-12 w-full items-center justify-between gap-2 border-t border-border px-1 text-left text-[15px] font-medium text-foreground"
+          >
+            <span>
+              Mais detalhes{' '}
+              <span className="font-normal text-muted-foreground">
+                · descrição, contexto, prazo, estratégia
+              </span>
+            </span>
+            <ChevronDown
+              className={cn('h-5 w-5 shrink-0 transition-transform', maisDetalhes && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </button>
+
+          <div className={cn('space-y-4', !maisDetalhes && 'hidden')}>
           <div className="space-y-2">
             <Label htmlFor={ids.description} className="text-sm font-medium text-foreground">
               Descrição e notas (opcional)
@@ -917,59 +1090,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor={ids.project} className="text-sm font-medium text-foreground">
-                Resultado vinculado (opcional)
-              </Label>
-              {/* FATIA 4B2 — transições de pai + ESTRATÉGIA (nunca persiste provisório) */}
-              <Select
-                value={projectId}
-                onValueChange={(v) => handleProjectChange(v === 'none' ? '' : v)}
-              >
-                <SelectTrigger
-                  id={ids.project}
-                  className="truncate border-input bg-card text-base text-foreground sm:text-sm"
-                >
-                  <SelectValue placeholder="Avanço solto (sem resultado)" />
-                </SelectTrigger>
-                <SelectContent className="max-h-56 border-border bg-popover text-popover-foreground">
-                  <SelectItem value="none">Avanço solto (sem resultado)</SelectItem>
-                  {/* Novos vínculos: apenas projetos permitidos pela regra atual.
-                     NUMERAÇÃO PERMANENTE: P-N real vem do sequence_number do
-                     banco; o value segue sendo o ID do projeto. */}
-                  {selectableProjects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      [{p.context}] {formatEntityTitle('project', p.sequence_number, p.title)}
-                    </SelectItem>
-                  ))}
-                  {/* B5 — vínculo atual fora da lista continua legível, com status. */}
-                  {linkedOutsideSelectable && (
-                    <SelectItem value={projectId} disabled>
-                      {(() => {
-                        const linked = projects.find((p) => p.id === projectId)
-                        return linked
-                          ? `[${linked.context}] ${formatEntityTitle('project', linked.sequence_number, linked.title)} (${linked.status})`
-                          : 'Resultado vinculado (indisponível)'
-                      })()}
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor={ids.deadline} className="text-sm font-medium text-foreground">
-                Prazo factual (opcional)
-              </Label>
-              <Input
-                id={ids.deadline}
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="border-input bg-card text-base text-foreground tabular-nums sm:text-sm"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={ids.deadline} className="text-sm font-medium text-foreground">
+              Prazo factual (opcional)
+            </Label>
+            <Input
+              id={ids.deadline}
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="border-input bg-card text-base text-foreground tabular-nums sm:text-sm"
+            />
           </div>
 
           {/* FATIA 5B1 — Planejamento (opcional): intenção local (dia/hora no
@@ -1158,23 +1289,20 @@ export const ActionModal: React.FC<ActionModalProps> = ({
             )}
           </div>
 
-          <DialogFooter className="flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="min-h-11 rounded-xl"
-            >
-              Cancelar
-            </Button>
+          </div>
+
+          <DialogFooter className="flex-col gap-2 pt-2 sm:flex-col sm:space-x-0">
             {/* BLOCO 5.1 — guarda na UI: nova ação com vínculo encerrado não sai
                do formulário; edição preserva o vínculo antigo (não bloqueada). */}
             <Button
               type="submit"
               disabled={isSaving || !title.trim() || blockedByClosedProject}
-              className="min-h-11 rounded-xl"
+              className="h-14 w-full rounded-full text-lg font-semibold"
             >
-              {isSaving ? 'Salvando...' : actionToEdit ? 'Atualizar' : 'Criar avanço'}
+              {isSaving ? 'Salvando...' : actionToEdit ? 'Salvar alterações' : 'Salvar avanço'}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClose} className="min-h-11 w-full rounded-full">
+              Cancelar
             </Button>
           </DialogFooter>
         </form>

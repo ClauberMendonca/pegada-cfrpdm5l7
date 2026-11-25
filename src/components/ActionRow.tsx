@@ -24,7 +24,6 @@ import {
   Play,
   Plus,
   Loader2,
-  Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ActionDescriptionBlock } from '@/components/ActionDescriptionBlock'
@@ -309,10 +308,7 @@ export const ActionRow: React.FC<ActionRowProps> = ({
 
           {/* REGISTRO DE TEMPO V1: controle de tempo discreto (não substitui progresso/status) */}
           {timeControl && (
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-              <Timer className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              {timeControl}
-            </div>
+            <div className="mt-3">{timeControl}</div>
           )}
 
           {/* Segunda linha de controles: registrar progresso com texto visível, estrela e menu */}

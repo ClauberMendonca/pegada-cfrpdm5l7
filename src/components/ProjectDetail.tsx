@@ -376,29 +376,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium">Cronometrar diretamente neste resultado</p>
-            <p className="text-xs text-muted-foreground">
-              O registro direto fica separado do tempo das ações.
-            </p>
-          </div>
-          <TimeControl
-            targetType="project"
-            targetId={project.id}
-            targetTitle={project.title}
-            contextLabel="Direto no resultado"
-            targetStatus={project.status}
-            projectStatus={project.status}
-            targetNumberCode={entityNumberCode('project', project.sequence_number)}
-            entries={directTimeEntries}
-            entriesLoading={timeTotals.loading}
-            entriesError={timeTotals.error}
-            onRetryEntries={timeTotals.reload}
-            onChanged={timeTotals.reload}
-          />
-        </div>
-
         <ProjectTimeHistory
           entries={projectTimeEntries}
           runningEntry={runningInProject}
@@ -458,6 +435,23 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               Concluir resultado
             </button>
           )}
+        </div>
+        {/* O relógio do resultado, à vista: o tempo corre aqui, na própria ficha. */}
+        <div className="mt-3">
+          <TimeControl
+            targetType="project"
+            targetId={project.id}
+            targetTitle={project.title}
+            contextLabel="Direto no resultado"
+            targetStatus={project.status}
+            projectStatus={project.status}
+            targetNumberCode={entityNumberCode('project', project.sequence_number)}
+            entries={directTimeEntries}
+            entriesLoading={timeTotals.loading}
+            entriesError={timeTotals.error}
+            onRetryEntries={timeTotals.reload}
+            onChanged={timeTotals.reload}
+          />
         </div>
       </Ficha>
 

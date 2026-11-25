@@ -307,7 +307,8 @@ export default function Layout() {
           <header className="flex h-14 items-center justify-between gap-3 px-5 lg:hidden">
             <div className="flex items-center gap-2">
               <PegadaSimbolo className="h-8 w-8 shrink-0 text-foreground" />
-              <PegadaNome className="h-6 w-auto text-foreground" />
+              {/* Com o relógio ligado, ele toma o lugar do nome: cabe no celular sem cobrir nada. */}
+              {running || error ? <GlobalTimerIndicator /> : <PegadaNome className="h-6 w-auto text-foreground" />}
             </div>
             <div className="flex items-center gap-2">
               <BotaoBusca />
@@ -317,6 +318,7 @@ export default function Layout() {
           </header>
           {/* Computador: chip de contexto no topo do conteúdo */}
           <div className="hidden items-center justify-end gap-3 px-10 pt-4 lg:flex">
+            <GlobalTimerIndicator />
             <BotaoBusca comTexto />
             <ContextoChip />
           </div>
@@ -325,9 +327,7 @@ export default function Layout() {
         <main
           className={cn(
             'mx-auto w-full max-w-[1080px] flex-1 px-5 py-6 lg:px-10 lg:py-8',
-            running || error
-              ? 'pb-[calc(env(safe-area-inset-bottom)+15rem)] lg:pb-32'
-              : 'pb-[calc(env(safe-area-inset-bottom)+7rem)] lg:pb-8',
+            'pb-[calc(env(safe-area-inset-bottom)+7rem)] lg:pb-8',
           )}
         >
           <Outlet />
@@ -371,7 +371,6 @@ export default function Layout() {
       <GlobalCaptureHost />
       <BuscaGlobal />
       <AvisoIAHost />
-      <GlobalTimerIndicator />
     </div>
   )
 }

@@ -341,14 +341,16 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                       </div>
                     </div>
                     <div className="space-y-2.5">
-                      <p className="text-base font-semibold text-foreground">A estratégia está funcionando?</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {atual.estrategias.length ? 'A estratégia está funcionando?' : 'Este resultado ainda vale?'}
+                      </p>
                       <p className="break-words text-sm leading-snug text-muted-foreground">
                         {atual.estrategias.length
                           ? `Aposta atual: ${atual.estrategias.map((e) => e.titulo).join('; ')}.`
                           : 'Este resultado ainda não tem uma estratégia escrita.'}
                       </p>
                       <div className="flex flex-col gap-2">
-                        {RESPOSTAS.map((r) => {
+                        {RESPOSTAS.filter((r) => r.valor !== 'ajustar' || atual.estrategias.length > 0).map((r) => {
                           const marcada = (respostas[atual.id] ?? 'sigo') === r.valor
                           return (
                             <button
@@ -361,7 +363,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                                 marcada ? 'border-2 border-foreground' : 'border border-input',
                               )}
                             >
-                              {r.texto}
+                              {r.valor === 'sigo' && !atual.estrategias.length ? 'Sim, sigo com ele' : r.texto}
                               {marcada && <Check className="h-5 w-5 shrink-0" aria-hidden="true" />}
                             </button>
                           )

@@ -77,7 +77,7 @@ interface ActionModalProps {
   onStrategyCreated?: (saved: Strategy) => void
 }
 
-const CHIP = 'h-11 rounded-full px-3.5 text-sm font-medium transition-colors disabled:opacity-70'
+const CHIP = 'h-11 rounded-full px-3 text-sm font-medium transition-colors disabled:opacity-70'
 const CHIP_ON = 'bg-foreground text-background'
 const CHIP_OFF = 'border border-input bg-card text-foreground hover:bg-secondary'
 
@@ -912,7 +912,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">Quando?</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Quando">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quando">
               <button
                 type="button"
                 aria-pressed={isTodaySelected || isNextStep}
@@ -963,7 +963,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">Que tipo de avanço é?</p>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Tipo de avanço">
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tipo de avanço">
               {(Object.keys(ACTION_KIND_LABEL) as ActionKind[]).map((k) => (
                 <button
                   key={k}

@@ -734,7 +734,7 @@ export const ActionsPage: React.FC = () => {
             aria-pressed={grupo === g}
             onClick={() => setGrupo(g)}
             className={cn(
-              'flex h-10 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-medium transition-colors',
+              'flex h-10 shrink-0 items-center gap-1.5 rounded-full px-[11px] text-sm font-medium transition-colors',
               grupo === g
                 ? 'bg-foreground text-background'
                 : 'border border-input text-foreground hover:bg-secondary',

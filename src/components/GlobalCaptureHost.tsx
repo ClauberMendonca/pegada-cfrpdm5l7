@@ -94,7 +94,7 @@ export function GlobalCaptureHost() {
     if (!aberto || valor.length < 12 || valor === dispensada) return
     let vivo = true
     const t = setTimeout(() => {
-      sugerir('captura', valor)
+      sugerir('captura', valor, true)
         .then((r) => {
           if (vivo && ['avanco', 'resultado', 'responsabilidade', 'estrategia'].includes(r.sugestao?.destino))
             setSugestao(r.sugestao)

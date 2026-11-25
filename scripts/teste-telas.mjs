@@ -504,6 +504,36 @@ await passo('revisões trimestral e anual', async () => {
 
 // 14c. IA embutida nas telas (só quando o servidor tem a chave): sugere, a pessoa decide
 if (process.env.PEGADA_TESTE_IA) {
+  // Privacidade: desligada, a IA não responde; ligada, pede o aviso na primeira vez.
+  const aceitarAviso = async () => {
+    const aviso = page.locator('[data-aviso-ia]')
+    await aviso.waitFor({ timeout: 4000 }).catch(() => {})
+    if (await aviso.count()) {
+      await botao('Entendi, usar a IA', aviso).click()
+      await page.waitForTimeout(500)
+      return true
+    }
+    return false
+  }
+  await passo('privacidade da IA', async () => {
+    await ir('/configuracoes')
+    const chave = page.locator('#ia-ligada')
+    await chave.waitFor()
+    if ((await chave.getAttribute('aria-checked')) === 'true') await chave.click()
+    await page.waitForTimeout(800)
+    await ir('/avancos')
+    await botao('Novo avanço').click()
+    await dialogo().locator('input[id$=action-title]').fill('texto qualquer para a IA')
+    await botao('Sugerir com IA', dialogo()).click()
+    await dialogo().getByText('A IA está desligada em Configurações.').waitFor()
+    confere('IA desligada em Configurações não envia nada', true)
+    await page.keyboard.press('Escape')
+    await esperaSumir()
+    await ir('/configuracoes')
+    await chave.click()
+    await page.waitForTimeout(800)
+    confere('a chave liga a IA de novo', (await chave.getAttribute('aria-checked')) === 'true')
+  })
   await passo('IA em Capturas', async () => {
     const ideia = T('ver uns tênis de corrida qualquer dia')
     await ir('/capturas')
@@ -512,6 +542,7 @@ if (process.env.PEGADA_TESTE_IA) {
     await page.waitForTimeout(1200)
     const linha = page.locator('div.rounded-xl').filter({ hasText: ideia }).first()
     await botao('Sugerir com IA', linha).click()
+    await aceitarAviso()
     await botao('Dispensar', linha).waitFor({ timeout: 45000 })
     confere('IA sugere o destino de uma captura', true)
     if (await botao('Usar sugestão', linha).count()) {

@@ -2529,6 +2529,29 @@ function pegadaRota(e) {
     return e.json(200, Array.isArray(body) ? out : out[0])
   }
 
+  // Preferência de privacidade da IA: devolve o estado e, se vier corpo, grava.
+  function iaPreferencia() {
+    var actor = core.resolveActor(e)
+    if (actor.type === 'agente') throw new ForbiddenError('Esta rota é do app.')
+    var dono = e.app.findRecordById('users', actor.userId)
+    var body = corpo()
+    var mudou = false
+    if (typeof body.desligada === 'boolean') {
+      dono.set('ai_off', body.desligada)
+      mudou = true
+    }
+    if (body.aviso_visto === true && !dono.getString('ai_notice_at')) {
+      dono.set('ai_notice_at', new Date().toISOString().replace('T', ' '))
+      mudou = true
+    }
+    if (mudou) e.app.save(dono)
+    return e.json(200, {
+      disponivel: !!$os.getenv('ANTHROPIC_API_KEY'),
+      desligada: dono.getBool('ai_off'),
+      aviso_visto: !!dono.getString('ai_notice_at'),
+    })
+  }
+
   function iaSugerir() {
     var actor = core.resolveActor(e)
     if (actor.type === 'agente')
@@ -2541,6 +2564,13 @@ function pegadaRota(e) {
     if (!apiKey) {
       return e.json(503, { message: 'IA embutida indisponível neste servidor.' })
     }
+    // Privacidade: a pessoa pode desligar a IA, e nada é enviado antes de ela
+    // ler o aviso de que o texto do pedido vai à Anthropic.
+    var dono = e.app.findRecordById('users', actor.userId)
+    if (dono.getBool('ai_off'))
+      return e.json(403, { message: 'A IA está desligada em Configurações.' })
+    if (!dono.getString('ai_notice_at'))
+      return e.json(428, { message: 'Leia o aviso de privacidade da IA antes de usá-la.' })
     var body = corpo()
     var tipo = String(body.tipo || '')
     var texto = String(body.texto || '').slice(0, 2000)
@@ -2643,6 +2673,7 @@ function pegadaRota(e) {
   if (p[0] === 'mcp' && p.length === 1) return mcp('')
   if (p[0] === 'mcp' && p.length === 2) return mcp(p[1])
   if (p[0] === 'ia' && p[1] === 'sugerir' && p.length === 2) return iaSugerir()
+  if (p[0] === 'ia' && p[1] === 'preferencia' && p.length === 2) return iaPreferencia()
 
   var ator = core.resolveActor(e)
   if (p[0] === 'op' && p.length === 2) return e.json(200, core.execute(e.app, ator, p[1], corpo()))
@@ -2678,3 +2709,4 @@ routerAdd('POST', '/backend/v1/pegada/mcp/{token}', pegadaRota)
 routerAdd('GET', '/backend/v1/pegada/mcp', pegadaRota)
 routerAdd('GET', '/backend/v1/pegada/mcp/{token}', pegadaRota)
 routerAdd('POST', '/backend/v1/pegada/ia/sugerir', pegadaRota)
+routerAdd('POST', '/backend/v1/pegada/ia/preferencia', pegadaRota)

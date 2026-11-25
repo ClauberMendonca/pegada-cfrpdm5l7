@@ -24,6 +24,7 @@ import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
 import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
+import { AvisoIAHost } from '@/components/AvisoIAHost'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
 import {
@@ -320,6 +321,7 @@ export default function Layout() {
       </nav>
 
       <GlobalCaptureHost />
+      <AvisoIAHost />
       <GlobalTimerIndicator />
     </div>
   )

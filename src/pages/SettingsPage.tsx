@@ -1,3 +1,4 @@
+import { PrivacidadeIA } from '@/components/PrivacidadeIA'
 import { GuiaDoProposito } from '@/components/GuiaDoProposito'
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
@@ -309,6 +310,8 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      <PrivacidadeIA />
     </div>
   )
 }

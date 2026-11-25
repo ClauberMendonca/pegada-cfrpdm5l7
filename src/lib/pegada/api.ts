@@ -161,6 +161,34 @@ export async function sugerir(
   })
 }
 
+export type NivelDesdobrar = 'papel' | 'responsabilidade' | 'resultado' | 'estrategia'
+export interface SugestaoDesdobrada {
+  titulo: string
+  por_que?: string
+  contexto?: string
+  prazo?: string
+  tipo?: string
+}
+
+/** Desce um degrau da escada: a IA devolve sugestões selecionáveis (não grava nada). */
+export async function desdobrar(nivel: NivelDesdobrar, texto: string): Promise<SugestaoDesdobrada[]> {
+  const res = await send<{ sugestao: { sugestoes?: SugestaoDesdobrada[] } }>('/ia/sugerir', {
+    tipo: `desdobrar_${nivel}`,
+    texto,
+  })
+  const lista = Array.isArray(res.sugestao?.sugestoes) ? res.sugestao.sugestoes : []
+  return lista.filter((x) => x && typeof x.titulo === 'string' && x.titulo.trim()).slice(0, 6)
+}
+
+/** Correção gentil: confere se um texto é mesmo um resultado (não grava nada). */
+export async function conferirResultado(texto: string): Promise<{ e: string; por_que: string }> {
+  const res = await send<{ sugestao: { e?: string; por_que?: string } }>('/ia/sugerir', {
+    tipo: 'conferir_resultado',
+    texto,
+  })
+  return { e: String(res.sugestao?.e || ''), por_que: String(res.sugestao?.por_que || '') }
+}
+
 /** Endereço do servidor MCP deste app (para conectar agentes). */
 export function mcpUrl(): string {
   const base = (import.meta.env.VITE_POCKETBASE_URL || window.location.origin).replace(/\/$/, '')

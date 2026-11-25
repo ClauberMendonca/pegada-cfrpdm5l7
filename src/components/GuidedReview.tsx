@@ -37,25 +37,50 @@ interface Resumo {
 }
 
 const PERIODOS = [
-  { dias: 1, nome: 'Diária', titulo: 'Revisão do dia', frase: 'hoje', duracao: 'cerca de 2 min' },
-  { dias: 7, nome: 'Semanal', titulo: 'Revisão da semana', frase: 'na semana', duracao: 'cerca de 10 min' },
-  { dias: 90, nome: 'Trimestral', titulo: 'Revisão do trimestre', frase: 'no trimestre', duracao: 'cerca de 20 min' },
-  { dias: 365, nome: 'Anual', titulo: 'Revisão do ano', frase: 'no ano', duracao: 'cerca de 30 min' },
+  { dias: 1, nome: 'Diária', titulo: 'Revisão do dia', frase: 'hoje', duracao: 'até 5 min' },
+  { dias: 7, nome: 'Semanal', titulo: 'Revisão da semana', frase: 'na semana', duracao: 'até 30 min' },
+  { dias: 90, nome: 'Trimestral', titulo: 'Revisão do trimestre', frase: 'no trimestre', duracao: 'até 1 hora' },
+  { dias: 365, nome: 'Anual', titulo: 'Revisão do ano', frase: 'no ano', duracao: 'até 2 horas' },
 ]
 
-const PASSOS = [
-  { nome: 'O que andou', titulo: 'O que você fez andar?' },
-  { nome: 'Resultados', titulo: 'Os resultados ainda valem?' },
-  { nome: 'Esperas', titulo: 'Precisa cobrar alguém?' },
-  { nome: 'Fechamento', titulo: 'A caixa de entrada está limpa?' },
-]
+type Tipo = 'andou' | 'resultados' | 'esperas' | 'fechamento' | 'futuros' | 'proposito' | 'responsabilidades'
+const PASSO: Record<Tipo, { nome: string; titulo: string }> = {
+  andou: { nome: 'O que andou', titulo: 'O que você fez andar?' },
+  resultados: { nome: 'Resultados', titulo: 'Os resultados ainda valem?' },
+  esperas: { nome: 'Esperas', titulo: 'Precisa cobrar alguém?' },
+  fechamento: { nome: 'Fechamento', titulo: 'A caixa de entrada está limpa?' },
+  futuros: { nome: 'Próximo trimestre', titulo: 'O que entra no próximo trimestre?' },
+  proposito: { nome: 'Propósito', titulo: 'O seu propósito ainda é este?' },
+  responsabilidades: { nome: 'Responsabilidades', titulo: 'Pelo que você responde hoje?' },
+}
+// Cada revisão tem o próprio roteiro (seção Ritmo do método).
+const ROTEIROS: Record<number, Tipo[]> = {
+  1: ['andou', 'resultados', 'esperas', 'fechamento'],
+  7: ['andou', 'resultados', 'esperas', 'fechamento'],
+  90: ['resultados', 'andou', 'futuros', 'fechamento'],
+  365: ['proposito', 'responsabilidades', 'andou', 'fechamento'],
+}
 
-type Resposta = 'sigo' | 'ajustar' | 'nao_vale'
+type Resposta = 'sigo' | 'ajustar' | 'nao_vale' | 'alcancei' | 'futuro'
 const RESPOSTAS: { valor: Resposta; texto: string }[] = [
   { valor: 'sigo', texto: 'Sim, sigo com ela' },
   { valor: 'ajustar', texto: 'Quero ajustar a estratégia' },
   { valor: 'nao_vale', texto: 'Este resultado não vale mais' },
 ]
+// Trimestral: o destino de cada resultado. Abandonar é escolha legítima.
+const RESPOSTAS_TRIMESTRE: { valor: Resposta; texto: string }[] = [
+  { valor: 'sigo', texto: 'Sigo com ele' },
+  { valor: 'alcancei', texto: 'Alcancei' },
+  { valor: 'futuro', texto: 'Volta para a lista de futuros' },
+  { valor: 'nao_vale', texto: 'Abandono: não é mais uma escolha minha' },
+]
+const DECISAO: Partial<Record<Resposta, string>> = { nao_vale: 'abandonar', alcancei: 'alcancado', futuro: 'futuro' }
+
+interface Mapa {
+  responsabilidades: { id: string; titulo: string; contexto: string; escolhida_por: string | null }[]
+  resultados: { id: string; titulo: string; prazo: string; status: string }[]
+  limite_resultados_ativos: number
+}
 
 function ateOPrazo(prazo: string): { valor: string; legenda: string } | null {
   if (!prazo) return null
@@ -75,6 +100,14 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
   const [indice, setIndice] = useState(0)
   const [respostas, setRespostas] = useState<Record<string, Resposta>>({})
   const [ocupado, setOcupado] = useState(false)
+  const [mapa, setMapa] = useState<Mapa | null>(null)
+  const [testes, setTestes] = useState({ unico: false, escolha: false })
+
+  const roteiro = ROTEIROS[dias] ?? ROTEIROS[7]
+  const PASSOS = roteiro.map((t) => PASSO[t])
+  const tipo = roteiro[passo]
+  const trimestral = dias === 90
+  const respostasDoPeriodo = trimestral ? RESPOSTAS_TRIMESTRE : RESPOSTAS
 
   const periodo = PERIODOS.find((p) => p.dias === dias) ?? PERIODOS[1]
 
@@ -83,6 +116,12 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
     setErro(null)
     try {
       const res = await op<Resumo>('ver_resumo_semana', { dias })
+      // Nas revisões longas o mapa chega junto: os passos de futuros e de
+      // responsabilidades nunca aparecem vazios por um instante.
+      if (dias >= 90) {
+        const m = await op<Mapa>('ver_mapa', {})
+        setMapa((m.resultado as Mapa) ?? null)
+      }
       setResumo((res.resultado as Resumo) ?? null)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível preparar a revisão.')
@@ -95,6 +134,8 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
     setPasso(0)
     setIndice(0)
     setRespostas({})
+    setTestes({ unico: false, escolha: false })
+    setMapa(null)
     setResumo(null)
     setAberta(true)
     void carregar()
@@ -117,18 +158,19 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
   }, [aberta])
 
   const resultados = resumo?.resultados_ativos ?? []
-  const atual = passo === 1 ? resultados[indice] : undefined
+  const atual = tipo === 'resultados' ? resultados[indice] : undefined
   const ajustar = resultados.filter((r) => respostas[r.id] === 'ajustar')
 
   const avancar = async () => {
     if (ocupado) return
-    if (passo === 1 && atual) {
-      if (respostas[atual.id] === 'nao_vale') {
+    if (tipo === 'resultados' && atual) {
+      const decisao = DECISAO[respostas[atual.id] ?? 'sigo']
+      if (decisao) {
         setOcupado(true)
         try {
           await op(
             'decidir_resultado',
-            { resultado_id: atual.id, decisao: 'abandonar' },
+            { resultado_id: atual.id, decisao },
             { desfazer: true, onDesfeito: () => void carregar() },
           )
         } catch (e) {
@@ -147,18 +189,33 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
     else setPasso(passo + 1)
   }
 
+  // Decisões dos passos de futuros e responsabilidades: gravam na hora, com Desfazer.
+  const decidirNoMapa = async (nome: string, entrada: Record<string, unknown>) => {
+    setOcupado(true)
+    try {
+      const res = await op(nome, entrada, { desfazer: true, onDesfeito: () => void carregar() })
+      const aviso = (res.resultado as { aviso?: string } | undefined)?.aviso
+      if (aviso) toast(aviso)
+      await carregar()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível gravar a decisão.')
+    } finally {
+      setOcupado(false)
+    }
+  }
+
   const voltar = () => {
-    if (passo === 1 && indice > 0) setIndice(indice - 1)
+    if (tipo === 'resultados' && indice > 0) setIndice(indice - 1)
     else if (passo > 0) {
       setPasso(passo - 1)
-      if (passo === 2) setIndice(Math.max(0, resultados.length - 1))
+      if (roteiro[passo - 1] === 'resultados') setIndice(Math.max(0, resultados.length - 1))
     }
   }
 
   const rotuloAvancar =
     passo === PASSOS.length - 1
       ? 'Concluir revisão'
-      : passo === 1 && indice < resultados.length - 1
+      : tipo === 'resultados' && indice < resultados.length - 1
         ? 'Próximo resultado'
         : 'Continuar'
 
@@ -172,8 +229,11 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
         <div>
           <h3 className="text-xl font-semibold text-foreground">Revisão guiada</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Um passo de cada vez: o que andou, se os resultados ainda valem, o que está esperando
-            e o que falta decidir.
+            {dias === 90
+              ? 'O destino de cada resultado, o espelho do trimestre e o que entra no próximo.'
+              : dias === 365
+                ? 'Reler o propósito, revisar as responsabilidades e olhar o espelho do ano.'
+                : 'Um passo de cada vez: o que andou, se os resultados ainda valem, o que está esperando e o que falta decidir.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="Período">
@@ -268,13 +328,21 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
 
             {resumo && !erro && (
               <div className="space-y-3 pb-4" data-passo={PASSOS[passo].nome}>
-                {passo === 0 && (
+                {tipo === 'andou' && (
                   <>
                     <div className="flex gap-2">
                       <Numero valor={resumo.concluidos} legenda={`feitos ${periodo.frase}`} />
                       <Numero valor={resumo.balanco.construir + resumo.balanco.sustentar} legenda="com porquê" />
                       <Numero valor={resumo.balanco.livres} legenda="sem porquê" />
                     </div>
+                    {resumo.concluidos > 0 && (
+                      <p className="rounded-3xl bg-secondary p-4 text-sm text-foreground" data-balanco>
+                        O balanço {periodo.frase}: <strong>{resumo.balanco.construir}</strong> para construir,{' '}
+                        <strong>{resumo.balanco.sustentar}</strong> para sustentar e{' '}
+                        <strong>{resumo.balanco.livres}</strong> livres. Quem só sustenta não avança, e quem só
+                        constrói deixa a vida desabar.
+                      </p>
+                    )}
                     {resumo.concluidos === 0 && (
                       <Vazio>Nenhum avanço concluído {periodo.frase}. Acontece: o próximo passo mostra o que retomar.</Vazio>
                     )}
@@ -294,9 +362,9 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                   </>
                 )}
 
-                {passo === 1 && !atual && <Vazio>Nenhum resultado ativo para revisar.</Vazio>}
+                {tipo === 'resultados' && !atual && <Vazio>Nenhum resultado ativo para revisar.</Vazio>}
 
-                {passo === 1 && atual && (
+                {tipo === 'resultados' && atual && (
                   <>
                     <div className="space-y-3 rounded-3xl border border-border bg-card p-4">
                       <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
@@ -342,15 +410,27 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                     </div>
                     <div className="space-y-2.5">
                       <p className="text-base font-semibold text-foreground">
-                        {atual.estrategias.length ? 'A estratégia está funcionando?' : 'Este resultado ainda vale?'}
+                        {trimestral
+                          ? 'Alcancei, sigo ou abandono?'
+                          : atual.estrategias.length
+                            ? 'A estratégia está funcionando?'
+                            : 'Este resultado ainda vale?'}
                       </p>
+                      {trimestral && (
+                        <p className="break-words text-sm leading-snug text-muted-foreground">
+                          Abandonar é uma escolha legítima, e não um fracasso.
+                          {atual.feitos_no_periodo === 0
+                            ? ' Nenhum avanço neste trimestre: um resultado parado há três meses é sinal de que talvez não seja mesmo uma escolha.'
+                            : ''}
+                        </p>
+                      )}
                       <p className="break-words text-sm leading-snug text-muted-foreground">
                         {atual.estrategias.length
                           ? `Aposta atual: ${atual.estrategias.map((e) => e.titulo).join('; ')}.`
                           : 'Este resultado ainda não tem uma estratégia escrita.'}
                       </p>
                       <div className="flex flex-col gap-2">
-                        {RESPOSTAS.filter((r) => r.valor !== 'ajustar' || atual.estrategias.length > 0).map((r) => {
+                        {respostasDoPeriodo.filter((r) => r.valor !== 'ajustar' || atual.estrategias.length > 0).map((r) => {
                           const marcada = (respostas[atual.id] ?? 'sigo') === r.valor
                           return (
                             <button
@@ -363,7 +443,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                                 marcada ? 'border-2 border-foreground' : 'border border-input',
                               )}
                             >
-                              {r.valor === 'sigo' && !atual.estrategias.length ? 'Sim, sigo com ele' : r.texto}
+                              {!trimestral && r.valor === 'sigo' && !atual.estrategias.length ? 'Sim, sigo com ele' : r.texto}
                               {marcada && <Check className="h-5 w-5 shrink-0" aria-hidden="true" />}
                             </button>
                           )
@@ -373,7 +453,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                   </>
                 )}
 
-                {passo === 2 && (
+                {tipo === 'esperas' && (
                   <>
                     {resumo.esperas_abertas.length === 0 && <Vazio>Nenhuma espera aberta.</Vazio>}
                     {resumo.esperas_abertas.map((e) => (
@@ -394,7 +474,124 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                   </>
                 )}
 
-                {passo === 3 && (
+
+                {tipo === 'futuros' && (
+                  <>
+                    {(() => {
+                      const ativos = (mapa?.resultados ?? []).filter((r) => r.status === 'ativo')
+                      const futuros = (mapa?.resultados ?? []).filter((r) => r.status === 'futuro')
+                      const limite = mapa?.limite_resultados_ativos ?? 7
+                      return (
+                        <>
+                          <p className="rounded-3xl bg-secondary p-4 text-sm text-foreground">
+                            Você está com <strong>{ativos.length}</strong> {ativos.length === 1 ? 'resultado ativo' : 'resultados ativos'}.
+                            O limite sugerido é de 5 a {limite}: os demais esperam na lista de futuros.
+                          </p>
+                          {futuros.length === 0 && <Vazio>A lista de futuros está vazia.</Vazio>}
+                          {futuros.map((r) => (
+                            <div
+                              key={r.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-border bg-card p-4"
+                            >
+                              <p className="min-w-0 flex-1 break-words text-base font-medium text-foreground">{r.titulo}</p>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={ocupado}
+                                className="rounded-full"
+                                onClick={() => void decidirNoMapa('decidir_resultado', { resultado_id: r.id, decisao: 'sigo' })}
+                              >
+                                Ativar
+                              </Button>
+                            </div>
+                          ))}
+                        </>
+                      )
+                    })()}
+                  </>
+                )}
+
+                {tipo === 'proposito' && (
+                  <>
+                    <div className="rounded-3xl p-5" style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' }}>
+                      <p className="text-xs uppercase tracking-[0.08em]" style={{ color: 'var(--pegada-on-ink-muted)' }}>
+                        Propósito
+                      </p>
+                      <p className="mt-1 break-words text-xl font-semibold leading-snug">
+                        {resumo.proposito || 'Você ainda não escreveu o seu propósito.'}
+                      </p>
+                    </div>
+                    <p className="text-base font-semibold text-foreground">Refaça os dois testes</p>
+                    {(
+                      [
+                        ['unico', 'Teste do único: ele vale tanto para a vida pessoal quanto para a profissional?'],
+                        ['escolha', 'Teste da escolha: ele ajuda a dizer “não” a alguma coisa?'],
+                      ] as const
+                    ).map(([k, t]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={testes[k]}
+                        onClick={() => setTestes((v) => ({ ...v, [k]: !v[k] }))}
+                        className={cn(
+                          'flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl bg-card px-4 py-2 text-left text-base font-medium text-foreground',
+                          testes[k] ? 'border-2 border-foreground' : 'border border-input',
+                        )}
+                      >
+                        {t}
+                        {testes[k] && <Check className="h-5 w-5 shrink-0" aria-hidden="true" />}
+                      </button>
+                    ))}
+                    <Link
+                      to="/configuracoes"
+                      onClick={sair}
+                      className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
+                    >
+                      Quero reescrever o propósito
+                    </Link>
+                  </>
+                )}
+
+                {tipo === 'responsabilidades' && (
+                  <>
+                    <p className="rounded-3xl bg-secondary p-4 text-sm text-foreground">
+                      Alguma terminou? Alguma nova chegou? Alguma você carrega sem ter escolhido e pode devolver?
+                    </p>
+                    {(mapa?.responsabilidades ?? []).length === 0 && <Vazio>Nenhuma responsabilidade ativa.</Vazio>}
+                    {(mapa?.responsabilidades ?? []).map((r) => (
+                      <div
+                        key={r.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-border bg-card p-4"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-base font-medium text-foreground">{r.titulo}</p>
+                          <p className="text-[13px] text-muted-foreground">
+                            {r.contexto === 'trabalho' ? 'Trabalho' : 'Vida'}
+                            {r.escolhida_por === 'para_mim' ? ' · escolhida para mim' : r.escolhida_por === 'mim' ? ' · escolhida por mim' : ''}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={ocupado}
+                          className="rounded-full"
+                          onClick={() => void decidirNoMapa('arquivar_responsabilidade', { responsabilidade_id: r.id })}
+                        >
+                          Terminou ou devolvo
+                        </Button>
+                      </div>
+                    ))}
+                    <Link
+                      to="/responsabilidades"
+                      onClick={sair}
+                      className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
+                    >
+                      Chegou uma nova: criar responsabilidade
+                    </Link>
+                  </>
+                )}
+
+                {tipo === 'fechamento' && (
                   <>
                     {resumo.capturas_pendentes === 0 ? (
                       <Vazio>Nenhuma captura pendente.</Vazio>
@@ -412,6 +609,16 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         </Button>
                       </div>
                     )}
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-border bg-card p-4">
+                      <p className="min-w-0 flex-1 text-base text-foreground">
+                        {dias >= 90 ? 'Feche escolhendo os próximos avanços.' : 'Defina os próximos avanços.'}
+                      </p>
+                      <Button size="sm" variant="outline" asChild className="rounded-full">
+                        <Link to="/avancos" onClick={sair}>
+                          Ver avanços
+                        </Link>
+                      </Button>
+                    </div>
                     {ajustar.length > 0 && (
                       <div className="space-y-2 rounded-3xl border border-border bg-card p-4">
                         <p className="text-base font-semibold text-foreground">Estratégias que você quer ajustar</p>

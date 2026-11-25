@@ -1,3 +1,4 @@
+import { GuiaDoProposito } from '@/components/GuiaDoProposito'
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import pb from '@/lib/pocketbase/client'
@@ -230,6 +231,7 @@ export default function SettingsPage() {
               }}
               className="space-y-4"
             >
+              <GuiaDoProposito onUsar={(frase) => setDraft(frase.slice(0, MAX_PURPOSE_LENGTH))} />
               <div className="space-y-2">
                 <Label htmlFor="life-purpose" className="text-sm font-medium text-foreground">
                   Propósito de vida
@@ -241,7 +243,7 @@ export default function SettingsPage() {
                   maxLength={MAX_PURPOSE_LENGTH}
                   disabled={isSaving}
                   onChange={(e) => setDraft(e.target.value)}
-                  placeholder="Ex.: Viver com presença e construir trabalho que sirva a outras pessoas."
+                  placeholder="Eu existo para [verbo] [quem ou o quê], para que [mudança]."
                   className="min-h-[120px] resize-y text-base"
                 />
                 <div className="flex items-center justify-between gap-3">

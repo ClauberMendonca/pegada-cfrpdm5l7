@@ -92,6 +92,29 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
 
   return (
     <section aria-label="Avanço principal" className="space-y-3">
+      {/* Passo 1 da escolha do dia: entra primeiro o que já está marcado. */}
+      {(dados.compromissos.length > 0 || dados.vencendo.length > 0) && (
+        <div className="rounded-[20px] border border-border bg-card px-4 py-3" data-marcados-hoje>
+          <p className="text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Já marcado para hoje
+          </p>
+          <ul className="mt-1">
+            {[...dados.compromissos, ...dados.vencendo].map((a) => (
+              <li key={a.id}>
+                <Link
+                  to={`/avancos?id=${encodeURIComponent(a.id)}`}
+                  className="flex min-h-11 items-center justify-between gap-3 text-base text-foreground"
+                >
+                  <span className="min-w-0 break-words">{a.titulo}</span>
+                  <span className="shrink-0 text-[13px] text-muted-foreground">
+                    {a.tipo_nome === 'Compromisso' ? 'compromisso' : 'vence hoje'}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="rounded-[20px] p-5 sm:p-6" style={INK}>
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs uppercase tracking-[0.08em]" style={MUTED}>
@@ -189,6 +212,28 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
           </>
         )}
       </div>
+
+      {/* Passo 3 da escolha do dia: completar com poucos outros. */}
+      {(() => {
+        const abertos = dados.para_hoje.length + (principal ? 1 : 0)
+        if (abertos > 5)
+          return (
+            <p className="rounded-2xl bg-secondary px-4 py-3 text-sm text-foreground" data-dica-do-dia>
+              Há {abertos} avanços para hoje. O método sugere de 3 a 5, fora os compromissos: tire o que pode
+              esperar.
+            </p>
+          )
+        if (principal && abertos < 3)
+          return (
+            <p className="px-1 text-sm text-muted-foreground" data-dica-do-dia>
+              Complete com poucos outros, até 3 a 5 no dia.{' '}
+              <Link to="/avancos" className="font-medium text-foreground underline underline-offset-4">
+                Escolher em Avanços
+              </Link>
+            </p>
+          )
+        return null
+      })()}
 
       {children}
 

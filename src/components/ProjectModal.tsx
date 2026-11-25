@@ -2,7 +2,7 @@ import { AiSuggest } from '@/components/AiSuggest'
 import React, { useState, useEffect, useId } from 'react'
 import { Project, EntityContext, ProjectStatus } from '@/types/execution'
 import { projectService, UpdateProjectInput } from '@/services/projectService'
-import { RegraError } from '@/lib/pegada/api'
+import { RegraError, conferirResultado, op } from '@/lib/pegada/api'
 import {
   Dialog,
   DialogContent,
@@ -82,6 +82,43 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
   const responsibilityOptions = useResponsibilityOptions(isOpen)
 
   const [isSaving, setIsSaving] = useState(false)
+  // Correção gentil: se o texto não tem linha de chegada, o Pegada oferece
+  // em uma linha o lugar certo. A pessoa dispensa com um toque.
+  const [correcao, setCorrecao] = useState<{ e: string; por_que: string } | null>(null)
+  const conferido = React.useRef('')
+  const conferir = async () => {
+    const t = title.trim()
+    if (projectToEdit || t.length < 12 || conferido.current === t) return
+    conferido.current = t
+    try {
+      const r = await conferirResultado(t)
+      if (conferido.current !== t) return
+      setCorrecao(['responsabilidade', 'estrategia', 'proposito'].includes(r.e) ? r : null)
+    } catch {
+      // Sem IA no servidor, ou falha: o formulário segue como sempre.
+    }
+  }
+  const guardarComoResponsabilidade = async () => {
+    setIsSaving(true)
+    try {
+      const res = await op('criar_responsabilidade', { titulo: title.trim(), contexto: context })
+      const id = String((res.resultado as { responsabilidade_id?: string })?.responsabilidade_id || '')
+      await responsibilityOptions.reload()
+      if (id) setResponsibilityId(id)
+      toast({
+        title: 'Responsabilidade guardada',
+        description: 'Agora escreva o resultado que nasce dela.',
+      })
+      setTitle('')
+      setCorrecao(null)
+      conferido.current = ''
+      onSaved?.()
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Não foi possível guardar.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
   // Mensagem de regra do método (código entre colchetes), exibida no próprio
   // formulário, perto de Salvar — sem perder o rascunho do usuário.
   const [formError, setFormError] = useState('')
@@ -98,6 +135,8 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
         setResponsibilityId(projectToEdit.responsibility_id || '')
       } else {
         setTitle('')
+        setCorrecao(null)
+        conferido.current = ''
         setContext(defaultContext)
         setStatus('rascunho')
         setCompletionCondition('')
@@ -195,16 +234,48 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({
               htmlFor={ids.title}
               className="text-xs uppercase tracking-wider text-muted-foreground"
             >
-              Título do Resultado
+              O que estará pronto, e até quando?
             </Label>
             <Input
               id={ids.title}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Ex: Reformulação da esteira de prospecção"
+              placeholder="Até dezembro, empresa funcionando duas semanas sem mim"
               className="font-medium"
               required
+              onBlur={() => void conferir()}
             />
+            {!projectToEdit && !correcao && (
+              <p className="text-xs text-muted-foreground">
+                Escreva como algo já pronto, com linha de chegada: “Até [data], …”.
+              </p>
+            )}
+            {correcao && (
+              <div
+                className="space-y-2 rounded-2xl border border-border bg-secondary p-3"
+                role="status"
+                data-correcao={correcao.e}
+              >
+                <p className="break-words text-sm text-foreground">
+                  {correcao.por_que}{' '}
+                  {correcao.e === 'responsabilidade'
+                    ? 'Quer guardar como Responsabilidade e criar um resultado dentro dela?'
+                    : correcao.e === 'estrategia'
+                      ? 'Parece um caminho, não o destino. Para quê você faria isso? A resposta é o resultado.'
+                      : 'Parece o seu propósito, que nunca se conclui. Que estado você quer alcançar por causa dele?'}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {correcao.e === 'responsabilidade' && (
+                    <Button type="button" size="sm" disabled={isSaving} onClick={() => void guardarComoResponsabilidade()}>
+                      Guardar como Responsabilidade
+                    </Button>
+                  )}
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setCorrecao(null)}>
+                    Dispensar
+                  </Button>
+                </div>
+              </div>
+            )}
             {!projectToEdit && (
               <AiSuggest
                 tipo="resultado"

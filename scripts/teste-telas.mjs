@@ -191,6 +191,8 @@ await passo('editar resultado', async () => {
 await passo('estratégia', async () => {
   await abrirResultado()
   await botao('Nova estratégia').click()
+  const comeco = await dialogo().locator('input').first().inputValue()
+  confere('o campo da estratégia já começa a frase', comeco.startsWith('Por meio de'), comeco)
   await dialogo().locator('input').first().fill(nomes.estrategia)
   await botao('Salvar', dialogo()).click()
   await esperaSumir()
@@ -347,6 +349,35 @@ await passo('concluir o Estudo com rastro', async () => {
   confere('Estudo só conclui deixando rastro, e fica feito', feito === 1)
 })
 
+// 10b. Método: a conclusão do Estudo vira nota no resultado; anexos leves; a escada
+await passo('material de referência e escada', async () => {
+  await abrirResultado()
+  const refs = page.locator('[data-referencias="resultado"]')
+  await refs.getByText(/Conclusão do estudo/).first().waitFor()
+  confere('a conclusão do Estudo vira nota presa ao resultado', (await refs.innerText()).includes(T('Aprendi a montar a planilha')))
+  await botao('Anexar', refs).click()
+  await refs.getByRole('button', { name: 'Link', exact: true }).click()
+  await refs.getByLabel('Título do anexo').fill(T('Planilha de treino'))
+  await refs.getByLabel('Endereço do anexo').fill('exemplo.com/planilha')
+  await botao('Guardar anexo', refs).click()
+  await refs.getByText(T('Planilha de treino')).waitFor()
+  confere('anexar um link ao resultado', (await refs.innerText()).includes('https://exemplo.com/planilha'))
+  await page.locator('[data-escada]').first().getByRole('link', { name: 'Para quê?' }).click()
+  await page.waitForTimeout(1200)
+  confere('"Para quê?" sobe do resultado para a responsabilidade', page.url().includes('/responsabilidades?id=') && (await texto('main')).includes(nomes.resp))
+})
+
+// 10c. Método: guia do propósito
+await passo('guia do propósito', async () => {
+  await ir('/configuracoes')
+  const guia = page.locator('[data-guia-proposito]')
+  await guia.getByRole('button', { name: /Guia do propósito/ }).click()
+  confere('guia do propósito traz as quatro perguntas', (await guia.locator('textarea').count()) === 5)
+  await guia.locator('#guia-frase').fill(nomes.proposito)
+  await botao('Usar esta frase', guia).click()
+  confere('a frase do guia vai para o campo do propósito', (await page.locator('#life-purpose').inputValue()) === nomes.proposito)
+})
+
 // 11. Avanços: editar e cancelar o avanço que veio da captura
 await passo('editar e cancelar avanço', async () => {
   await verGrupo('Prontos')
@@ -450,6 +481,27 @@ await passo('revisão guiada', async () => {
   confere('Revisão guiada: Desfazer mantém o resultado ativo', (await botao('Pausar').count()) === 1)
 })
 
+// 14b2. Revisões trimestral e anual têm roteiro próprio
+await passo('revisões trimestral e anual', async () => {
+  await ir('/revisao')
+  await page.getByRole('group', { name: 'Período' }).getByRole('button', { name: 'Trimestral' }).click()
+  await botao('Começar a revisão').click()
+  const guia = page.locator('[data-revisao]')
+  await guia.locator('[data-passo="Resultados"]').waitFor()
+  const tri = await guia.innerText()
+  confere('Revisão trimestral começa pelo destino de cada resultado', /Alcancei, sigo ou abandono\?/.test(tri) && tri.includes('Volta para a lista de futuros'), tri.slice(0, 200))
+  await guia.getByRole('button', { name: 'Sair da revisão e continuar depois' }).click()
+  await page.getByRole('group', { name: 'Período' }).getByRole('button', { name: 'Anual' }).click()
+  await botao('Começar a revisão').click()
+  await guia.locator('[data-passo="Propósito"]').waitFor()
+  const ano = await guia.innerText()
+  confere('Revisão anual começa relendo o propósito e os dois testes', ano.includes(nomes.proposito) && /Teste do único/.test(ano), ano.slice(0, 200))
+  await guia.getByRole('button', { name: 'Continuar', exact: true }).click()
+  await guia.locator('[data-passo="Responsabilidades"]').waitFor()
+  confere('Revisão anual revisa as responsabilidades', (await guia.innerText()).includes(nomes.resp))
+  await guia.getByRole('button', { name: 'Sair da revisão e continuar depois' }).click()
+})
+
 // 14c. IA embutida nas telas (só quando o servidor tem a chave): sugere, a pessoa decide
 if (process.env.PEGADA_TESTE_IA) {
   await passo('IA em Capturas', async () => {
@@ -479,6 +531,31 @@ if (process.env.PEGADA_TESTE_IA) {
     await botao('Decidir depois', d).click()
     await page.waitForTimeout(400)
     confere('captura rápida: "Decidir depois" dispensa a sugestão', (await d.locator('[data-sugestao]').count()) === 0)
+    await page.keyboard.press('Escape')
+    await esperaSumir()
+  })
+  await passo('desdobrar com IA', async () => {
+    await abrirResultado()
+    await botao('Desdobrar em estratégias').click()
+    const caixa = page.locator('div[data-desdobrar="resultado"]')
+    await caixa.locator('li button').first().waitFor({ timeout: 45000 })
+    const sugestao = (await caixa.locator('li button').first().innerText()).split('\n')[0].trim()
+    confere('desdobrar: a IA sugere estratégias com o motivo', (await caixa.locator('li button').count()) >= 2, sugestao)
+    await caixa.locator('li button').first().click()
+    await botao('Criar a escolhida', caixa).click()
+    await page.waitForTimeout(2000)
+    confere('desdobrar: a sugestão escolhida vira estratégia', (await texto('main')).includes(sugestao), sugestao)
+  })
+  await passo('correção gentil', async () => {
+    await ir('/resultados')
+    await botao('Novo resultado').click()
+    const d = dialogo()
+    await d.locator('input[id$=project-title]').fill('Ser um bom pai para as minhas filhas')
+    await d.locator('input[id$=completion-condition]').click()
+    await d.locator('[data-correcao]').waitFor({ timeout: 45000 }).catch(() => {})
+    const n = await d.locator('[data-correcao]').count()
+    confere('correção gentil: o Pegada avisa quando o resultado não tem linha de chegada', n === 1)
+    if (n) await botao('Dispensar', d).click()
     await page.keyboard.press('Escape')
     await esperaSumir()
   })

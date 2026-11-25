@@ -19,6 +19,9 @@ import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
 import { ActivityPage } from '@/pages/ActivityPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { ConvitePage } from '@/pages/ConvitePage'
+import { EsqueciSenhaPage, NovaSenhaPage, ConfirmarEmailPage } from '@/pages/SenhaPages'
+import { PessoasPage } from '@/pages/PessoasPage'
 import { PropositoPage } from '@/pages/PropositoPage'
 import NotFound from '@/pages/NotFound'
 
@@ -82,8 +85,11 @@ const ProtectedRoutes = () => {
             {/* O que foi excluído espera na Lixeira, até ser restaurado ou apagado de vez. */}
             <Route path="/lixeira" element={<LixeiraPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
-            {/* Configurações da conta: perfil, fuso e privacidade da IA. */}
+            {/* Configurações: perfil, entrada, privacidade e segurança da conta. */}
             <Route path="/configuracoes" element={<SettingsPage />} />
+            <Route path="/conta" element={<Redireciona para="/configuracoes" />} />
+            {/* Quem administra convida pessoas e acompanha as contas. */}
+            <Route path="/pessoas" element={<PessoasPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
@@ -98,7 +104,14 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <ProtectedRoutes />
+        <Routes>
+          {/* Telas de fora do app: valem com ou sem sessão. */}
+          <Route path="/convite/:token" element={<ConvitePage />} />
+          <Route path="/esqueci-a-senha" element={<EsqueciSenhaPage />} />
+          <Route path="/nova-senha/:token" element={<NovaSenhaPage />} />
+          <Route path="/confirmar-email/:token" element={<ConfirmarEmailPage />} />
+          <Route path="*" element={<ProtectedRoutes />} />
+        </Routes>
       </AuthProvider>
     </TooltipProvider>
   </BrowserRouter>

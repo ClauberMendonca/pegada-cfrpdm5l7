@@ -3,6 +3,7 @@ import pb from '@/lib/pocketbase/client'
 import { op } from '@/lib/pegada/api'
 import { UserProfile } from '@/types/execution'
 import { mapUserProfile } from '@/lib/profileMapper'
+import { conta } from '@/lib/pegada/conta'
 
 interface AuthContextType {
   user: UserProfile | null
@@ -13,6 +14,14 @@ interface AuthContextType {
   logout: () => void
   updateTimezone: (timezone: string) => Promise<void>
   updateLifePurpose: (text: string) => Promise<void>
+  /** Nome e foto: o que os outros veem de você. `foto: null` remove a foto. */
+  updateProfile: (dados: { nome?: string; foto?: File | null }) => Promise<void>
+  /** Troca a senha (exige a atual) e entra de novo: as outras sessões caem. */
+  changePassword: (atual: string, nova: string) => Promise<void>
+  /** Encerra as outras sessões; esta continua com um token novo. */
+  signOutEverywhere: () => Promise<void>
+  /** Endereço da foto, ou '' quando não há. */
+  avatarUrl: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -96,6 +105,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
+  const updateProfile = async (dados: { nome?: string; foto?: File | null }) => {
+    if (!user) throw new Error('Sem sessão ativa.')
+    const form = new FormData()
+    if (dados.nome !== undefined) form.append('name', dados.nome.trim())
+    if (dados.foto === null) form.append('avatar', '')
+    else if (dados.foto) form.append('avatar', dados.foto)
+    const sessionId = user.id
+    const updated = await pb.collection('users').update(sessionId, form)
+    if (pb.authStore.isValid && pb.authStore.model?.id === sessionId) {
+      pb.authStore.save(pb.authStore.token, updated)
+      setUser(mapUserProfile(updated))
+    }
+  }
+
+  const changePassword = async (atual: string, nova: string) => {
+    if (!user) throw new Error('Sem sessão ativa.')
+    await pb.collection('users').update(user.id, {
+      oldPassword: atual,
+      password: nova,
+      passwordConfirm: nova,
+    })
+    // A troca invalida todos os tokens, inclusive o desta sessão.
+    const authData = await pb.collection('users').authWithPassword(user.email, nova)
+    setUser(mapUserProfile(authData.record))
+  }
+
+  const signOutEverywhere = async () => {
+    if (!user) throw new Error('Sem sessão ativa.')
+    const res = await conta.sairDeTodos()
+    pb.authStore.save(res.token, pb.authStore.model)
+  }
+
+  const avatarUrl =
+    user?.avatar && pb.authStore.model
+      ? pb.files.getURL(pb.authStore.model, user.avatar, { thumb: '100x100' })
+      : ''
+
   const isAuthenticated = Boolean(user && pb.authStore.isValid)
   const needsTimezoneSetup = Boolean(
     isAuthenticated && (!user?.timezone || user.timezone.trim() === ''),
@@ -112,6 +158,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateTimezone,
         updateLifePurpose,
+        updateProfile,
+        changePassword,
+        signOutEverywhere,
+        avatarUrl,
       }}
     >
       {children}

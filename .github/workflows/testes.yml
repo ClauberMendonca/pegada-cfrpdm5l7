@@ -38,9 +38,12 @@ jobs:
       - name: Subir servidor de teste com a IA simulada
         run: |
           node scripts/simulador-anthropic.mjs &
+          node scripts/simulador-smtp.mjs &
           ./pb/pocketbase migrate up --dir=pb_data --migrationsDir=pocketbase/migrations
           ./pb/pocketbase superuser upsert ci@pegada.teste "$PB_ADMIN_SENHA" --dir=pb_data --migrationsDir=pocketbase/migrations
           ANTHROPIC_API_KEY=teste PEGADA_IA_URL=http://127.0.0.1:8787 \
+            PEGADA_SMTP_HOST=127.0.0.1 PEGADA_SMTP_PORT=2525 \
+            PEGADA_EMAIL_REMETENTE=ola@pegada.teste PEGADA_URL=http://127.0.0.1:8090 \
             ./pb/pocketbase serve --http=127.0.0.1:8090 --dir=pb_data \
             --hooksDir=pocketbase/hooks --migrationsDir=pocketbase/migrations --publicDir=dist > pb.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8090/api/health && break; sleep 1; done
@@ -52,6 +55,7 @@ jobs:
         env:
           PEGADA_URL: http://127.0.0.1:8090
           PEGADA_TESTE_IA: simulada
+          PEGADA_TESTE_CAIXA: http://127.0.0.1:2526/
           PB_ADMIN_EMAIL: ci@pegada.teste
           PB_ADMIN_SENHA: ci-${{ github.run_id }}-Senha9
 

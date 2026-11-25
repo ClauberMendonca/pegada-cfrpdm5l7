@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Globe, Clock } from 'lucide-react'
 
-const COMMON_TIMEZONES = [
+export const COMMON_TIMEZONES = [
   { value: 'America/Sao_Paulo', label: 'Brasília / São Paulo (GMT-3)' },
   { value: 'America/Manaus', label: 'Manaus (GMT-4)' },
   { value: 'America/Belem', label: 'Belém / Norte (GMT-3)' },

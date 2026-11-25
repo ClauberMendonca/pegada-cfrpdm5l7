@@ -2,7 +2,9 @@
 // Confere a cópia de segurança: a agenda semanal está ligada e o servidor
 // consegue gerar uma cópia completa que dá para baixar. Apaga a cópia de teste.
 const BASE = (process.argv[2] || '').replace(/\/$/, '')
-const { PEGADA_DONO_EMAIL: email, PEGADA_DONO_SENHA: senha } = process.env
+const { PEGADA_DONO_EMAIL: email } = process.env
+// O painel pode ter senha própria; sem ela, vale a do dono.
+const senha = process.env.PEGADA_PAINEL_SENHA || process.env.PEGADA_DONO_SENHA
 const pede = (method, path, body, token) =>
   fetch(BASE + path, {
     method,

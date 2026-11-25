@@ -161,6 +161,46 @@ async function contas({ t, suToken, donoId, login2 }) {
   const propria = await http('POST', C + '/pessoas/' + donoId + '/desativar', { token: t })
   confere('conta: admin não desativa a própria conta', propria.status === 400, propria)
 
+  // E-mail: convite, recuperação de senha e troca de e-mail (só com a caixa de teste ligada)
+  if (cfg.json?.email === true && process.env.PEGADA_TESTE_CAIXA) {
+    const caixa = async (para, trecho) => {
+      for (let i = 0; i < 20; i++) {
+        const r = await fetch(process.env.PEGADA_TESTE_CAIXA).then((x) => x.json())
+        const m = r.filter((x) => x.para.includes(para) && x.corpo.includes(trecho)).pop()
+        if (m) return m.corpo
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+      return ''
+    }
+    const emailC2 = 'por-email-' + Date.now() + '@pegada.teste'
+    const conv2 = await http('POST', C + '/convites', { token: t, body: { email: emailC2 } })
+    const cartaConv = await caixa(emailC2, '/convite/')
+    confere('e-mail: o convite chega com o link', conv2.json?.email_enviado === true && cartaConv.includes(conv2.json?.link), { enviado: conv2.json?.email_enviado })
+
+    const pede = await http('POST', U + '/request-password-reset', { body: { email: emailConv } })
+    const inexistente = await http('POST', U + '/request-password-reset', { body: { email: 'ninguem-' + Date.now() + '@pegada.teste' } })
+    confere('senha: o pedido responde igual exista ou não a conta', pede.status === 204 && inexistente.status === 204, { existe: pede.status, nao: inexistente.status })
+    const carta = await caixa(emailConv, '/nova-senha/')
+    const tokenReset = (carta.match(/\/nova-senha\/([A-Za-z0-9._-]+)/) || [])[1] || ''
+    confere('senha: o link de nova senha chega por e-mail, em português', !!tokenReset && carta.includes('30 minutos'), carta.slice(0, 200))
+    const resetFraco = await http('POST', U + '/confirm-password-reset', { body: { token: tokenReset, password: '1234567890', passwordConfirm: '1234567890' } })
+    confere('senha: a senha nova pelo link também não pode ser comum', resetFraco.status === 400, resetFraco)
+    const senhaReset = 'janela-tambor-abacate'
+    const reset = await http('POST', U + '/confirm-password-reset', { body: { token: tokenReset, password: senhaReset, passwordConfirm: senhaReset } })
+    const entraReset = await http('POST', U + '/auth-with-password', { body: { identity: emailConv, password: senhaReset } })
+    confere('senha: a pessoa redefine pelo link e entra', reset.status === 204 && entraReset.status === 200, { reset: reset.status, entra: entraReset.status })
+    const reusoReset = await http('POST', U + '/confirm-password-reset', { body: { token: tokenReset, password: 'outra-senha-bem-longa', passwordConfirm: 'outra-senha-bem-longa' } })
+    confere('senha: o link só vale uma vez', reusoReset.status >= 400, reusoReset)
+
+    const emailNovo = 'novo-' + Date.now() + '@pegada.teste'
+    const pedeTroca = await http('POST', U + '/request-email-change', { token: entraReset.json?.token, body: { newEmail: emailNovo } })
+    const cartaTroca = await caixa(emailNovo, '/confirmar-email/')
+    const tokenTroca = (cartaTroca.match(/\/confirmar-email\/([A-Za-z0-9._-]+)/) || [])[1] || ''
+    const confirma = await http('POST', U + '/confirm-email-change', { body: { token: tokenTroca, password: senhaReset } })
+    const entraNovo = await http('POST', U + '/auth-with-password', { body: { identity: emailNovo, password: senhaReset } })
+    confere('e-mail: a troca só vale depois de confirmar no endereço novo', pedeTroca.status === 204 && confirma.status === 204 && entraNovo.status === 200, { pede: pedeTroca.status, confirma: confirma.status, entra: entraNovo.status })
+  }
+
   // Cabeçalhos de segurança
   const cab = await fetch(BASE + '/')
   confere(

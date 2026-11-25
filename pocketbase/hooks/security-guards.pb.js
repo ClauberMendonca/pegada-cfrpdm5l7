@@ -55,9 +55,9 @@ onRecordUpdateRequest((e) => {
   }
   e.next()
   if (trocaSenha) {
-    contas.registrar(e.app, e, e.record.id, 'senha_trocada', 'em Minha conta')
+    contas.registrar(e.app, e, e.record.id, 'senha_trocada', 'em Configurações')
     contas.enviar(e.app, e.record.getString('email'), 'A sua senha do Pegada foi trocada', [
-      'A senha da sua conta no Pegada acaba de ser trocada em Minha conta. As sessões abertas em outros aparelhos foram encerradas.',
+      'A senha da sua conta no Pegada acaba de ser trocada em Configurações. As sessões abertas em outros aparelhos foram encerradas.',
       'Se não foi você, use "Esqueci a senha" na tela de entrada e avise quem administra o Pegada.',
     ])
   }

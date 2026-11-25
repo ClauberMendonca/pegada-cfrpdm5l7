@@ -47,6 +47,34 @@ migrate(
     }
     const senha = users.fields.getByName('password')
     if (senha) senha.min = 10
+    // Foto do perfil: imagem pequena, com miniatura para o avatar.
+    const foto = users.fields.getByName('avatar')
+    if (foto) {
+      foto.maxSelect = 1
+      foto.maxSize = 2 * 1024 * 1024
+      foto.mimeTypes = ['image/png', 'image/jpeg', 'image/webp']
+      foto.thumbs = ['100x100']
+    }
+    // E-mails do sistema em português, levando às telas do próprio app.
+    const pe = '<p style="font-size:13px;color:#6b635a">Pegada: cada passo com o seu porquê.</p>'
+    users.resetPasswordTemplate.subject = 'Criar uma senha nova no Pegada'
+    users.resetPasswordTemplate.body =
+      '<p>Olá,</p><p>Recebemos um pedido de senha nova para a sua conta no Pegada.</p>' +
+      '<p><a href="{APP_URL}/nova-senha/{TOKEN}">Criar a senha nova</a></p>' +
+      '<p>O link vale por 30 minutos e só pode ser usado uma vez. Se não foi você, ignore este e-mail: a sua senha continua a mesma.</p>' +
+      pe
+    users.confirmEmailChangeTemplate.subject = 'Confirmar o e-mail novo no Pegada'
+    users.confirmEmailChangeTemplate.body =
+      '<p>Olá,</p><p>Para usar este endereço como o e-mail da sua conta no Pegada, confirme abaixo.</p>' +
+      '<p><a href="{APP_URL}/confirmar-email/{TOKEN}">Confirmar o e-mail novo</a></p>' +
+      '<p>Se não foi você, ignore este e-mail: nada muda na conta.</p>' +
+      pe
+    users.authAlert.enabled = true
+    users.authAlert.emailTemplate.subject = 'Entrada nova na sua conta do Pegada'
+    users.authAlert.emailTemplate.body =
+      '<p>Olá,</p><p>A sua conta no Pegada foi aberta em um aparelho ou lugar novo.</p>' +
+      '<p>Se foi você, não precisa fazer nada. Se não foi, troque a senha em Configurações e use "Sair de todos os outros aparelhos".</p>' +
+      pe
     users.authRule = 'disabled = false'
     users.authToken.duration = 30 * 24 * 60 * 60
     users.passwordResetToken.duration = 30 * 60

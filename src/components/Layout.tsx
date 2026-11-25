@@ -13,6 +13,7 @@ import {
   Settings,
   LogOut,
   Trash2,
+  Users,
   ChevronDown,
   Check,
 } from 'lucide-react'
@@ -114,7 +115,7 @@ function ContextoChip({ className }: { className?: string }) {
 }
 
 function ContaMenu({ comNome }: { comNome?: boolean }) {
-  const { user, logout } = useAuth()
+  const { user, logout, avatarUrl } = useAuth()
   const navigate = useNavigate()
   const nome = (user?.name || user?.email || 'Conta') as string
   const inicial = nome.trim().charAt(0).toUpperCase() || 'C'
@@ -132,10 +133,14 @@ function ContaMenu({ comNome }: { comNome?: boolean }) {
         >
           <span
             aria-hidden="true"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-semibold"
+            className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full text-base font-semibold"
             style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' }}
           >
-            {inicial}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-11 w-11 rounded-full object-cover" />
+            ) : (
+              inicial
+            )}
           </span>
           {comNome && (
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -158,6 +163,12 @@ function ContaMenu({ comNome }: { comNome?: boolean }) {
             </DropdownMenuItem>
           )
         })}
+        {user?.role === 'admin' && (
+          <DropdownMenuItem onSelect={() => navigate('/pessoas')} className="min-h-11 gap-3">
+            <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            Pessoas
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => logout()} className="min-h-11 gap-3">
           <LogOut className="h-4 w-4 text-muted-foreground" aria-hidden="true" />

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -16,7 +16,14 @@ import { ReviewPage } from '@/pages/ReviewPage'
 import SettingsPage from '@/pages/SettingsPage'
 import { ActivityPage } from '@/pages/ActivityPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { PropositoPage } from '@/pages/PropositoPage'
 import NotFound from '@/pages/NotFound'
+
+// Endereços antigos continuam valendo: levam ao lugar novo, com o que vinha depois do "?".
+const Redireciona = ({ para }: { para: string }) => {
+  const { search } = useLocation()
+  return <Navigate to={para + search} replace />
+}
 
 const ProtectedRoutes = () => {
   const { isAuthenticated, isLoading } = useAuth()
@@ -42,7 +49,9 @@ const ProtectedRoutes = () => {
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<TodayPage />} />
-            <Route path="/capturas" element={<CapturesPage />} />
+            {/* A Caixa recebe o que foi capturado e espera decisão. */}
+            <Route path="/caixa" element={<CapturesPage />} />
+            <Route path="/capturas" element={<Redireciona para="/caixa" />} />
             {/* ENTREGA 1B — caminhos canônicos novos; /acoes e /projetos
                 permanecem como aliases legados (nenhum redirect). */}
             <Route path="/avancos" element={<ActionsPage />} />
@@ -53,10 +62,13 @@ const ProtectedRoutes = () => {
                 providers/Layout; ficha retomável via ?id=). */}
             <Route path="/responsabilidades" element={<ResponsibilitiesPage />} />
             {/* PEGADA — histórico com desfazer, propostas de agentes e agentes. */}
-            <Route path="/atividade" element={<ActivityPage />} />
+            <Route path="/historico" element={<ActivityPage />} />
+            <Route path="/atividade" element={<Redireciona para="/historico" />} />
             <Route path="/mapa" element={<MapPage />} />
+            {/* O Propósito é o topo do Mapa, e não uma configuração da conta. */}
+            <Route path="/mapa/proposito" element={<PropositoPage />} />
             <Route path="/revisao" element={<ReviewPage />} />
-            {/* ENTREGA 2A — Configurações do perfil (propósito de vida). */}
+            {/* Configurações da conta: perfil, fuso e privacidade da IA. */}
             <Route path="/configuracoes" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<NotFound />} />

@@ -1,5 +1,7 @@
 import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
+import { Trilha } from '@/components/Trilha'
+import { useResponsibilityReference } from '@/hooks/use-responsibility-reference'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { TimeEntry } from '@/services/timeService'
 import { Project, ActionItem, ProgressLog, ActionStatus, ProjectStatus } from '@/types/execution'
@@ -15,17 +17,10 @@ import { CompleteProjectDialog } from '@/components/CompleteProjectDialog'
 import { ResponsibilityReference } from '@/components/ResponsibilitySelect'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
-  Target,
-  Sparkles,
   CheckCircle2,
   Clock,
-  BookOpen,
-  Compass,
-  ChevronDown,
   Plus,
-  ArrowLeft,
   Flame,
   Trophy,
   Edit3,
@@ -55,13 +50,13 @@ import { usePegadaMudou } from '@/lib/pegada/useMudou'
 
 interface ProjectDetailProps {
   projectId: string
-  onBack: () => void
+  /** Mantido para quem chama; a volta agora é a trilha do fio. */
+  onBack?: () => void
   onProjectUpdated?: () => void
 }
 
 export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   projectId,
-  onBack,
   onProjectUpdated,
 }) => {
   const { toast } = useToast()
@@ -70,6 +65,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const timeTotals = useProjectTimeTotals(projectId)
   const { running } = useTimer()
   const [project, setProject] = useState<Project | null>(null)
+  const responsabilidadeRef = useResponsibilityReference(project?.responsibility_id || null)
   const [actions, setActions] = useState<ActionItem[]>([])
   const [logs, setLogs] = useState<ProgressLog[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -97,7 +93,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [editingAction, setEditingAction] = useState<ActionItem | null>(null)
   const [isLogModalOpen, setIsLogModalOpen] = useState(false)
   const [logAction, setLogAction] = useState<ActionItem | null>(null)
-  const [is8RsOpen, setIs8RsOpen] = useState(false)
   // Edição da ficha: modal próprio do detalhe (camada acima do detalhe, sem sair dele)
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false)
 
@@ -238,17 +233,6 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
     )
   }
 
-  const has8Rs = Boolean(
-    project.r_resultado ||
-    project.r_razao ||
-    project.r_referencia ||
-    project.r_rumo ||
-    project.r_recursos ||
-    project.r_restricoes ||
-    project.r_riscos ||
-    project.r_responsavel,
-  )
-
   const timeTotalLabel = (seconds: number) =>
     timeTotals.loading || timeTotals.error
       ? '—'
@@ -380,15 +364,20 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       {/* Top back button and actions — no celular, as ações descem para a
          linha de baixo em vez de vazar da tela. */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onBack}
-          className="text-muted-foreground hover:text-foreground -ml-2 text-xs gap-1.5"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Voltar para Lista de Resultados
-        </Button>
+        <Trilha
+          degraus={[
+            { rotulo: 'Mapa', to: '/mapa' },
+            ...(project.responsibility_id
+              ? [
+                  {
+                    rotulo: responsabilidadeRef.status === 'ready' ? responsabilidadeRef.data.title : 'Responsabilidade',
+                    to: `/responsabilidades?id=${encodeURIComponent(project.responsibility_id)}`,
+                  },
+                ]
+              : []),
+          ]}
+          atual={project.title}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           {project.status === 'ativo' && (
@@ -461,7 +450,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             {project.deadline && (
               <span className="flex items-center gap-1 text-xs font-mono text-muted-foreground">
                 <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                Prazo Factual: {formatCalendarDay(project.deadline)}
+                Até {formatCalendarDay(project.deadline)}
               </span>
             )}
           </div>
@@ -485,136 +474,13 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           />
         </div>
 
-        {/* Separação Pragmática: Aspiração vs Entrega Controlável */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-4 rounded-xl bg-muted border border-border space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Aspiração (O que quero alcançar)</span>
-            </div>
-            <p className="text-sm text-foreground">
-              {project.aspiration || (
-                <span className="text-muted-foreground italic">Nenhuma aspiração preenchida.</span>
-              )}
+        {project.completion_condition && (
+          <div className="border-t border-border pt-4">
+            <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+              Como vou saber que cheguei
             </p>
+            <p className="mt-1 text-base text-foreground">{project.completion_condition}</p>
           </div>
-
-          <div className="p-4 rounded-xl bg-muted border border-border space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              <Target className="w-3.5 h-3.5" />
-              <span>Entrega Controlável (O que vou entregar)</span>
-            </div>
-            <p className="text-sm text-foreground">
-              {project.controllable_delivery || (
-                <span className="text-muted-foreground italic">
-                  Nenhuma entrega controlável especificada.
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Condição de término & Aprendizado durável */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2 border-t border-border">
-          <div>
-            <span className="text-muted-foreground font-semibold uppercase tracking-wider block mb-1">
-              Condição Clara de Término
-            </span>
-            <p className="text-foreground">
-              {project.completion_condition || (
-                <span className="text-muted-foreground italic">Não definida</span>
-              )}
-            </p>
-          </div>
-
-          <div>
-            <span className="text-pegada-info font-semibold uppercase tracking-wider block mb-1 flex items-center gap-1">
-              <BookOpen className="w-3.5 h-3.5" />
-              Possível Aprendizado ou Ativo Durável
-            </span>
-            <p className="text-foreground">
-              {project.learning_asset || (
-                <span className="text-muted-foreground italic">Sem ativo registrado</span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        {/* Os 8 Rs (Recolhível) */}
-        {has8Rs && (
-          <Collapsible
-            open={is8RsOpen}
-            onOpenChange={setIs8RsOpen}
-            className="pt-2 border-t border-border"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-pegada-success" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ficha dos Oito Rs
-                </span>
-              </div>
-              <CollapsibleTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground">
-                  <span>{is8RsOpen ? 'Recolher Rs' : 'Expandir Rs'}</span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 ml-1 transition-transform ${is8RsOpen ? 'rotate-180' : ''}`}
-                  />
-                </Button>
-              </CollapsibleTrigger>
-            </div>
-
-            <CollapsibleContent className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-muted p-4 rounded-xl border border-border">
-              {project.r_resultado && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">1. Resultado:</span>
-                  <p className="text-foreground mt-0.5">{project.r_resultado}</p>
-                </div>
-              )}
-              {project.r_razao && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">2. Razão:</span>
-                  <p className="text-foreground mt-0.5">{project.r_razao}</p>
-                </div>
-              )}
-              {project.r_referencia && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">3. Referência:</span>
-                  <p className="text-foreground mt-0.5">{project.r_referencia}</p>
-                </div>
-              )}
-              {project.r_rumo && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">4. Rumo:</span>
-                  <p className="text-foreground mt-0.5">{project.r_rumo}</p>
-                </div>
-              )}
-              {project.r_recursos && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">5. Recursos:</span>
-                  <p className="text-foreground mt-0.5">{project.r_recursos}</p>
-                </div>
-              )}
-              {project.r_restricoes && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">6. Restrições:</span>
-                  <p className="text-foreground mt-0.5">{project.r_restricoes}</p>
-                </div>
-              )}
-              {project.r_riscos && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">7. Riscos:</span>
-                  <p className="text-foreground mt-0.5">{project.r_riscos}</p>
-                </div>
-              )}
-              {project.r_responsavel && (
-                <div>
-                  <span className="text-muted-foreground font-medium block">8. Responsável:</span>
-                  <p className="text-foreground mt-0.5">{project.r_responsavel}</p>
-                </div>
-              )}
-            </CollapsibleContent>
-          </Collapsible>
         )}
       </div>
 

@@ -240,7 +240,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
       {(dados.capturas_pendentes > 0 || reavaliar > 0 || dados.propostas_pendentes > 0) && (
         <div className="flex flex-wrap gap-2.5">
           {dados.capturas_pendentes > 0 && (
-            <Link to="/capturas" className={ATALHO}>
+            <Link to="/caixa" className={ATALHO}>
               <span className="text-xl font-semibold">{dados.capturas_pendentes}</span>
               <span>{dados.capturas_pendentes === 1 ? 'captura para decidir' : 'capturas para decidir'}</span>
             </Link>
@@ -252,7 +252,7 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
             </button>
           )}
           {dados.propostas_pendentes > 0 && (
-            <Link to="/atividade" className={ATALHO}>
+            <Link to="/historico" className={ATALHO}>
               <span className="text-xl font-semibold">{dados.propostas_pendentes}</span>
               <span>
                 {dados.propostas_pendentes === 1 ? 'proposta para confirmar' : 'propostas para confirmar'}

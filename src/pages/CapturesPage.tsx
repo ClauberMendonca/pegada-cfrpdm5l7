@@ -1,4 +1,5 @@
 import { Dica } from '@/components/Dica'
+import { PropostasParaDecidir } from '@/components/PropostasParaDecidir'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
@@ -389,7 +390,7 @@ export const CapturesPage: React.FC = () => {
             variant="ghost"
             onClick={() => handleDiscard(item.id)}
             className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
-            title="Descartar logicamente"
+            title="Descartar"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
@@ -447,11 +448,11 @@ export const CapturesPage: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
             <Inbox className="w-6 h-6 text-primary" />
-            Capturas
+            Caixa
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Caixa de entrada rápida para descarregar a mente sem fricção. Converta em Resultado ou
-            Avanço, ou descarte.
+            O que você capturou e ainda não decidiu. Cada item vira um resultado, um avanço ou é
+            descartado.
           </p>
         </div>
 
@@ -487,6 +488,7 @@ export const CapturesPage: React.FC = () => {
         </div>
       </div>
 
+      <PropostasParaDecidir />
       <Dica id="capturas">
         Capture do jeito que pensa, sem classificar na hora. Depois você decide o que cada captura vira.
       </Dica>
@@ -624,7 +626,7 @@ export const CapturesPage: React.FC = () => {
                         variant="ghost"
                         onClick={() => handleDiscard(item.id)}
                         className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
-                        title="Descartar logicamente"
+                        title="Descartar"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         Descartar

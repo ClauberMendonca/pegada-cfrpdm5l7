@@ -636,7 +636,7 @@ export const ActionsPage: React.FC = () => {
         <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-4 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm text-destructive font-medium">Falha ao carregar o catálogo.</p>
+            <p className="text-sm text-destructive font-medium">Não foi possível carregar os avanços.</p>
             <p className="text-xs text-destructive mt-0.5">{loadError}</p>
             <Button size="sm" variant="outline" onClick={loadData} className="mt-2 text-xs">
               Tentar novamente
@@ -685,7 +685,7 @@ export const ActionsPage: React.FC = () => {
               className="mt-2 gap-1.5 text-xs"
             >
               <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
-              Voltar ao catálogo
+              Voltar aos avanços
             </Button>
           </div>
         </div>
@@ -770,19 +770,17 @@ export const ActionsPage: React.FC = () => {
                 </span>
               ) : catalogDestAction ? (
                 <span>
-                  Este avanço está fora dos filtros atuais do catálogo (busca, status ou vínculo).
-                  Os filtros foram preservados.
+                  Este avanço está fora do filtro atual. O filtro foi mantido.
                 </span>
               ) : (
                 <span>
-                  Este avanço não está nos dados carregados do catálogo; foi aberto por leitura
-                  direta do link.
+                  Este avanço foi aberto direto pelo link.
                 </span>
               )}
             </div>
             <Button size="sm" variant="ghost" onClick={closeDest} className="gap-1 text-xs">
               <X className="h-3.5 w-3.5" aria-hidden="true" />
-              Fechar destino
+              Fechar
             </Button>
           </div>
           {renderActionRow(destDisplayAction, true)}

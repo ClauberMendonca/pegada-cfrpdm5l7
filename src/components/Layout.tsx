@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { op } from '@/lib/pegada/api'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   SunMedium,
   Map as MapIcon,
-  ListChecks,
   Compass,
   Plus,
   Inbox,
-  FolderKanban,
-  Anchor,
+  Search,
   History,
   Settings,
   LogOut,
@@ -27,6 +25,8 @@ import { GlobalTimerIndicator } from '@/components/TimeControl'
 import { AvisoIAHost } from '@/components/AvisoIAHost'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
+import { BuscaGlobal, abrirBusca } from '@/components/BuscaGlobal'
+import { Destino, digitandoEmCampo, lugarDe } from '@/lib/pegada/lugar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,25 +37,31 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 // PEGADA — navegação com quatro destinos e captura no centro.
-// Celular: barra inferior (Hoje, Mapa, [Capturar], Avanços, Revisão).
+// Celular: barra inferior (Hoje, Mapa, [Capturar], Caixa, Revisão).
 // Computador: coluna lateral com os mesmos destinos e o botão Capturar.
-// Contexto (Tudo/Vida/Trabalho) é um chip; conta e telas secundárias ficam no avatar.
+// Toda tela pertence a um destino (lib/pegada/lugar), então o menu fica sempre
+// aceso. O avatar guarda só o que é da conta. Contexto (Tudo/Vida/Trabalho) é
+// um chip que muda de cor quando filtra.
 
 type IconType = typeof SunMedium
 
-const NAV: { to: string; label: string; icon: IconType }[] = [
-  { to: '/', label: 'Hoje', icon: SunMedium },
-  { to: '/mapa', label: 'Mapa', icon: MapIcon },
-  { to: '/avancos', label: 'Avanços', icon: ListChecks },
-  { to: '/revisao', label: 'Revisão', icon: Compass },
+interface ItemNav {
+  to: string
+  label: string
+  icon: IconType
+  destino: Destino
+}
+
+const NAV: ItemNav[] = [
+  { to: '/', label: 'Hoje', icon: SunMedium, destino: 'hoje' },
+  { to: '/mapa', label: 'Mapa', icon: MapIcon, destino: 'mapa' },
+  { to: '/caixa', label: 'Caixa', icon: Inbox, destino: 'caixa' },
+  { to: '/revisao', label: 'Revisão', icon: Compass, destino: 'revisao' },
 ]
 
 const CONTA: { to: string; label: string; icon: IconType }[] = [
-  { to: '/capturas', label: 'Capturas', icon: Inbox },
-  { to: '/resultados', label: 'Resultados', icon: FolderKanban },
-  { to: '/responsabilidades', label: 'Responsabilidades', icon: Anchor },
-  { to: '/atividade', label: 'Atividade', icon: History },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
+  { to: '/historico', label: 'Histórico', icon: History },
 ]
 
 const CONTEXTOS: { id: LifeWorkContext; label: string }[] = [
@@ -76,13 +82,16 @@ function ContextoChip({ className }: { className?: string }) {
           type="button"
           aria-label={`Contexto: ${atual.label}. Trocar contexto`}
           className={cn(
-            'flex min-h-11 items-center gap-1.5 rounded-full border border-input bg-transparent px-4 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-secondary',
+            'flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition-colors duration-200',
+            contextFilter === 'todos'
+              ? 'border-input bg-transparent text-foreground hover:bg-secondary'
+              : 'border-foreground bg-foreground text-background',
             FOCO,
             className,
           )}
         >
-          <span>{atual.label}</span>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <span>{contextFilter === 'todos' ? atual.label : `Só ${atual.label}`}</span>
+          <ChevronDown className="h-4 w-4 opacity-70" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
@@ -112,7 +121,7 @@ function ContaMenu({ comNome }: { comNome?: boolean }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label="Conta e mais telas"
+          aria-label="Conta"
           className={cn(
             'flex min-h-11 items-center gap-3 rounded-full text-left transition-colors duration-200 hover:bg-secondary',
             comNome ? 'w-full pr-3' : '',
@@ -157,13 +166,16 @@ function ContaMenu({ comNome }: { comNome?: boolean }) {
   )
 }
 
-// Computador: Capturas no menu, com o número do que falta decidir.
-function CapturasLink() {
+// Quantos itens esperam decisão na Caixa: capturas e propostas de agentes.
+function usePendentesDaCaixa(): number {
   const [pendentes, setPendentes] = useState(0)
   const carregar = useCallback(async () => {
     try {
-      const res = await op<{ capturas_pendentes: number }>('ver_fio_de_hoje', {})
-      setPendentes(res.resultado?.capturas_pendentes ?? 0)
+      const res = await op<{ capturas_pendentes: number; propostas_pendentes: number }>(
+        'ver_fio_de_hoje',
+        {},
+      )
+      setPendentes((res.resultado?.capturas_pendentes ?? 0) + (res.resultado?.propostas_pendentes ?? 0))
     } catch {
       setPendentes(0)
     }
@@ -172,35 +184,57 @@ function CapturasLink() {
     void carregar()
   }, [carregar])
   usePegadaMudou(carregar)
+  return pendentes
+}
+
+function BotaoBusca({ comTexto }: { comTexto?: boolean }) {
   return (
-    <NavLink
-      to="/capturas"
-      className={({ isActive }) =>
-        cn(
-          'mt-1 flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-200',
-          FOCO,
-          isActive
-            ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-            : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-        )
-      }
-    >
-      <Inbox className="h-5 w-5" aria-hidden="true" />
-      <span>Capturas</span>
-      {pendentes > 0 && (
-        <span
-          aria-label={`${pendentes} para decidir`}
-          className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground"
-        >
-          {pendentes}
-        </span>
+    <button
+      type="button"
+      onClick={abrirBusca}
+      aria-label="Buscar em tudo"
+      className={cn(
+        'flex min-h-11 items-center gap-2 rounded-full border border-input text-sm text-muted-foreground transition-colors duration-200 hover:bg-secondary hover:text-foreground',
+        comTexto ? 'w-72 px-4' : 'w-11 justify-center',
+        FOCO,
       )}
-    </NavLink>
+    >
+      <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+      {comTexto && (
+        <>
+          <span className="flex-1 text-left">Buscar em tudo</span>
+          <kbd className="rounded-md border border-input px-1.5 text-xs font-medium">/</kbd>
+        </>
+      )}
+    </button>
   )
 }
 
 export default function Layout() {
   const { running, error } = useTimer()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const lugar = lugarDe(location.pathname)
+  const pendentes = usePendentesDaCaixa()
+
+  // O título da aba diz onde a pessoa está.
+  useEffect(() => {
+    document.title = lugar.titulo === 'Pegada' ? 'Pegada' : `${lugar.titulo} · Pegada`
+  }, [lugar.titulo])
+
+  // Teclas 1 a 4 trocam de destino, fora de campos de texto e de diálogos.
+  useEffect(() => {
+    const tecla = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
+      const i = ['1', '2', '3', '4'].indexOf(e.key)
+      if (i < 0) return
+      if (digitandoEmCampo(e.target) || document.querySelector('[role="dialog"]')) return
+      e.preventDefault()
+      navigate(NAV[i].to)
+    }
+    window.addEventListener('keydown', tecla)
+    return () => window.removeEventListener('keydown', tecla)
+  }, [navigate])
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground selection:bg-secondary lg:flex-row">
@@ -231,29 +265,34 @@ export default function Layout() {
         <nav aria-label="Principal" className="mt-6 flex flex-col gap-1">
           {NAV.map((item) => {
             const Icon = item.icon
+            const aqui = lugar.destino === item.destino
             return (
-              <NavLink
+              <Link
                 key={item.to}
                 to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-200',
-                    FOCO,
-                    isActive
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                      : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                  )
-                }
+                aria-current={aqui ? 'page' : undefined}
+                className={cn(
+                  'flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-200',
+                  FOCO,
+                  aqui
+                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                )}
               >
                 <Icon className="h-5 w-5" aria-hidden="true" />
                 <span>{item.label}</span>
-              </NavLink>
+                {item.destino === 'caixa' && pendentes > 0 && (
+                  <span
+                    aria-label={`${pendentes} para decidir`}
+                    className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground"
+                  >
+                    {pendentes}
+                  </span>
+                )}
+              </Link>
             )
           })}
         </nav>
-
-        <CapturasLink />
 
         <div className="mt-auto border-t border-border pt-4">
           <ContaMenu comNome />
@@ -269,12 +308,14 @@ export default function Layout() {
               <span className="text-lg font-semibold tracking-tight text-foreground">pegada</span>
             </div>
             <div className="flex items-center gap-2">
+              <BotaoBusca />
               <ContextoChip />
               <ContaMenu />
             </div>
           </header>
           {/* Computador: chip de contexto no topo do conteúdo */}
-          <div className="hidden items-center justify-end px-10 pt-4 lg:flex">
+          <div className="hidden items-center justify-end gap-3 px-10 pt-4 lg:flex">
+            <BotaoBusca comTexto />
             <ContextoChip />
           </div>
         </div>
@@ -299,7 +340,7 @@ export default function Layout() {
       >
         <div className="mx-auto grid max-w-md grid-cols-5 items-center">
           {NAV.slice(0, 2).map((item) => (
-            <ItemInferior key={item.to} {...item} />
+            <ItemInferior key={item.to} {...item} aqui={lugar.destino === item.destino} />
           ))}
           <div className="flex justify-center">
             <button
@@ -315,46 +356,52 @@ export default function Layout() {
             </button>
           </div>
           {NAV.slice(2).map((item) => (
-            <ItemInferior key={item.to} {...item} />
+            <ItemInferior
+              key={item.to}
+              {...item}
+              aqui={lugar.destino === item.destino}
+              aviso={item.destino === 'caixa' ? pendentes : 0}
+            />
           ))}
         </div>
       </nav>
 
       <GlobalCaptureHost />
+      <BuscaGlobal />
       <AvisoIAHost />
       <GlobalTimerIndicator />
     </div>
   )
 }
 
-const ItemInferior: React.FC<{ to: string; label: string; icon: IconType }> = ({
+const ItemInferior: React.FC<ItemNav & { aqui: boolean; aviso?: number }> = ({
   to,
   label,
   icon: Icon,
+  aqui,
+  aviso = 0,
 }) => (
-  <NavLink
+  <Link
     to={to}
-    end={to === '/'}
-    className={({ isActive }) =>
-      cn(
-        'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-        isActive ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground',
-      )
-    }
-  >
-    {({ isActive }) => (
-      <>
-        <span
-          aria-hidden="true"
-          className={cn(
-            'flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-200',
-            isActive ? 'bg-secondary' : 'bg-transparent',
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </span>
-        <span>{label}</span>
-      </>
+    aria-current={aqui ? 'page' : undefined}
+    className={cn(
+      'flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-1 text-xs transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+      aqui ? 'font-semibold text-foreground' : 'font-medium text-muted-foreground',
     )}
-  </NavLink>
+  >
+    <span
+      aria-hidden="true"
+      className={cn(
+        'relative flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-200',
+        aqui ? 'bg-secondary' : 'bg-transparent',
+      )}
+    >
+      <Icon className="h-5 w-5" />
+      {aviso > 0 && <span className="absolute right-2 top-0.5 h-2 w-2 rounded-full bg-primary" />}
+    </span>
+    <span>
+      {label}
+      {aviso > 0 && <span className="sr-only">, {aviso} para decidir</span>}
+    </span>
+  </Link>
 )

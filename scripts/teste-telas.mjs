@@ -128,9 +128,9 @@ await passo('entrar', async () => {
 
 // 2. Propósito
 await passo('propósito', async () => {
-  await ir('/configuracoes')
-  await page.fill('#life-purpose', nomes.proposito)
-  await botao('Salvar propósito').click()
+  await ir('/mapa/proposito')
+  await page.fill('#proposito', nomes.proposito)
+  await botao('Salvar').click()
   await page.waitForTimeout(1200)
   await ir('/mapa')
   confere('propósito salvo aparece no Mapa', (await texto()).includes(nomes.proposito))
@@ -252,12 +252,12 @@ await passo('capturar pelo botão do topo', async () => {
   await dialogo().locator('textarea').fill(nomes.captura)
   await dialogo().getByRole('button', { name: 'Capturar', exact: true }).click()
   await esperaSumir()
-  await ir('/capturas')
+  await ir('/caixa')
   confere('captura do topo aparece em Capturas', (await texto('main')).includes(nomes.captura))
 })
 
 await passo('capturar na tela de Capturas', async () => {
-  await ir('/capturas')
+  await ir('/caixa')
   await page.locator('textarea').first().fill(nomes.captura2)
   await botao('Capturar Ideia').click()
   await page.waitForTimeout(1200)
@@ -294,7 +294,7 @@ const item = (nome) => page.getByRole('menuitem', { name: nome }).first()
 
 // 8. Processar capturas: uma vira avanço, a outra é descartada e depois volta
 await passo('processar captura em avanço', async () => {
-  await ir('/capturas')
+  await ir('/caixa')
   const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura }).first()
   await botao('Processar', linha).click()
   await item(/^Ação$/).click()
@@ -304,24 +304,24 @@ await passo('processar captura em avanço', async () => {
 })
 
 await passo('descartar captura', async () => {
-  await ir('/capturas')
+  await ir('/caixa')
   const linha = page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).first()
   await botao('Processar', linha).click()
   await item('Descartar').click()
   await page.waitForTimeout(1500)
-  await ir('/capturas')
+  await ir('/caixa')
   const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
   confere('captura descartada sai das pendentes', pendente === 0)
 })
 
 // 9. Atividade: o histórico mostra o que foi feito e desfaz o último passo
 await passo('atividade e desfazer', async () => {
-  await ir('/atividade')
+  await ir('/historico')
   const t = await texto('main')
   confere('Atividade registra o que foi feito', /captura/i.test(t), t.slice(0, 200))
   await botao('Desfazer', page.locator('main')).click()
   await page.waitForTimeout(1500)
-  await ir('/capturas')
+  await ir('/caixa')
   const pendente = await page.locator('div.rounded-xl').filter({ hasText: nomes.captura2 }).filter({ has: page.getByRole('button', { name: 'Processar' }) }).count()
   confere('Desfazer devolve a captura descartada', pendente === 1)
 })
@@ -369,13 +369,56 @@ await passo('material de referência e escada', async () => {
 
 // 10c. Método: guia do propósito
 await passo('guia do propósito', async () => {
-  await ir('/configuracoes')
+  await ir('/mapa/proposito')
   const guia = page.locator('[data-guia-proposito]')
   await guia.getByRole('button', { name: /Guia do propósito/ }).click()
   confere('guia do propósito traz as quatro perguntas', (await guia.locator('textarea').count()) === 5)
   await guia.locator('#guia-frase').fill(nomes.proposito)
   await botao('Usar esta frase', guia).click()
-  confere('a frase do guia vai para o campo do propósito', (await page.locator('#life-purpose').inputValue()) === nomes.proposito)
+  confere('a frase do guia vai para o campo do propósito', (await page.locator('#proposito').inputValue()) === nomes.proposito)
+})
+
+// 10d. Navegação: toda tela acende um destino do menu, a aba diz onde se está,
+// os endereços antigos levam ao lugar novo e a busca acha itens de qualquer tela.
+await passo('navegação: onde estou', async () => {
+  const aceso = async () =>
+    (await page.locator('nav[aria-label="Principal"] [aria-current="page"]').allInnerTexts())
+      .map((t) => t.replace(/[\d\s,]+para decidir/, '').trim().split('\n')[0])
+      .filter(Boolean)[0]
+  for (const [rota, destino, titulo] of [
+    ['/', 'Hoje', 'Hoje'],
+    ['/mapa', 'Mapa', 'Mapa'],
+    ['/resultados', 'Mapa', 'Resultados'],
+    ['/responsabilidades', 'Mapa', 'Responsabilidades'],
+    ['/avancos', 'Mapa', 'Avanços'],
+    ['/mapa/proposito', 'Mapa', 'Propósito'],
+    ['/caixa', 'Caixa', 'Caixa'],
+    ['/revisao', 'Revisão', 'Revisão'],
+  ]) {
+    await ir(rota)
+    confere(`${rota} acende ${destino} no menu`, String(await aceso()).startsWith(destino), String(await aceso()))
+    confere(`${rota} põe "${titulo}" na aba`, (await page.title()) === `${titulo} · Pegada`, await page.title())
+  }
+  await ir('/capturas')
+  confere('o endereço antigo /capturas leva à Caixa', new URL(page.url()).pathname === '/caixa', page.url())
+  await ir('/atividade')
+  confere('o endereço antigo /atividade leva ao Histórico', new URL(page.url()).pathname === '/historico', page.url())
+})
+
+await passo('busca global', async () => {
+  await ir('/')
+  await page.getByRole('button', { name: 'Buscar em tudo' }).first().click()
+  const busca = dialogo()
+  await busca.locator('input').fill(nomes.resultado)
+  const achado = busca.getByRole('group', { name: 'Resultados' }).getByRole('option').filter({ hasText: nomes.resultado }).first()
+  await achado.waitFor()
+  confere('a busca acha o resultado pelo nome, a partir de Hoje', true)
+  await achado.click()
+  await page.waitForURL(/\/resultados\?id=/)
+  confere('escolher na busca abre a ficha do resultado', true)
+  const trilha = page.locator('[data-trilha]')
+  await trilha.waitFor()
+  confere('a ficha mostra a trilha do fio, com o Mapa acima', (await trilha.innerText()).includes('Mapa') || (await trilha.locator('a').count()) > 0)
 })
 
 // 11. Avanços: editar e cancelar o avanço que veio da captura
@@ -536,7 +579,7 @@ if (process.env.PEGADA_TESTE_IA) {
   })
   await passo('IA em Capturas', async () => {
     const ideia = T('ver uns tênis de corrida qualquer dia')
-    await ir('/capturas')
+    await ir('/caixa')
     await page.locator('textarea').first().fill(ideia)
     await botao('Capturar Ideia').click()
     await page.waitForTimeout(1200)
@@ -607,7 +650,7 @@ if (process.env.PEGADA_TESTE_IA) {
 // 15. Nenhuma tela pode ficar mais larga que o aparelho
 await passo('largura das telas', async () => {
   const largas = []
-  for (const rota of ['/', '/avancos', '/capturas', '/resultados', '/responsabilidades', '/mapa', '/atividade', '/revisao', '/configuracoes']) {
+  for (const rota of ['/', '/avancos', '/caixa', '/resultados', '/responsabilidades', '/mapa', '/mapa/proposito', '/historico', '/revisao', '/configuracoes']) {
     await ir(rota)
     const [sw, cw] = await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.clientWidth])
     if (sw > cw + 1) largas.push(`${rota} (${sw} em ${cw})`)

@@ -84,7 +84,7 @@ export function LifePurposeBar() {
                 <DialogFooter className="gap-2">
                   <Button variant="outline" asChild className="min-h-11">
                     {/* Navegar fecha a leitura: nenhum overlay órfão. */}
-                    <Link to="/configuracoes" onClick={() => setOpen(false)}>
+                    <Link to="/mapa/proposito" onClick={() => setOpen(false)}>
                       Editar nas Configurações
                     </Link>
                   </Button>
@@ -96,7 +96,7 @@ export function LifePurposeBar() {
           // Propósito vazio confirmado: convite discreto, como link —
           // nunca diálogo automático nem onboarding obrigatório.
           <Link
-            to="/configuracoes"
+            to="/mapa/proposito"
             className="min-w-0 flex-1 truncate text-sm text-muted-foreground underline-offset-4 transition-colors duration-150 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           >
             Defina seu propósito

@@ -331,7 +331,7 @@ export const ResponsibilitiesPage: React.FC = () => {
             <Button asChild variant="outline" size="sm" className="mt-3 gap-1.5">
               <Link to="/responsabilidades">
                 <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
-                Voltar ao catálogo de responsabilidades
+                Voltar às responsabilidades
               </Link>
             </Button>
           </div>

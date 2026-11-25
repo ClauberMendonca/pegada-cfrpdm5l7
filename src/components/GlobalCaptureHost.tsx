@@ -286,7 +286,7 @@ export function GlobalCaptureHost() {
         </div>
         <p className="text-center text-[13px] text-muted-foreground">
           Capturar leva um toque. Nada é perdido, nada é decidido por você.{' '}
-          <Link to="/capturas" onClick={() => setAberto(false)} className="underline underline-offset-4">
+          <Link to="/caixa" onClick={() => setAberto(false)} className="underline underline-offset-4">
             Ver capturas
           </Link>
         </p>

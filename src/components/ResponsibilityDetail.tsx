@@ -9,6 +9,7 @@
  */
 import { Referencias } from '@/components/Referencias'
 import { Escada } from '@/components/Escada'
+import { Trilha } from '@/components/Trilha'
 import { Desdobrar } from '@/components/Desdobrar'
 import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useCallback, useEffect, useState } from 'react'
@@ -16,7 +17,6 @@ import { Link } from 'react-router-dom'
 import {
   Anchor,
   ArrowRight,
-  ArrowLeft,
   AlertCircle,
   Archive,
   ArchiveRestore,
@@ -50,7 +50,8 @@ export interface ResponsibilityDetailProps {
   responsibility: Responsibility
   /** Contexto global atual (para o aviso fora do recorte). */
   globalContext: 'todos' | 'vida' | 'trabalho'
-  onBack: () => void
+  /** Mantido para quem chama; a volta agora é a trilha do fio. */
+  onBack?: () => void
   /** Registro alterado (editar/arquivar/reativar) — página recarrega catálogo. */
   onChanged: () => void
   /** Abre o modal de edição por cima da ficha (mesmo ID ao cancelar/salvar). */
@@ -60,7 +61,6 @@ export interface ResponsibilityDetailProps {
 export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
   responsibility,
   globalContext,
-  onBack,
   onChanged,
   onEdit,
 }) => {
@@ -140,19 +140,11 @@ export const ResponsibilityDetail: React.FC<ResponsibilityDetailProps> = ({
 
   return (
     <div className="space-y-8">
+      <Trilha degraus={[{ rotulo: 'Mapa', to: '/mapa' }]} atual={responsibility.title} />
       {/* Header da ficha */}
       <div className="flex flex-col gap-4 pb-2 border-b border-border">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onBack}
-              aria-label="Voltar ao catálogo de responsabilidades"
-              className="min-h-11 min-w-11 shrink-0"
-            >
-              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
-            </Button>
             <div className="min-w-0">
               <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <Anchor className="w-6 h-6 text-primary shrink-0" aria-hidden="true" />

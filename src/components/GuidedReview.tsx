@@ -543,7 +543,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                       </button>
                     ))}
                     <Link
-                      to="/configuracoes"
+                      to="/mapa/proposito"
                       onClick={sair}
                       className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
                     >
@@ -603,7 +603,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                             : `${resumo.capturas_pendentes} capturas esperando decisão.`}
                         </p>
                         <Button size="sm" asChild className="rounded-full">
-                          <Link to="/capturas" onClick={sair}>
+                          <Link to="/caixa" onClick={sair}>
                             Decidir capturas
                           </Link>
                         </Button>

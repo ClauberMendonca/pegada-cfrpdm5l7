@@ -320,7 +320,7 @@ export const TodayPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente avanços "prontos" podem ser o próximo avanço único. Tente outro avanço ou reavalie este.',
+            'Só um avanço pronto pode ser o avanço principal. Escolha outro ou reavalie este.',
         })
         return
       }
@@ -359,7 +359,7 @@ export const TodayPage: React.FC = () => {
           title: 'Não é possível selecionar',
           description:
             check.label ||
-            'Somente avanços "prontos" podem ir para os Poucos Avanços de Hoje. Tente outro avanço ou reavalie este.',
+            'Só um avanço pronto pode entrar em Hoje. Escolha outro ou reavalie este.',
         })
         return
       }
@@ -416,7 +416,7 @@ export const TodayPage: React.FC = () => {
           </h1>
         </div>
         <Link
-          to={proposito ? '/mapa' : '/configuracoes'}
+          to={proposito ? '/mapa' : '/mapa/proposito'}
           className="flex min-h-11 items-center gap-2.5 text-sm leading-snug text-muted-foreground hover:text-foreground"
         >
           <PegadaSimbolo className="h-[18px] w-[18px] shrink-0 text-foreground" />
@@ -551,10 +551,10 @@ export const TodayPage: React.FC = () => {
             </div>
             <div>
               <h3 className="text-sm font-semibold uppercase tracking-wider text-pegada-info">
-                Prazos Fatuais de Hoje ({todayDeadlineActions.length})
+                Vence hoje ({todayDeadlineActions.length})
               </h3>
               <p className="text-xs text-muted-foreground">
-                Compromissos externos ou datas limite com vencimento hoje. Prazo não escolhe foco.
+                O que tem prazo para hoje e ainda não foi escolhido.
               </p>
             </div>
           </div>
@@ -615,8 +615,7 @@ export const TodayPage: React.FC = () => {
                   Reavaliar ({reevaluateCount})
                 </span>
                 <p className="text-xs text-muted-foreground">
-                  Atrasadas, aguardando, bloqueadas, fora do foco por impedimento e resultados
-                  pausados ou sem avanço
+                  Prazos vencidos, esperas e resultados parados
                 </p>
               </div>
             </div>
@@ -641,7 +640,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-destructive uppercase tracking-wider">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Avanços com Prazo Passado ({overdueActions.length})</span>
+                  <span>Prazo vencido ({overdueActions.length})</span>
                 </div>
                 <div className="grid gap-2">
                   {overdueActions.map((action) => (
@@ -691,7 +690,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-pegada-warning uppercase tracking-wider">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>Aguardando ou Bloqueados ({blockedOrWaitingActions.length})</span>
+                  <span>Esperando ({blockedOrWaitingActions.length})</span>
                 </div>
                 <div className="grid gap-2">
                   {blockedOrWaitingActions.map((action) => (
@@ -746,7 +745,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <CheckCircle className="w-3.5 h-3.5" />
-                  <span>Fora do Foco por Impedimento ({focusImpediments.length})</span>
+                  <span>Escolhidos que não podem ser feitos agora ({focusImpediments.length})</span>
                 </div>
                 <div className="grid gap-2">
                   {focusImpediments.map((action) => (
@@ -787,7 +786,7 @@ export const TodayPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <span>
-                    Resultados Pausados ou Sem Próximo Avanço ({reevaluateProjects.length})
+                    Resultados pausados ou sem avanço aberto ({reevaluateProjects.length})
                   </span>
                 </div>
                 <div className="grid gap-2">

@@ -350,9 +350,10 @@ export function MapPage() {
           O mapa é uma escada: perguntar “para quê?” sobe um degrau, e perguntar “como?” desce um.
         </Dica>
       </div>
-      <section
-        aria-label="Propósito"
-        className="mt-6 rounded-[20px] p-5"
+      <Link
+        to="/mapa/proposito"
+        aria-label={mapa.proposito ? `Propósito: ${mapa.proposito}. Abrir para editar` : 'Escrever o seu propósito'}
+        className="mt-6 block rounded-[20px] p-5 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         style={{ background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' }}
       >
         <p
@@ -364,14 +365,28 @@ export function MapPage() {
         {mapa.proposito ? (
           <p className="mt-2 text-[17px] font-semibold leading-snug">{mapa.proposito}</p>
         ) : (
-          <Link
-            to="/configuracoes"
-            className="mt-2 block text-[17px] font-semibold underline underline-offset-4"
-          >
+          <p className="mt-2 text-[17px] font-semibold underline underline-offset-4">
             Escreva o seu propósito
-          </Link>
+          </p>
         )}
-      </section>
+      </Link>
+
+      {/* Até o Mapa virar a lista única (fase 2), as listas completas ficam a um toque daqui. */}
+      <nav aria-label="Listas completas" className="mt-4 flex flex-wrap gap-2">
+        {[
+          ['/resultados', 'Resultados'],
+          ['/responsabilidades', 'Responsabilidades'],
+          ['/avancos', 'Avanços'],
+        ].map(([to, nome]) => (
+          <Link
+            key={to}
+            to={to}
+            className="flex h-11 items-center rounded-full border border-input bg-card px-3.5 text-sm font-medium text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {nome}
+          </Link>
+        ))}
+      </nav>
 
       {(mapa.avancos_sem_fio > 0 || mapa.resultados_sem_forma_minima.length > 0) && (
         <div className="mt-4 rounded-2xl border border-border bg-card p-4 text-sm text-foreground">

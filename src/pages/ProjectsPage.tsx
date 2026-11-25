@@ -260,7 +260,7 @@ export const ProjectsPage: React.FC = () => {
             <Button asChild variant="outline" size="sm" className="mt-3 gap-1.5">
               <Link to="/resultados">
                 <ArrowRight className="h-3.5 w-3.5 rotate-180" aria-hidden="true" />
-                Voltar ao catálogo de resultados
+                Voltar aos resultados
               </Link>
             </Button>
           </div>
@@ -467,22 +467,6 @@ export const ProjectsPage: React.FC = () => {
                     </span>
                   </h3>
                 </div>
-
-                {/* Aspiração preview */}
-                {project.aspiration && (
-                  <div className="text-xs text-muted-foreground flex items-start gap-1.5 line-clamp-2">
-                    <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-pegada-warning" />
-                    <span>{project.aspiration}</span>
-                  </div>
-                )}
-
-                {/* Entrega controlável preview */}
-                {project.controllable_delivery && (
-                  <div className="text-xs text-muted-foreground flex items-start gap-1.5 line-clamp-2">
-                    <Target className="w-3.5 h-3.5 shrink-0 mt-0.5 text-pegada-success" />
-                    <span>{project.controllable_delivery}</span>
-                  </div>
-                )}
               </div>
 
               <div className="pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">

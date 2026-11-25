@@ -65,7 +65,8 @@ export const StrategyModal: React.FC<StrategyModalProps> = ({
   // Inicializa só ao abrir ou ao trocar de grupo/Resultado (não a cada update do objeto).
   useEffect(() => {
     if (!open) return
-    setTitle(strategy?.title ?? '')
+    // O campo já começa a frase: a forma de escrever conduz ao conceito.
+    setTitle(strategy?.title ?? 'Por meio de ')
     setDescription(strategy?.description ?? '')
     setError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,7 +75,7 @@ export const StrategyModal: React.FC<StrategyModalProps> = ({
   const handleSave = async () => {
     if (busyRef.current) return
     const trimmed = title.trim()
-    if (!trimmed) {
+    if (!trimmed || trimmed.toLowerCase() === 'por meio de') {
       setError('Informe um título para a estratégia.')
       return
     }
@@ -134,8 +135,11 @@ export const StrategyModal: React.FC<StrategyModalProps> = ({
               onChange={(e) => setTitle(e.target.value)}
               className="min-h-11"
             />
-            <p className="text-right text-xs text-muted-foreground">
-              {title.length}/{TITLE_MAX}
+            <p className="flex justify-between gap-2 text-xs text-muted-foreground">
+              <span>Uma aposta sobre o caminho. Pode ser trocada sem mudar o resultado.</span>
+              <span>
+                {title.length}/{TITLE_MAX}
+              </span>
             </p>
           </div>
 

@@ -34,15 +34,15 @@
     --input: 30 10.4% 49%;
     --ring: 30 21.1% 7.5%;
     --radius: 1.25rem;
-    --ginga-primary-hover: #b8461a;
-    --ginga-mint: #d2551e; /* só acento/símbolo, não texto pequeno sobre branco */
-    --ginga-warning: #79400b;
-    --ginga-warning-bg: #fff3e4;
-    --ginga-danger-bg: #fff0f2;
-    --ginga-info: #204f7f;
-    --ginga-info-bg: #eef5fc;
-    --ginga-shadow: none;
-    --ginga-font: 'Outfit', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --pegada-primary-hover: #b8461a;
+    --pegada-mint: #d2551e; /* só acento/símbolo, não texto pequeno sobre branco */
+    --pegada-warning: #79400b;
+    --pegada-warning-bg: #fff3e4;
+    --pegada-danger-bg: #fff0f2;
+    --pegada-info: #4a4138;
+    --pegada-info-bg: #ebe2d6;
+    --pegada-shadow: none;
+    --pegada-font: 'Outfit', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
     color-scheme: light;
 
     --sidebar-background: 32.7 100% 97.8%;
@@ -61,19 +61,19 @@
     --chart-5: 33 100% 50%;
 
     /* Pares semânticos Ginga: status e interações. */
-    --ginga-primary-pressed: #9e3b14;
-    --ginga-destructive-hover: #831b2c;
-    --ginga-destructive-pressed: #681521;
-    --ginga-mint-foreground: #17130f;
-    --ginga-success: #16634c;
-    --ginga-success-bg: #eaf6ef;
-    --ginga-info-hsl: 210.315789 59.748428% 31.176471%;
-    --ginga-info-bg-hsl: 210 70% 96.078431%;
-    --ginga-warning-hsl: 28.909091 83.333333% 25.882353%;
-    --ginga-warning-bg-hsl: 33.333333 100% 94.705882%;
-    --ginga-danger-bg-hsl: 352 100% 97.058824%;
-    --ginga-success-hsl: 162.077922 63.636364% 23.72549%;
-    --ginga-success-bg-hsl: 145 40% 94.117647%;
+    --pegada-primary-pressed: #9e3b14;
+    --pegada-destructive-hover: #831b2c;
+    --pegada-destructive-pressed: #681521;
+    --pegada-mint-foreground: #17130f;
+    --pegada-success: #17130f;
+    --pegada-success-bg: #ebe2d6;
+    --pegada-info-hsl: 30 13.8% 25.5%;
+    --pegada-info-bg-hsl: 34.3 34.4% 88%;
+    --pegada-warning-hsl: 28.909091 83.333333% 25.882353%;
+    --pegada-warning-bg-hsl: 33.333333 100% 94.705882%;
+    --pegada-danger-bg-hsl: 352 100% 97.058824%;
+    --pegada-success-hsl: 30 21.1% 7.5%;
+    --pegada-success-bg-hsl: 34.3 34.4% 88%;
   }
 
   .dark {
@@ -121,31 +121,31 @@
     --chart-5: 10 100% 50%;
 
     /* Pares semânticos Ginga: status e interações. */
-    --ginga-primary-hover: #b8461a;
-    --ginga-primary-pressed: #9e3b14;
-    --ginga-destructive-hover: #ffcbd2;
-    --ginga-destructive-pressed: #ffe0e5;
-    --ginga-mint: #d2551e;
-    --ginga-mint-foreground: #17130f;
-    --ginga-warning: #f6cd85;
-    --ginga-warning-bg: #40301c;
-    --ginga-danger-bg: #421f27;
-    --ginga-info: #add0ff;
-    --ginga-info-bg: #1c3048;
-    --ginga-success: #9bdfc1;
-    --ginga-success-bg: #203e32;
-    --ginga-info-hsl: 214.390244 100% 83.921569%;
-    --ginga-info-bg-hsl: 212.727273 44% 19.607843%;
-    --ginga-warning-hsl: 38.230088 86.259542% 74.313725%;
-    --ginga-warning-bg-hsl: 33.333333 39.130435% 18.039216%;
-    --ginga-danger-bg-hsl: 346.285714 36.082474% 19.019608%;
-    --ginga-success-hsl: 153.529412 51.515152% 74.117647%;
-    --ginga-success-bg-hsl: 156 31.914894% 18.431373%;
+    --pegada-primary-hover: #b8461a;
+    --pegada-primary-pressed: #9e3b14;
+    --pegada-destructive-hover: #ffcbd2;
+    --pegada-destructive-pressed: #ffe0e5;
+    --pegada-mint: #d2551e;
+    --pegada-mint-foreground: #17130f;
+    --pegada-warning: #f6cd85;
+    --pegada-warning-bg: #40301c;
+    --pegada-danger-bg: #421f27;
+    --pegada-info: #c9bfb2;
+    --pegada-info-bg: #2a241e;
+    --pegada-success: #f4eee6;
+    --pegada-success-bg: #2a241e;
+    --pegada-info-hsl: 33.9 17.5% 74.3%;
+    --pegada-info-bg-hsl: 30 16.7% 14.1%;
+    --pegada-warning-hsl: 38.230088 86.259542% 74.313725%;
+    --pegada-warning-bg-hsl: 33.333333 39.130435% 18.039216%;
+    --pegada-danger-bg-hsl: 346.285714 36.082474% 19.019608%;
+    --pegada-success-hsl: 34.3 38.9% 92.9%;
+    --pegada-success-bg-hsl: 30 16.7% 14.1%;
   }
 
   html,
   body {
-    font-family: var(--ginga-font);
+    font-family: var(--pegada-font);
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
   }

@@ -188,7 +188,7 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
         <DialogContent className="max-w-[min(680px,calc(100vw-16px))] rounded-[20px] bg-card text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-semibold text-foreground">
-              <Check className="h-5 w-5 text-ginga-success" aria-hidden="true" />
+              <Check className="h-5 w-5 text-pegada-success" aria-hidden="true" />
               Progresso registrado
             </DialogTitle>
             <DialogDescription className="text-sm text-muted-foreground">
@@ -276,13 +276,13 @@ export const ProgressLogModal: React.FC<ProgressLogModalProps> = ({
               <label
                 className={`flex cursor-pointer flex-col gap-1 rounded-xl border p-3 transition-colors duration-150 ${
                   logType === 'resultado_aconteceu'
-                    ? 'border-ginga-info bg-ginga-info-bg text-ginga-info ring-1 ring-ginga-info'
+                    ? 'border-pegada-info bg-pegada-info-bg text-pegada-info ring-1 ring-pegada-info'
                     : 'border-border bg-card text-muted-foreground hover:bg-muted'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-ginga-info" aria-hidden="true" />
+                    <Trophy className="h-4 w-4 text-pegada-info" aria-hidden="true" />
                     <span className="text-base font-semibold text-foreground">
                       Resultado aconteceu
                     </span>

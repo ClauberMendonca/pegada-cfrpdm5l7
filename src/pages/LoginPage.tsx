@@ -57,7 +57,7 @@ export const LoginPage: React.FC = () => {
               {error && (
                 <Alert
                   variant="destructive"
-                  className="bg-ginga-danger-bg border-destructive/30 text-destructive"
+                  className="bg-pegada-danger-bg border-destructive/30 text-destructive"
                 >
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>

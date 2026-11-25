@@ -256,7 +256,7 @@ export const ResponsibilitySelect: React.FC<ResponsibilitySelectProps> = ({
       {options.error && (
         <div
           role="alert"
-          className="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-ginga-danger-bg p-2 text-xs text-destructive"
+          className="flex items-start gap-1.5 rounded-md border border-destructive/30 bg-pegada-danger-bg p-2 text-xs text-destructive"
         >
           <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
           <span className="flex-1">{options.error}</span>
@@ -274,7 +274,7 @@ export const ResponsibilitySelect: React.FC<ResponsibilitySelectProps> = ({
       {/* Contexto incompatível NUNCA é apagado automaticamente: permanece
          identificado e o salvamento do vínculo incompatível é bloqueado. */}
       {contextMismatch && known?.status === 'ativa' && (
-        <p role="alert" className="text-xs font-medium text-ginga-warning">
+        <p role="alert" className="text-xs font-medium text-pegada-warning">
           A responsabilidade selecionada é de {contextLabel(known.context as EntityContext)}, mas o
           contexto aqui é {contextLabel(context)}. Escolha “Nenhuma” ou outra compatível antes de
           salvar.

@@ -27,6 +27,7 @@ function pegadaRota(e) {
 
   var VERSION = '0.1.0'
   var MAX_ACTIVE_RESULTS = 7
+  var REF_ELEMENTS = ['responsabilidade', 'resultado', 'estrategia', 'avanco']
   var SUGGESTED_ACTIVE_RESULTS = 5
   var KINDS = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia', 'espera']
   var KIND_LABEL = {
@@ -520,8 +521,38 @@ function pegadaRota(e) {
           if (pid) countBy[pid] = (countBy[pid] || 0) + 1
           else if (!openActions[i].getString('responsibility_id')) semFio++
         }
+        // Progresso de cada resultado e os avanços abertos de cada estratégia.
+        var doneActions = app.findRecordsByFilter(
+          'actions',
+          "user_id = {:u} && status = 'feita' && project_id != ''",
+          '',
+          0,
+          0,
+          { u: u },
+        )
+        var doneBy = {}
+        for (var d = 0; d < doneActions.length; d++) {
+          var dp = doneActions[d].getString('project_id')
+          doneBy[dp] = (doneBy[dp] || 0) + 1
+        }
+        var openByStrategy = {}
+        var openLoose = {}
+        for (var o = 0; o < openActions.length; o++) {
+          var item = {
+            id: openActions[o].id,
+            titulo: openActions[o].getString('title'),
+            tipo: openActions[o].getString('kind') || 'acao',
+          }
+          var sid = openActions[o].getString('strategy_id')
+          var opid = openActions[o].getString('project_id')
+          if (sid) (openByStrategy[sid] = openByStrategy[sid] || []).push(item)
+          else if (opid) (openLoose[opid] = openLoose[opid] || []).push(item)
+        }
         var resultsOut = results.map(function (r) {
           var v = resultView(r)
+          v.avancos_feitos = doneBy[r.id] || 0
+          v.avancos_total = (doneBy[r.id] || 0) + (countBy[r.id] || 0)
+          v.avancos_sem_estrategia = openLoose[r.id] || []
           v.estrategias = strategies
             .filter(function (s) {
               return s.getString('project_id') === r.id
@@ -531,6 +562,7 @@ function pegadaRota(e) {
                 id: s.id,
                 titulo: s.getString('title'),
                 sinal_de_teste: s.getString('test_signal'),
+                avancos: openByStrategy[s.id] || [],
               }
             })
           v.avancos_abertos = countBy[r.id] || 0
@@ -640,8 +672,46 @@ function pegadaRota(e) {
           { u: u },
         )
         var total = done.length || 1
+        // Um retrato de cada resultado ativo, para a revisão olhar um por vez:
+        // quanto já andou, o que andou no período e há quanto tempo está parado.
+        var hoje = new Date()
+        var ativos = actives.map(function (r) {
+          var acts = app.findRecordsByFilter(
+            'actions',
+            "user_id = {:u} && project_id = {:p} && status != 'cancelada'",
+            '',
+            0,
+            0,
+            { u: u, p: r.id },
+          )
+          var feitos = 0
+          var ultimo = ''
+          for (var j = 0; j < acts.length; j++) {
+            if (acts[j].getString('status') !== 'feita') continue
+            feitos++
+            var c = String(acts[j].get('completed_at') || '')
+            if (c > ultimo) ultimo = c
+          }
+          var v = resultView(r)
+          v.avancos_total = acts.length
+          v.avancos_feitos = feitos
+          v.feitos_no_periodo = porResultado[r.id] ? porResultado[r.id].concluidos.length : 0
+          v.dias_parado = ultimo
+            ? Math.max(0, Math.floor((hoje.getTime() - new Date(ultimo.replace(' ', 'T')).getTime()) / 86400000))
+            : null
+          v.estrategias = strategies
+            .filter(function (s) {
+              return s.getString('project_id') === r.id
+            })
+            .map(function (s) {
+              return { id: s.id, titulo: s.getString('title') }
+            })
+          return v
+        })
         return {
           periodo_dias: dias,
+          proposito: purpose,
+          resultados_ativos: ativos,
           concluidos: done.length,
           espelho: Object.keys(porResultado).map(function (k) {
             return porResultado[k]
@@ -1171,7 +1241,124 @@ function pegadaRota(e) {
           )
         }
         ctx.update(a, { status: 'feita', trail: trail || undefined, is_next_step: false })
+        // A conclusão de um Estudo ou de uma Reflexão vira uma nota presa ao
+        // resultado: o que a pessoa aprendeu ou decidiu não se perde.
+        var projId = a.getString('project_id')
+        if ((kind === 'estudo' || kind === 'reflexao') && trail && projId) {
+          try {
+            ctx.create('references', {
+              element_type: 'resultado',
+              element_id: projId,
+              kind: 'nota',
+              title: (kind === 'estudo' ? 'Conclusão do estudo: ' : 'Decisão da reflexão: ') + a.getString('title'),
+              body: trail,
+              source_action_id: a.id,
+              status: 'ativa',
+            })
+          } catch (_) {
+            // Sem a coleção (servidor ainda não migrado), a conclusão segue valendo.
+          }
+        }
         return { resumo: 'Concluiu ' + KIND_LABEL[kind] + ' ' + label(a), avanco_id: a.id }
+      },
+    },
+
+    // ======================= MATERIAL DE REFERÊNCIA =======================
+    listar_referencias: {
+      scope: 'ler',
+      write: false,
+      title: 'Listar material de referência',
+      description:
+        'Lista os anexos leves (notas, links, contatos, documentos) de um elemento. O Pegada não tem arquivo geral: o material aparece só onde é usado.',
+      schema: {
+        type: 'object',
+        required: ['elemento_tipo', 'elemento_id'],
+        properties: {
+          elemento_tipo: { type: 'string', enum: REF_ELEMENTS },
+          elemento_id: S_ID,
+        },
+      },
+      run: function (ctx, input) {
+        var recs = ctx.app.findRecordsByFilter(
+          'references',
+          "user_id = {:u} && element_type = {:t} && element_id = {:e} && status = 'ativa'",
+          '-created',
+          200,
+          0,
+          { u: ctx.userId, t: str(input.elemento_tipo), e: str(input.elemento_id) },
+        )
+        return {
+          referencias: recs.map(function (r) {
+            return {
+              id: r.id,
+              tipo: r.getString('kind'),
+              titulo: r.getString('title'),
+              texto: r.getString('body'),
+              endereco: r.getString('url'),
+              do_avanco_id: r.getString('source_action_id') || null,
+              criada_em: r.getString('created'),
+            }
+          }),
+        }
+      },
+    },
+    anexar_referencia: {
+      scope: 'avancos',
+      write: true,
+      title: 'Anexar material de referência',
+      description:
+        'Prende uma nota, um link, um contato ou um documento (pelo endereço) a uma responsabilidade, um resultado, uma estratégia ou um avanço.',
+      schema: {
+        type: 'object',
+        required: ['elemento_tipo', 'elemento_id', 'tipo'],
+        properties: {
+          elemento_tipo: { type: 'string', enum: REF_ELEMENTS },
+          elemento_id: S_ID,
+          tipo: { type: 'string', enum: ['nota', 'link', 'contato', 'documento'] },
+          titulo: { type: 'string', maxLength: 300 },
+          texto: { type: 'string', maxLength: 5000 },
+          endereco: { type: 'string', maxLength: 2000 },
+        },
+      },
+      run: function (ctx, input) {
+        var et = str(input.elemento_tipo)
+        var col = { responsabilidade: 'responsibilities', resultado: 'projects', estrategia: 'strategies', avanco: 'actions' }[et]
+        if (!col) throw rule('ELEMENTO_INVALIDO', 'elemento_tipo deve ser responsabilidade, resultado, estrategia ou avanco.')
+        var kind = str(input.tipo)
+        if (['nota', 'link', 'contato', 'documento'].indexOf(kind) < 0)
+          throw rule('TIPO_INVALIDO', 'tipo deve ser nota, link, contato ou documento.')
+        var el
+        if (et === 'estrategia') {
+          el = ctx.app.findRecordById('strategies', str(input.elemento_id))
+          findOwned(ctx.app, 'projects', el.getString('project_id'), ctx.userId, 'Resultado')
+        } else el = findOwned(ctx.app, col, str(input.elemento_id), ctx.userId, 'Elemento')
+        var url = str(input.endereco)
+        if (url && !/^(https?:\/\/|mailto:|tel:)/i.test(url)) url = 'https://' + url
+        var title = str(input.titulo)
+        var body = str(input.texto)
+        if (!title && !body && !url) throw rule('REFERENCIA_VAZIA', 'Escreva a nota ou informe o endereço.')
+        var r = ctx.create('references', {
+          element_type: et,
+          element_id: el.id,
+          kind: kind,
+          title: title || undefined,
+          body: body || undefined,
+          url: url || undefined,
+          status: 'ativa',
+        })
+        return { resumo: 'Anexou ' + kind + ' a ' + et, referencia_id: r.id }
+      },
+    },
+    remover_referencia: {
+      scope: 'avancos',
+      write: true,
+      title: 'Remover material de referência',
+      description: 'Tira um anexo do elemento. Dá para desfazer.',
+      schema: { type: 'object', required: ['referencia_id'], properties: { referencia_id: S_ID } },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'references', str(input.referencia_id), ctx.userId, 'Referência')
+        ctx.update(r, { status: 'removida' })
+        return { resumo: 'Removeu um anexo', referencia_id: r.id }
       },
     },
 
@@ -2367,8 +2554,20 @@ function pegadaRota(e) {
         'Proponha uma frase de propósito no formato "Eu existo para [verbo] [quem ou o quê], para que [mudança]." Responda JSON {"texto": "...", "por_que": "uma frase"}.',
       captura:
         'Classifique a captura: destino entre avanco, resultado, responsabilidade, estrategia; se avanco, o tipo. Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
+      // Desdobrar: descer um degrau da escada, sempre como sugestões selecionáveis.
+      desdobrar_papel:
+        'A pessoa descreve um PAPEL que vive (pai, sócia, líder). Traduza em 3 a 5 RESPONSABILIDADES: compromissos contínuos, com padrão a manter e sem linha de chegada, escritos como "Cuidar de…" ou "Zelar por…". Para cada uma, o contexto: vida ou trabalho. Responda JSON {"sugestoes": [{"titulo": "...", "contexto": "vida ou trabalho", "por_que": "uma frase"}]}.',
+      desdobrar_responsabilidade:
+        'A pessoa informa uma RESPONSABILIDADE. Proponha 2 a 4 RESULTADOS que nascem dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
+      desdobrar_resultado:
+        'A pessoa informa um RESULTADO. Proponha 2 a 3 ESTRATÉGIAS: apostas diferentes sobre o caminho, escritas como "Por meio de…", que podem ser trocadas sem mudar o resultado. Responda JSON {"sugestoes": [{"titulo": "...", "por_que": "uma frase"}]}.',
+      desdobrar_estrategia:
+        'A pessoa informa uma ESTRATÉGIA e o resultado a que ela serve. Proponha 3 a 5 AVANÇOS concretos: título curto começando por verbo e o tipo entre acao, compromisso, estudo, reflexao, ideia, espera. Responda JSON {"sugestoes": [{"titulo": "...", "tipo": "...", "por_que": "uma frase"}]}.',
+      // Correção gentil: confere se o texto é mesmo um resultado.
+      conferir_resultado:
+        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, responsabilidade (padrão a manter, sem linha de chegada), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
     }[tipo]
-    if (!guide) throw new BadRequestError('tipo deve ser resultado, avanco, proposito ou captura.')
+    if (!guide) throw new BadRequestError('tipo de sugestão desconhecido.')
     var baseUrl = ($os.getenv('PEGADA_IA_URL') || 'https://api.anthropic.com').replace(/\/$/, '')
     var modelo = $os.getenv('PEGADA_IA_MODELO') || 'claude-sonnet-5-5'
     var res = null
@@ -2413,11 +2612,12 @@ function pegadaRota(e) {
     }
     var sugestao = null
     try {
-      sugestao = JSON.parse(
-        String(content)
-          .replace(/^```(json)?|```$/g, '')
-          .trim(),
-      )
+      // Só o trecho entre a primeira "{" e a última "}": a IA às vezes
+      // escreve uma frase ou uma cerca de código em volta do JSON.
+      var bruto = String(content)
+      var ini = bruto.indexOf('{')
+      var fim = bruto.lastIndexOf('}')
+      sugestao = JSON.parse(ini >= 0 && fim > ini ? bruto.slice(ini, fim + 1) : bruto.trim())
     } catch (_) {
       sugestao = null
     }

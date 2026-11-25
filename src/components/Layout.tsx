@@ -1,4 +1,6 @@
-import React from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { op } from '@/lib/pegada/api'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   SunMedium,
@@ -22,7 +24,6 @@ import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
 import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
-import { LifePurposeBar } from '@/components/LifePurposeBar'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
 import {
@@ -155,6 +156,48 @@ function ContaMenu({ comNome }: { comNome?: boolean }) {
   )
 }
 
+// Computador: Capturas no menu, com o número do que falta decidir.
+function CapturasLink() {
+  const [pendentes, setPendentes] = useState(0)
+  const carregar = useCallback(async () => {
+    try {
+      const res = await op<{ capturas_pendentes: number }>('ver_fio_de_hoje', {})
+      setPendentes(res.resultado?.capturas_pendentes ?? 0)
+    } catch {
+      setPendentes(0)
+    }
+  }, [])
+  useEffect(() => {
+    void carregar()
+  }, [carregar])
+  usePegadaMudou(carregar)
+  return (
+    <NavLink
+      to="/capturas"
+      className={({ isActive }) =>
+        cn(
+          'mt-1 flex min-h-11 items-center gap-3 rounded-xl px-3 text-base font-medium transition-colors duration-200',
+          FOCO,
+          isActive
+            ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+            : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+        )
+      }
+    >
+      <Inbox className="h-5 w-5" aria-hidden="true" />
+      <span>Capturas</span>
+      {pendentes > 0 && (
+        <span
+          aria-label={`${pendentes} para decidir`}
+          className="ml-auto rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground"
+        >
+          {pendentes}
+        </span>
+      )}
+    </NavLink>
+  )
+}
+
 export default function Layout() {
   const { running, error } = useTimer()
 
@@ -171,7 +214,7 @@ export default function Layout() {
           type="button"
           onClick={abrirCaptura}
           className={cn(
-            'mt-6 flex min-h-12 items-center justify-between gap-2 rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)]',
+            'mt-6 flex min-h-12 items-center justify-between gap-2 rounded-full bg-primary px-5 text-base font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--pegada-primary-hover)]',
             FOCO,
           )}
         >
@@ -209,6 +252,8 @@ export default function Layout() {
           })}
         </nav>
 
+        <CapturasLink />
+
         <div className="mt-auto border-t border-border pt-4">
           <ContaMenu comNome />
         </div>
@@ -231,7 +276,6 @@ export default function Layout() {
           <div className="hidden items-center justify-end px-10 pt-4 lg:flex">
             <ContextoChip />
           </div>
-          <LifePurposeBar />
         </div>
 
         <main
@@ -262,7 +306,7 @@ export default function Layout() {
               onClick={abrirCaptura}
               aria-label="Capturar"
               className={cn(
-                '-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)]',
+                '-mt-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground ring-4 ring-card transition-colors duration-200 hover:bg-[var(--pegada-primary-hover)]',
                 FOCO,
               )}
             >

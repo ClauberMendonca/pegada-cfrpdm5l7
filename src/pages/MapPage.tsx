@@ -1,3 +1,4 @@
+import { Dica } from '@/components/Dica'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, ChevronRight, Loader2 } from 'lucide-react'
@@ -10,10 +11,16 @@ import { cn } from '@/lib/utils'
 // e de cada Responsabilidade aos seus Resultados e Estratégias.
 // Fonte única: a operação ver_mapa (o MCP lê o mesmo).
 
+interface MapaAvanco {
+  id: string
+  titulo: string
+  tipo: string
+}
 interface MapaEstrategia {
   id: string
   titulo: string
   sinal_de_teste: string
+  avancos?: MapaAvanco[]
 }
 interface MapaResultado {
   id: string
@@ -26,6 +33,9 @@ interface MapaResultado {
   responsabilidade_id: string | null
   estrategias: MapaEstrategia[]
   avancos_abertos: number
+  avancos_total?: number
+  avancos_feitos?: number
+  avancos_sem_estrategia?: MapaAvanco[]
 }
 interface MapaResponsabilidade {
   id: string
@@ -103,10 +113,135 @@ function ResultadoItem({ r, semForma }: { r: MapaResultado; semForma: boolean })
   )
 }
 
+function ListaDeAvancos({ itens }: { itens: MapaAvanco[] }) {
+  return (
+    <ul className="flex flex-col gap-2 border-t border-border pt-2.5">
+      {itens.map((a) => (
+        <li key={a.id}>
+          <Link
+            to={`/avancos?id=${encodeURIComponent(a.id)}`}
+            className="flex min-h-7 items-center gap-2.5 text-[15px] text-foreground"
+          >
+            <span
+              aria-hidden="true"
+              className="h-2.5 w-2.5 shrink-0 rounded-full border-2 border-muted-foreground"
+            />
+            <span className="min-w-0 break-words">{a.titulo}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Um resultado na trilha do Construir: prazo, título, progresso e, aberto,
+// as estratégias com os avanços de cada uma.
+function ResultadoNo({
+  r,
+  aberto,
+  onAlternar,
+  semForma,
+}: {
+  r: MapaResultado
+  aberto: boolean
+  onAlternar: () => void
+  semForma: boolean
+}) {
+  const prazo = formatarPrazo(r.prazo)
+  const ativo = r.status === 'ativo'
+  const total = r.avancos_total ?? 0
+  const feitos = r.avancos_feitos ?? 0
+  const soltos = r.avancos_sem_estrategia ?? []
+  return (
+    <li
+      className={cn(
+        'relative flex flex-col gap-3 border-l-2 py-3.5 pl-[18px]',
+        ativo ? 'border-primary' : 'border-input',
+      )}
+      data-resultado={r.id}
+    >
+      <span
+        aria-hidden="true"
+        className={cn(
+          'absolute -left-2 top-6 h-3.5 w-3.5 rounded-full',
+          ativo ? 'bg-primary' : 'border-2 border-muted-foreground bg-background',
+        )}
+      />
+      <div className="flex flex-col gap-1">
+        <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+          Resultado
+          {!ativo && ` · ${(STATUS_LABEL[r.status] ?? r.status).toLowerCase()}`}
+          {prazo && ` · até ${prazo}`}
+        </p>
+        <Link
+          to={`/resultados?id=${r.id}`}
+          className="break-words text-[19px] font-semibold leading-tight text-foreground"
+        >
+          {r.titulo}
+        </Link>
+        {semForma && (
+          <p className="text-[13px] font-medium text-destructive">Sem prazo: toque no título para completar.</p>
+        )}
+      </div>
+      <div className="flex items-center gap-2.5">
+        <div
+          role="img"
+          aria-label={`${feitos} de ${total} avanços concluídos`}
+          className="h-2 flex-1 overflow-hidden rounded-full bg-muted-foreground/25"
+        >
+          <div
+            className="h-2 rounded-full bg-foreground"
+            style={{ width: `${total ? Math.round((feitos * 100) / total) : 0}%` }}
+          />
+        </div>
+        <p className="text-[13px] text-muted-foreground">
+          {feitos} de {total} {total === 1 ? 'avanço' : 'avanços'}
+        </p>
+      </div>
+      {aberto ? (
+        <>
+          {r.estrategias.map((s) => (
+            <div key={s.id} className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
+              <div className="flex flex-col gap-0.5">
+                <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                  Estratégia · aposta em teste
+                </p>
+                <p className="break-words text-base font-medium leading-snug text-foreground">{s.titulo}</p>
+              </div>
+              {(s.avancos ?? []).length > 0 && <ListaDeAvancos itens={s.avancos ?? []} />}
+            </div>
+          ))}
+          {soltos.length > 0 && (
+            <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
+              <p className="text-xs uppercase tracking-[0.08em] text-muted-foreground">
+                Avanços sem estratégia
+              </p>
+              <ListaDeAvancos itens={soltos} />
+            </div>
+          )}
+          {r.estrategias.length === 0 && soltos.length === 0 && (
+            <p className="text-sm text-muted-foreground">Ainda sem estratégia nem avanços abertos.</p>
+          )}
+        </>
+      ) : null}
+      <button
+        type="button"
+        aria-expanded={aberto}
+        onClick={onAlternar}
+        className="h-11 self-start rounded-full border border-muted-foreground px-3.5 text-sm font-medium text-foreground"
+      >
+        {aberto ? 'Recolher' : 'Ver estratégia e avanços'}
+      </button>
+    </li>
+  )
+}
+
 export function MapPage() {
   const { contextFilter } = useGlobalFilter()
   const [mapa, setMapa] = useState<Mapa | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [modo, setModo] = useState<'construir' | 'sustentar'>('construir')
+  const [abertos, setAbertos] = useState<Record<string, boolean>>({})
 
   const carregar = useCallback(async () => {
     try {
@@ -148,6 +283,14 @@ export function MapPage() {
     return out
   }, [mapa, contextFilter])
 
+  // Construir: os resultados em trilha, ativos primeiro.
+  const trilha = useMemo(() => {
+    if (!mapa) return []
+    return mapa.resultados
+      .filter((r) => contextFilter === 'todos' || r.contexto === contextFilter)
+      .sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9))
+  }, [mapa, contextFilter])
+
   const semForma = useMemo(
     () => new Set((mapa?.resultados_sem_forma_minima ?? []).map((r) => r.id)),
     [mapa],
@@ -175,14 +318,38 @@ export function MapPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
-        Mapa
-      </h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
+          Mapa
+        </h1>
+        <div className="flex rounded-full bg-secondary p-1" role="group" aria-label="Visão do mapa">
+          {(['construir', 'sustentar'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={modo === m}
+              onClick={() => setModo(m)}
+              className={cn(
+                'h-9 rounded-full px-3.5 text-sm font-medium capitalize',
+                modo === m ? 'bg-foreground text-background' : 'text-foreground',
+              )}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
       <p className="mt-1 text-[15px] text-muted-foreground">
-        Do seu porquê até cada resultado. {ativos} de {mapa.limite_resultados_ativos} resultados
-        ativos.
+        {modo === 'construir'
+          ? `Do seu porquê até cada resultado. ${ativos} de ${mapa.limite_resultados_ativos} resultados ativos.`
+          : 'O que você escolheu sustentar, e os resultados de cada responsabilidade.'}
       </p>
 
+      <div className="mt-4">
+        <Dica id="mapa-escada">
+          O mapa é uma escada: perguntar “para quê?” sobe um degrau, e perguntar “como?” desce um.
+        </Dica>
+      </div>
       <section
         aria-label="Propósito"
         className="mt-6 rounded-[20px] p-5"
@@ -227,7 +394,34 @@ export function MapPage() {
         </div>
       )}
 
-      <div className="relative mt-6 space-y-6 border-l-2 border-[var(--pegada-line)] pl-5">
+      {modo === 'construir' && (
+        <ul className="mt-4 flex flex-col pl-3.5">
+          {trilha.length === 0 && (
+            <li className="text-[15px] text-muted-foreground">
+              Nenhum resultado neste contexto.{' '}
+              <Link to="/resultados" className="text-foreground underline underline-offset-4">
+                Criar um resultado
+              </Link>
+            </li>
+          )}
+          {trilha.map((r, i) => (
+            <ResultadoNo
+              key={r.id}
+              r={r}
+              semForma={semForma.has(r.id)}
+              aberto={abertos[r.id] ?? i === 0}
+              onAlternar={() => setAbertos((v) => ({ ...v, [r.id]: !(v[r.id] ?? i === 0) }))}
+            />
+          ))}
+        </ul>
+      )}
+
+      <div
+        className={cn(
+          'relative mt-6 space-y-6 border-l-2 border-[var(--pegada-line)] pl-5',
+          modo !== 'sustentar' && 'hidden',
+        )}
+      >
         {grupos.length === 0 && (
           <p className="text-[15px] text-muted-foreground">
             Nenhuma responsabilidade neste contexto.{' '}

@@ -1,3 +1,4 @@
+import { Dica } from '@/components/Dica'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
@@ -387,7 +388,7 @@ export const CapturesPage: React.FC = () => {
             size="sm"
             variant="ghost"
             onClick={() => handleDiscard(item.id)}
-            className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
+            className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
             title="Descartar logicamente"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -416,17 +417,17 @@ export const CapturesPage: React.FC = () => {
     switch (st) {
       case 'pendente':
         return (
-          <Badge className="bg-ginga-warning-bg text-ginga-warning border-ginga-warning/30">
+          <Badge className="bg-pegada-warning-bg text-pegada-warning border-pegada-warning/30">
             Pendente
           </Badge>
         )
       case 'convertida_projeto':
         return (
-          <Badge className="bg-ginga-info-bg text-ginga-info border-ginga-info/30">Resultado</Badge>
+          <Badge className="bg-pegada-info-bg text-pegada-info border-pegada-info/30">Resultado</Badge>
         )
       case 'convertida_acao':
         return (
-          <Badge className="bg-ginga-success-bg text-ginga-success border-ginga-success/30">
+          <Badge className="bg-pegada-success-bg text-pegada-success border-pegada-success/30">
             Avanço
           </Badge>
         )
@@ -486,6 +487,9 @@ export const CapturesPage: React.FC = () => {
         </div>
       </div>
 
+      <Dica id="capturas">
+        Capture do jeito que pensa, sem classificar na hora. Depois você decide o que cada captura vira.
+      </Dica>
       {/* Input de Captura Rápida */}
       <Card className="bg-card border-border shadow-md">
         <CardContent className="pt-4 space-y-3">
@@ -516,7 +520,7 @@ export const CapturesPage: React.FC = () => {
             </p>
           )}
           {draftNotice && (
-            <p role="status" className="text-xs text-ginga-warning">
+            <p role="status" className="text-xs text-pegada-warning">
               {draftNotice}
             </p>
           )}
@@ -619,7 +623,7 @@ export const CapturesPage: React.FC = () => {
                         size="sm"
                         variant="ghost"
                         onClick={() => handleDiscard(item.id)}
-                        className="text-muted-foreground hover:text-destructive hover:bg-ginga-danger-bg text-xs"
+                        className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
                         title="Descartar logicamente"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

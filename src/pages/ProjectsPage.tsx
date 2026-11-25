@@ -215,9 +215,9 @@ export const ProjectsPage: React.FC = () => {
     return (
       <div className="space-y-4">
         {outOfScope && (
-          <div className="rounded-xl border border-ginga-warning/30 bg-ginga-warning-bg p-3 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-ginga-warning mt-0.5 shrink-0" />
-            <p className="text-xs text-ginga-warning">
+          <div className="rounded-xl border border-pegada-warning/30 bg-pegada-warning-bg p-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-pegada-warning mt-0.5 shrink-0" />
+            <p className="text-xs text-pegada-warning">
               Esta ficha é de {urlProject.context === 'trabalho' ? 'Trabalho' : 'Vida'} e está fora
               do recorte atual ({contextFilter === 'trabalho' ? 'Trabalho' : 'Vida'}).
             </p>
@@ -248,7 +248,7 @@ export const ProjectsPage: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-6 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-6 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">
@@ -301,19 +301,19 @@ export const ProjectsPage: React.FC = () => {
         )
       case 'ativo':
         return (
-          <Badge className="bg-ginga-success-bg text-ginga-success border-ginga-success/30">
+          <Badge className="bg-pegada-success-bg text-pegada-success border-pegada-success/30">
             Ativo
           </Badge>
         )
       case 'pausado':
         return (
-          <Badge className="bg-ginga-warning-bg text-ginga-warning border-ginga-warning/30">
+          <Badge className="bg-pegada-warning-bg text-pegada-warning border-pegada-warning/30">
             Pausado
           </Badge>
         )
       case 'concluido':
         return (
-          <Badge className="bg-ginga-info-bg text-ginga-info border-ginga-info/30">Concluído</Badge>
+          <Badge className="bg-pegada-info-bg text-pegada-info border-pegada-info/30">Concluído</Badge>
         )
       case 'arquivado':
         return (
@@ -439,8 +439,8 @@ export const ProjectsPage: React.FC = () => {
                     <span
                       className={`text-[11px] font-semibold uppercase px-2 py-0.5 rounded ${
                         project.context === 'trabalho'
-                          ? 'bg-ginga-info-bg text-ginga-info border border-ginga-info/30'
-                          : 'bg-ginga-warning-bg text-ginga-warning border border-ginga-warning/30'
+                          ? 'bg-pegada-info-bg text-pegada-info border border-pegada-info/30'
+                          : 'bg-pegada-warning-bg text-pegada-warning border border-pegada-warning/30'
                       }`}
                     >
                       {project.context}
@@ -471,7 +471,7 @@ export const ProjectsPage: React.FC = () => {
                 {/* Aspiração preview */}
                 {project.aspiration && (
                   <div className="text-xs text-muted-foreground flex items-start gap-1.5 line-clamp-2">
-                    <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ginga-warning" />
+                    <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-pegada-warning" />
                     <span>{project.aspiration}</span>
                   </div>
                 )}
@@ -479,7 +479,7 @@ export const ProjectsPage: React.FC = () => {
                 {/* Entrega controlável preview */}
                 {project.controllable_delivery && (
                   <div className="text-xs text-muted-foreground flex items-start gap-1.5 line-clamp-2">
-                    <Target className="w-3.5 h-3.5 shrink-0 mt-0.5 text-ginga-success" />
+                    <Target className="w-3.5 h-3.5 shrink-0 mt-0.5 text-pegada-success" />
                     <span>{project.controllable_delivery}</span>
                   </div>
                 )}

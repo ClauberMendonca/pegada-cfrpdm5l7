@@ -1,3 +1,5 @@
+import { Desdobrar } from '@/components/Desdobrar'
+import { op as pegadaOp } from '@/lib/pegada/api'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -63,7 +65,7 @@ function statusBadge(status: Responsibility['status']): React.ReactNode {
     )
   }
   return (
-    <Badge className="bg-ginga-success-bg text-ginga-success border-ginga-success/30">Ativa</Badge>
+    <Badge className="bg-pegada-success-bg text-pegada-success border-pegada-success/30">Ativa</Badge>
   )
 }
 
@@ -72,8 +74,8 @@ function contextBadge(context: Responsibility['context']): React.ReactNode {
     <span
       className={`text-[11px] font-semibold uppercase px-2 py-0.5 rounded ${
         context === 'trabalho'
-          ? 'bg-ginga-info-bg text-ginga-info border border-ginga-info/30'
-          : 'bg-ginga-warning-bg text-ginga-warning border border-ginga-warning/30'
+          ? 'bg-pegada-info-bg text-pegada-info border border-pegada-info/30'
+          : 'bg-pegada-warning-bg text-pegada-warning border border-pegada-warning/30'
       }`}
     >
       {context === 'trabalho' ? 'Trabalho' : 'Vida'}
@@ -279,9 +281,9 @@ export const ResponsibilitiesPage: React.FC = () => {
     return (
       <div className="space-y-4">
         {outOfScope && (
-          <div className="rounded-xl border border-ginga-warning/30 bg-ginga-warning-bg p-3 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-ginga-warning mt-0.5 shrink-0" />
-            <p className="text-xs text-ginga-warning">
+          <div className="rounded-xl border border-pegada-warning/30 bg-pegada-warning-bg p-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-pegada-warning mt-0.5 shrink-0" />
+            <p className="text-xs text-pegada-warning">
               Esta responsabilidade está fora do recorte atual do catálogo (contexto ou status), mas
               continua acessível aqui.
             </p>
@@ -317,7 +319,7 @@ export const ResponsibilitiesPage: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-6 flex items-start gap-3">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-6 flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
           <div className="flex-1">
             <p className="text-sm text-destructive font-medium">
@@ -382,6 +384,21 @@ export const ResponsibilitiesPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Papéis são a porta de entrada: a pessoa diz o papel, o Pegada sugere as responsabilidades. */}
+      <Desdobrar
+        nivel="papel"
+        rotulo="Partir de um papel que você vive"
+        pergunta="Que papel você vive? Conte do seu jeito."
+        exemplo="Sou pai de uma filha de 9 anos e outra de 16."
+        onCriar={async (s) => {
+          await pegadaOp('criar_responsabilidade', {
+            titulo: s.titulo,
+            contexto: s.contexto === 'trabalho' ? 'trabalho' : 'vida',
+          })
+        }}
+        onCriados={() => void loadResponsibilities()}
+      />
+
       {/* Recorte local de status (Ativas inicial) */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
         {STATUS_TABS.map((st) => (
@@ -418,7 +435,7 @@ export const ResponsibilitiesPage: React.FC = () => {
       {isLoading ? (
         <div className="p-8 text-center text-muted-foreground">Carregando responsabilidades...</div>
       ) : loadError ? (
-        <div className="rounded-xl border border-destructive/30 bg-ginga-danger-bg p-6 text-center">
+        <div className="rounded-xl border border-destructive/30 bg-pegada-danger-bg p-6 text-center">
           <AlertCircle className="w-8 h-8 text-destructive mx-auto mb-2" />
           <p className="text-sm text-destructive font-medium">
             Não foi possível carregar as responsabilidades.

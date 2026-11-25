@@ -6,7 +6,7 @@ name: dominio
 
 on:
   push:
-    branches: [main, migracao/fora-do-skip]
+    branches: [main]
     paths: [".github/workflows/dominio.yml", "scripts/fly-dominio.sh"]
   workflow_dispatch:
 

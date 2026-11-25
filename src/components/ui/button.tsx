@@ -11,9 +11,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'bg-primary text-primary-foreground hover:bg-[var(--ginga-primary-hover)] active:bg-[var(--ginga-primary-pressed)]',
+          'bg-primary text-primary-foreground hover:bg-[var(--pegada-primary-hover)] active:bg-[var(--pegada-primary-pressed)]',
         destructive:
-          'bg-destructive text-destructive-foreground hover:bg-[var(--ginga-destructive-hover)] active:bg-[var(--ginga-destructive-pressed)]',
+          'bg-destructive text-destructive-foreground hover:bg-[var(--pegada-destructive-hover)] active:bg-[var(--pegada-destructive-pressed)]',
         outline:
           'border border-input bg-card text-foreground hover:bg-accent hover:text-accent-foreground',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-accent active:bg-secondary',

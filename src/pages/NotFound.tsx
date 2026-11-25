@@ -16,7 +16,7 @@ const NotFound = () => {
         <p className="mb-4 text-lg text-muted-foreground">Página não encontrada</p>
         <a
           href="/"
-          className="font-medium text-primary underline underline-offset-4 hover:text-ginga-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          className="font-medium text-primary underline underline-offset-4 hover:text-pegada-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
           Voltar para Hoje
         </a>

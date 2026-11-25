@@ -43,12 +43,10 @@ export function useViewPreference(
   area: string,
   userId: string | undefined,
 ): [CollectionView, (v: CollectionView) => void] {
+  // O desenho do Pegada tem uma apresentação só por tela: o alternador
+  // Cards/Lista saiu, e a preferência antiga guardada no aparelho é ignorada.
   const [view, setView] = useState<CollectionView>('cards')
-
-  useEffect(() => {
-    if (!userId) return
-    setView(readStored(area, userId) ?? 'cards')
-  }, [area, userId])
+  void readStored
 
   const setPreference = useCallback(
     (value: CollectionView) => {
@@ -80,16 +78,6 @@ export function useSummaryPreference(
 ): [boolean, (v: boolean) => void] {
   const [show, setShow] = useState(false)
 
-  useEffect(() => {
-    if (!userId) return
-    const key = summaryKey(area, userId)
-    try {
-      setShow(window.localStorage.getItem(key) === '1')
-    } catch {
-      setShow(summaryMemory.get(key) === true)
-    }
-  }, [area, userId])
-
   const setShowPreference = useCallback(
     (value: boolean) => {
       setShow(value)
@@ -113,6 +101,12 @@ export function useSummaryPreference(
  * só em Lista; área de toque e foco visíveis consistentes com o seletor.
  */
 export const SummaryToggle: React.FC<{
+  checked: boolean
+  onChange: (v: boolean) => void
+  className?: string
+}> = () => null
+
+const SummaryToggleAntigo: React.FC<{
   checked: boolean
   onChange: (v: boolean) => void
   className?: string
@@ -183,6 +177,13 @@ export function projectSummaryLine(
 
 /** Seletor Cards/Lista com rótulos, aria-pressed, foco visível e toque adequado. */
 export const ViewToggle: React.FC<{
+  view: CollectionView
+  onChange: (v: CollectionView) => void
+  disabled?: boolean
+  className?: string
+}> = () => null
+
+const ViewToggleAntigo: React.FC<{
   view: CollectionView
   onChange: (v: CollectionView) => void
   disabled?: boolean
@@ -303,3 +304,7 @@ export const ListRow: React.FC<{
     {open && children && <div className="border-t border-border p-2">{children}</div>}
   </div>
 )
+
+// Mantidos fora de uso para referência do comportamento anterior.
+void SummaryToggleAntigo
+void ViewToggleAntigo

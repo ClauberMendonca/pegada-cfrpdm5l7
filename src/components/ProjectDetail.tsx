@@ -1,3 +1,5 @@
+import { Referencias } from '@/components/Referencias'
+import { Escada } from '@/components/Escada'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { TimeEntry } from '@/services/timeService'
 import { Project, ActionItem, ProgressLog, ActionStatus, ProjectStatus } from '@/types/execution'
@@ -406,7 +408,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               variant="outline"
               size="sm"
               onClick={() => handleUpdateProjectStatus('ativo')}
-              className="text-xs border-ginga-success/40 text-ginga-success hover:bg-ginga-success-bg"
+              className="text-xs border-pegada-success/40 text-pegada-success hover:bg-pegada-success-bg"
             >
               <PlayCircle className="w-3.5 h-3.5 mr-1" />
               Ativar
@@ -420,7 +422,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               onClick={() => handleUpdateProjectStatus('concluido')}
               className="text-xs"
             >
-              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-ginga-success" />
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-pegada-success" />
               Concluir resultado
             </Button>
           )}
@@ -444,8 +446,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
             <Badge
               className={`uppercase text-[10px] tracking-wider font-semibold ${
                 project.context === 'trabalho'
-                  ? 'bg-ginga-info-bg border border-ginga-info/30 text-ginga-info'
-                  : 'bg-ginga-warning-bg border border-ginga-warning/30 text-ginga-warning'
+                  ? 'bg-pegada-info-bg border border-pegada-info/30 text-pegada-info'
+                  : 'bg-pegada-warning-bg border border-pegada-warning/30 text-pegada-warning'
               }`}
             >
               {project.context}
@@ -470,6 +472,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           {/* 3C1 — Responsabilidade do Resultado confirmado: leitura autenticada
               por ID ( ResponsibilitySelect ), discreta e secundária ao título. */}
           <ResponsibilityReference id={project.responsibility_id || null} />
+          <Escada
+            paraQue={
+              project.responsibility_id
+                ? {
+                    to: `/responsabilidades?id=${encodeURIComponent(project.responsibility_id)}`,
+                    nome: 'a responsabilidade de onde este resultado nasce',
+                  }
+                : { to: '/mapa', nome: 'o seu propósito' }
+            }
+            como={{ ancora: 'como-chegar', nome: 'as estratégias e os avanços' }}
+          />
         </div>
 
         {/* Separação Pragmática: Aspiração vs Entrega Controlável */}
@@ -515,7 +528,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
 
           <div>
-            <span className="text-ginga-info font-semibold uppercase tracking-wider block mb-1 flex items-center gap-1">
+            <span className="text-pegada-info font-semibold uppercase tracking-wider block mb-1 flex items-center gap-1">
               <BookOpen className="w-3.5 h-3.5" />
               Possível Aprendizado ou Ativo Durável
             </span>
@@ -536,7 +549,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-ginga-success" />
+                <Compass className="w-4 h-4 text-pegada-success" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Ficha dos Oito Rs
                 </span>
@@ -717,25 +730,28 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
           {/* Aviso legível sobre o estado que impede (ou condiciona) o planejamento. */}
           {isProjectClosed ? (
-            <p role="note" className="text-xs text-ginga-warning">
+            <p role="note" className="text-xs text-pegada-warning">
               Resultado encerrado — não recebe novos avanços. Para planejar novamente, reabra o
               resultado pelo comando existente (Ativar / Editar Ficha) antes de criar avanços
               vinculados.
             </p>
           ) : isProjectPaused ? (
-            <p role="note" className="text-xs text-ginga-warning">
+            <p role="note" className="text-xs text-pegada-warning">
               Resultado pausado — você pode planejar avanços; execução e seleção de foco continuam
               sujeitas às regras existentes.
             </p>
           ) : null}
         </div>
 
+        <Referencias elemento="resultado" id={project.id} recarregar={actions} />
+        <div id="como-chegar" className="scroll-mt-20" />
         <StrategySection
           projectId={project.id}
           projectLabel={formatEntityTitle('project', project.sequence_number, project.title)}
           actions={actions}
           renderActions={renderActionBlocks}
           refreshTick={inlineStrategyTick}
+          onAvancosCriados={() => void loadData()}
         />
 
         {actions.length === 0 && (
@@ -790,14 +806,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <div className="mt-0.5 shrink-0">
                   {log.log_type === 'executei' ? (
                     <div
-                      className="p-1.5 rounded-md bg-ginga-success-bg text-ginga-success border border-ginga-success/20"
+                      className="p-1.5 rounded-md bg-pegada-success-bg text-pegada-success border border-pegada-success/20"
                       title="Executei (Controlável)"
                     >
                       <Flame className="w-3.5 h-3.5" />
                     </div>
                   ) : (
                     <div
-                      className="p-1.5 rounded-md bg-ginga-info-bg text-ginga-info border border-ginga-info/20"
+                      className="p-1.5 rounded-md bg-pegada-info-bg text-pegada-info border border-pegada-info/20"
                       title="Resultado Aconteceu (Ambiente)"
                     >
                       <Trophy className="w-3.5 h-3.5" />
@@ -810,8 +826,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     <span
                       className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${
                         log.log_type === 'executei'
-                          ? 'bg-ginga-success-bg text-ginga-success border border-ginga-success/30'
-                          : 'bg-ginga-info-bg text-ginga-info border border-ginga-info/30'
+                          ? 'bg-pegada-success-bg text-pegada-success border border-pegada-success/30'
+                          : 'bg-pegada-info-bg text-pegada-info border border-pegada-info/30'
                       }`}
                     >
                       {log.log_type === 'executei' ? 'Executei' : 'Resultado Aconteceu'}

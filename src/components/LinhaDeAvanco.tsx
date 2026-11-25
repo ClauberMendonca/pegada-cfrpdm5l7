@@ -11,9 +11,11 @@ interface Props {
   ocupado?: boolean
   /** Concluir, ou reabrir quando já está feito. */
   onAlternar: (action: ActionItem) => void
+  /** Em resultado compartilhado: o nome de quem está com o avanço, quando não é você. */
+  com?: string
 }
 
-export function LinhaDeAvanco({ action, ocupado, onAlternar }: Props) {
+export function LinhaDeAvanco({ action, ocupado, onAlternar, com }: Props) {
   const feito = action.status === 'feita'
   const cancelado = action.status === 'cancelada'
   const espera = action.status === 'aguardando' || action.status === 'bloqueada'
@@ -23,6 +25,7 @@ export function LinhaDeAvanco({ action, ocupado, onAlternar }: Props) {
     tipo !== 'acao' && ACTION_KIND_LABEL[tipo],
     cancelado && 'cancelado',
     espera && (action.waiting_for ? `esperando ${action.waiting_for}` : 'esperando'),
+    com && `com ${com}`,
   ]
     .filter(Boolean)
     .join(' · ')
@@ -30,8 +33,9 @@ export function LinhaDeAvanco({ action, ocupado, onAlternar }: Props) {
     <div className="flex items-center gap-1" data-avanco={action.id}>
       <button
         type="button"
-        disabled={ocupado || cancelado}
-        aria-label={`${feito ? 'Reabrir' : 'Concluir'}: ${action.title}`}
+        disabled={ocupado || cancelado || Boolean(com)}
+        aria-label={com ? `Com ${com}: ${action.title}` : `${feito ? 'Reabrir' : 'Concluir'}: ${action.title}`}
+        title={com ? `Está com ${com}` : undefined}
         onClick={() => onAlternar(action)}
         className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >

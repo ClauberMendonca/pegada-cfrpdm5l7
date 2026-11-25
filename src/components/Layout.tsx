@@ -28,6 +28,7 @@ import { AvisoIAHost } from '@/components/AvisoIAHost'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
 import { BuscaGlobal, abrirBusca } from '@/components/BuscaGlobal'
+import { Sino } from '@/components/juntos/Sino'
 import { Destino, digitandoEmCampo, lugarDe } from '@/lib/pegada/lugar'
 import {
   DropdownMenu,
@@ -323,6 +324,7 @@ export default function Layout() {
             </div>
             <div className="flex items-center gap-2">
               <BotaoBusca />
+              <Sino />
               <ContextoChip />
               <ContaMenu />
             </div>
@@ -331,6 +333,7 @@ export default function Layout() {
           <div className="hidden items-center justify-end gap-3 px-10 pt-4 lg:flex">
             <GlobalTimerIndicator />
             <BotaoBusca comTexto />
+            <Sino />
             <ContextoChip />
           </div>
         </div>

@@ -32,6 +32,9 @@ export interface MapaAvanco {
   principal?: boolean
   rotina?: boolean
   prazo?: string
+  /** Em resultado compartilhado: false quando o avanço está com outra pessoa. */
+  meu?: boolean
+  responsavel?: { id: string; nome: string } | null
 }
 interface MapaEstrategia {
   id: string
@@ -50,6 +53,9 @@ export interface MapaResultado {
   estrategias: MapaEstrategia[]
   avancos_abertos: number
   avancos_sem_estrategia?: MapaAvanco[]
+  meu?: boolean
+  compartilhado?: boolean
+  dono?: { id: string; nome: string } | null
 }
 interface MapaResponsabilidade {
   id: string
@@ -168,15 +174,21 @@ function Avancos({ itens, c }: { itens: MapaAvanco[]; c: Ctx }) {
       {itens.map((a) => {
         const espera = a.status === 'aguardando' || a.status === 'bloqueada'
         const prazo = formatarPrazo(a.prazo)
-        const detalhe = [a.rotina && 'rotina', espera && 'esperando', prazo && `até ${prazo}`]
+        const deOutro = a.meu === false
+        const detalhe = [
+          a.rotina && 'rotina',
+          espera && 'esperando',
+          prazo && `até ${prazo}`,
+          deOutro && `com ${(a.responsavel?.nome ?? 'outra pessoa').split(' ')[0]}`,
+        ]
           .filter(Boolean)
           .join(' · ')
         return (
           <li key={a.id} className="flex items-center gap-1" data-avanco={a.id}>
             <button
               type="button"
-              disabled={c.concluindo !== null}
-              aria-label={`Concluir: ${a.titulo}`}
+              disabled={c.concluindo !== null || deOutro}
+              aria-label={deOutro ? `Com outra pessoa: ${a.titulo}` : `Concluir: ${a.titulo}`}
               onClick={() => c.concluir(a)}
               className={cn('-ml-2 flex h-11 w-9 shrink-0 items-center justify-center rounded-full', FOCO)}
             >
@@ -191,7 +203,7 @@ function Avancos({ itens, c }: { itens: MapaAvanco[]; c: Ctx }) {
             <Titulo to={fichaDoAvanco(a.id)} detalhe={detalhe || undefined} c={c}>
               <span className="text-[15px] font-normal">{a.titulo}</span>
             </Titulo>
-            {!espera && (
+            {!espera && !deOutro && (
               <button
                 type="button"
                 aria-pressed={Boolean(a.hoje)}
@@ -228,6 +240,7 @@ function Resultado({ r, c }: { r: MapaResultado; c: Ctx }) {
     'Resultado',
     r.status === 'pausado' && 'pausado',
     prazo && `até ${prazo}`,
+    r.compartilhado && (r.meu === false ? `de ${(r.dono?.nome ?? 'outra pessoa').split(' ')[0]}` : 'compartilhado'),
   ]
     .filter(Boolean)
     .join(' · ')

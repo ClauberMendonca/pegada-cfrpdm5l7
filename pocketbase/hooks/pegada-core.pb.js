@@ -385,8 +385,13 @@ function pegadaRota(e) {
       } catch (_) {
         throw new NotFoundError('Estratégia não encontrado(a): ' + id)
       }
+      var doGrupo = safeFind(app, 'projects', raiz.getString('project_id'))
+      if (doGrupo && doGrupo.getString('user_id') !== userId && participa(doGrupo, userId))
+        throw rule('SO_QUEM_CRIOU', 'Só quem criou o resultado exclui uma estratégia dele. Você pode arquivar.')
       findOwned(app, 'projects', raiz.getString('project_id'), userId, 'Estratégia')
     } else raiz = findOwned(app, def[0], id, userId, def[1])
+    if (elemento === 'avanco' && raiz.getString('delegated_by') && raiz.getString('delegated_by') !== userId)
+      throw rule('AVANCO_PASSADO', 'Este avanço foi passado para você. Devolva em vez de excluir.')
 
     var projetos = []
     var estrategias = []
@@ -3152,6 +3157,41 @@ function pegadaRota(e) {
       )
       marcar(ctx, r.id)
       return { resumo: 'Devolveu o avanço ' + label(a) + ' para ' + nomeDe(ctx.app, para), avanco_id: a.id }
+    },
+  }
+
+  OPS.ver_avanco = {
+    scope: 'ler',
+    title: 'Ver um avanço',
+    description:
+      'Devolve um avanço com o seu fio. Em resultado compartilhado, diz com quem ele está, quem passou e para quem dá para passar.',
+    schema: { type: 'object', required: ['avanco_id'], properties: { avanco_id: S_ID } },
+    run: function (ctx, input) {
+      var app = ctx.app
+      var a = safeFind(app, 'actions', str(input.avanco_id))
+      var r = a ? safeFind(app, 'projects', a.getString('project_id')) : null
+      var meu = !!a && a.getString('user_id') === ctx.userId
+      if (!a || (!meu && !(r && participa(r, ctx.userId))))
+        throw new NotFoundError('Avanço não encontrado(a): ' + str(input.avanco_id))
+      var v = actionView(app, a, purposeOf(app, ctx.userId), {}, ctx.userId)
+      var junto = !!r && compartilhado(r) && participa(r, ctx.userId)
+      var aberto = a.getString('status') !== 'feita' && a.getString('status') !== 'cancelada'
+      v.meu = meu
+      v.responsavel = pessoaView(app, a.getString('user_id'))
+      v.compartilhado = junto
+      v.pode_passar =
+        junto &&
+        aberto &&
+        (meu || r.getString('user_id') === ctx.userId || a.getString('delegated_by') === ctx.userId)
+      v.pode_devolver = junto && aberto && meu && !!a.getString('delegated_by')
+      v.pessoas = junto
+        ? [r.getString('user_id')].concat(membrosDe(r)).map(function (id) {
+            var pv = pessoaView(app, id)
+            pv.eu = id === ctx.userId
+            return pv
+          })
+        : []
+      return v
     },
   }
 

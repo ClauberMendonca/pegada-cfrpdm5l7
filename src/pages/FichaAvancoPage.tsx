@@ -22,6 +22,9 @@ import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { actionService, notificarMudanca } from '@/services/actionService'
 import { timeService, type TimeEntry } from '@/services/timeService'
 import type { ActionItem, ActionStatus } from '@/types/execution'
+import { ComQuemEsta } from '@/components/juntos/ComQuemEsta'
+import { LinhaDeAvanco } from '@/components/LinhaDeAvanco'
+import { juntos, primeiroNome, type AvancoJunto } from '@/lib/pegada/juntos'
 
 export function FichaAvancoPage() {
   const { id } = useParams()
@@ -36,6 +39,8 @@ export function FichaAvancoPage() {
   const [anotando, setAnotando] = useState(false)
   const [tempos, setTempos] = useState<TimeEntry[]>([])
   const [temposErro, setTemposErro] = useState<string | null>(null)
+  // Em resultado compartilhado: com quem está, quem passou e o fio de quem vê.
+  const [junto, setJunto] = useState<AvancoJunto | null>(null)
 
   const carregar = useCallback(async () => {
     if (!id) return
@@ -43,6 +48,12 @@ export function FichaAvancoPage() {
       const a = await actionService.getById(id)
       setAvanco(a)
       setEstado('pronto')
+      if (a.project_id)
+        juntos
+          .avanco(id)
+          .then(setJunto)
+          .catch(() => setJunto(null))
+      else setJunto(null)
     } catch {
       setEstado((e) => (e === 'pronto' ? e : 'nao-achou'))
     }
@@ -101,7 +112,15 @@ export function FichaAvancoPage() {
     ? (resultado.expand?.responsibility_id ?? null)
     : (avanco.expand?.responsibility_id ?? null)
   const vontade = resultado?.expand?.wish_id ?? null
-  const fio = fioDoAvanco(avanco, user?.life_purpose)
+  const fioLocal = fioDoAvanco(avanco, user?.life_purpose)
+  // No resultado de outra pessoa, o porquê é o de quem vê: vem do servidor.
+  const emResultadoAlheio = Boolean(resultado && user && resultado.user_id !== user.id)
+  const fio =
+    emResultadoAlheio && junto && junto.id === avanco.id
+      ? { ...fioLocal, frase: junto.fio.frase, semFio: junto.fio.sem_fio }
+      : fioLocal
+  const meu = !user || avanco.user_id === user.id
+  const compartilhado = junto && junto.id === avanco.id && junto.compartilhado ? junto : null
 
   const degraus: Degrau[] = [
     { rotulo: 'Mapa', to: '/mapa' },
@@ -166,6 +185,28 @@ export function FichaAvancoPage() {
         semMoldura
       >
         <div data-avanco={avanco.id}>
+          {compartilhado && (
+            <ComQuemEsta
+              dados={compartilhado}
+              onMudou={() => {
+                void carregar()
+                notificarMudanca()
+              }}
+            />
+          )}
+          {!meu ? (
+            <div className="rounded-2xl border border-border bg-card px-4 py-2">
+              <LinhaDeAvanco
+                action={avanco}
+                com={compartilhado ? primeiroNome(compartilhado.responsavel.nome) : 'outra pessoa'}
+                onAlternar={() => {}}
+              />
+              {avanco.description && (
+                <p className="whitespace-pre-wrap px-2 pb-2 text-sm text-muted-foreground">{avanco.description}</p>
+              )}
+            </div>
+          ) : (
+          <>
           <ActionRow
             action={avanco}
             isNextAdvance={avanco.is_next_step}
@@ -220,6 +261,8 @@ export function FichaAvancoPage() {
             ocupado={gravando}
             onExcluido={() => navigate('/mapa')}
           />
+          </>
+          )}
         </div>
       </Ficha>
 

@@ -34,6 +34,9 @@ import { useTimer } from '@/contexts/TimeContext'
 import { formatDuration } from '@/lib/timeHelpers'
 import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
+import { useAuth } from '@/contexts/AuthContext'
+import { PessoasDoResultado } from '@/components/juntos/PessoasDoResultado'
+import { primeiroNome, type Participantes } from '@/lib/pegada/juntos'
 
 interface ProjectDetailProps {
   projectId: string
@@ -52,9 +55,25 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const timeTotals = useProjectTimeTotals(projectId)
   const { running } = useTimer()
   const [project, setProject] = useState<Project | null>(null)
-  const responsabilidadeRef = useResponsibilityReference(project?.responsibility_id || null)
+  const { user } = useAuth()
+  // Resultado compartilhado: quem participa e, para quem não criou, o SEU porquê.
+  const [gente, setGente] = useState<Participantes | null>(null)
+  const souDono = !project || !user || project.user_id === user.id
+  // De onde o resultado nasce é de cada um: o dono usa o que gravou no
+  // resultado; quem participa, o vínculo pessoal dele.
+  const origem = {
+    responsibility_id: souDono ? project?.responsibility_id || '' : gente?.meu_porque?.responsabilidade_id || '',
+    wish_id: souDono ? project?.wish_id || '' : gente?.meu_porque?.vontade_id || '',
+  }
+  const nomes = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const p of gente?.pessoas ?? []) m[p.id] = primeiroNome(p.nome)
+    return m
+  }, [gente])
+  const quemCriou = gente?.pessoas.find((p) => p.papel === 'criou')
+  const responsabilidadeRef = useResponsibilityReference(origem.responsibility_id || null)
   const [vontade, setVontade] = useState<{ id: string; title: string } | null>(null)
-  const vontadeId = project?.wish_id || ''
+  const vontadeId = origem.wish_id
   useEffect(() => {
     setVontade(null)
     if (!vontadeId) return
@@ -181,6 +200,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           <LinhaDeAvanco
             key={action.id}
             action={action}
+            com={user && action.user_id !== user.id ? (nomes[action.user_id] ?? 'outra pessoa') : undefined}
             ocupado={savingActionId !== null}
             onAlternar={(a) => void handleStatusChange(a.id, a.status === 'feita' ? 'pronta' : 'feita')}
           />
@@ -205,33 +225,33 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
       <Ficha
         degraus={[
           { rotulo: 'Mapa', to: '/mapa' },
-          ...(project.wish_id
-            ? [{ rotulo: vontade?.title ?? 'Vontade', to: fichaDaVontade(project.wish_id) }]
+          ...(origem.wish_id
+            ? [{ rotulo: vontade?.title ?? 'Vontade', to: fichaDaVontade(origem.wish_id) }]
             : []),
-          ...(project.responsibility_id
+          ...(origem.responsibility_id
             ? [
                 {
                   rotulo:
                     responsabilidadeRef.status === 'ready'
                       ? responsabilidadeRef.data.title
                       : 'Responsabilidade',
-                  to: fichaDaResponsabilidade(project.responsibility_id),
+                  to: fichaDaResponsabilidade(origem.responsibility_id),
                 },
               ]
             : []),
         ]}
         atual={project.title}
         paraQue={
-          project.wish_id ? (
+          origem.wish_id ? (
             <Link
-              to={fichaDaVontade(project.wish_id)}
+              to={fichaDaVontade(origem.wish_id)}
               className="font-medium underline-offset-4 hover:underline"
             >
               Para realizar {vontade ? `“${vontade.title}”` : 'uma vontade sua'}
             </Link>
-          ) : project.responsibility_id ? (
+          ) : origem.responsibility_id ? (
             <Link
-              to={fichaDaResponsabilidade(project.responsibility_id)}
+              to={fichaDaResponsabilidade(origem.responsibility_id)}
               className="font-medium underline-offset-4 hover:underline"
             >
               Para sustentar{' '}
@@ -239,6 +259,11 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 ? `“${responsabilidadeRef.data.title}”`
                 : 'uma responsabilidade sua'}
             </Link>
+          ) : !souDono ? (
+            <p>
+              Você busca este resultado com {quemCriou ? primeiroNome(quemCriou.nome) : 'outra pessoa'}. No botão
+              das pessoas, diga onde ele se encaixa no seu mapa.
+            </p>
           ) : (
             <p>Resultado livre: não nasce de uma vontade nem de uma responsabilidade. Também vale.</p>
           )
@@ -408,6 +433,14 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         )}
         <div className="mt-4 flex flex-wrap gap-2">
+          <PessoasDoResultado
+            resultadoId={project.id}
+            encerrado={isProjectClosed}
+            onMudou={setGente}
+            onSaiu={() => navigate('/mapa')}
+          />
+          {souDono && (
+          <>
           <Triade
             elemento="resultado"
             id={project.id}
@@ -434,6 +467,8 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
               Concluir resultado
             </button>
+          )}
+          </>
           )}
         </div>
         {/* O relógio do resultado, à vista: o tempo corre aqui, na própria ficha. */}

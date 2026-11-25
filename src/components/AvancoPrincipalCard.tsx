@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Loader2 } from 'lucide-react'
+import { Check, Loader2, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { op } from '@/lib/pegada/api'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { actionService, notificarMudanca } from '@/services/actionService'
+import { timeService } from '@/services/timeService'
+import { fioCurto } from '@/lib/pegada/fioCurto'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 
 // PEGADA — o Avanço principal do dia, com a frase do fio.
@@ -17,9 +19,15 @@ interface AvancoHoje {
   tipo: string
   tipo_nome: string
   contexto: string
-  fio: { frase: string; livre?: boolean }
+  fio: {
+    frase: string
+    sem_fio?: boolean
+    resultado?: { id: string; titulo: string } | null
+    responsabilidade?: { id: string; titulo: string } | null
+  }
 }
 interface FioDeHoje {
+  proposito?: string
   principal: AvancoHoje | null
   compromissos: AvancoHoje[]
   vencendo: AvancoHoje[]
@@ -29,9 +37,19 @@ interface FioDeHoje {
 }
 
 const INK = { background: 'var(--pegada-ink)', color: 'var(--pegada-on-ink)' } as const
+const ATALHO =
+  'flex min-h-[52px] min-w-[150px] flex-1 items-center gap-2.5 rounded-2xl bg-secondary px-3.5 py-2 text-left text-sm leading-tight text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 const MUTED = { color: 'var(--pegada-on-ink-muted)' } as const
 
-export function AvancoPrincipalCard() {
+interface Props {
+  /** Conteúdo entre o cartão e os atalhos (a lista "Também hoje"). */
+  children?: React.ReactNode
+  /** Quantos avanços e resultados pedem reavaliação; 0 esconde o atalho. */
+  reavaliar?: number
+  onReavaliar?: () => void
+}
+
+export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Props) {
   const { contextFilter } = useGlobalFilter()
   const [dados, setDados] = useState<FioDeHoje | null>(null)
   const [ocupado, setOcupado] = useState(false)
@@ -75,22 +93,29 @@ export function AvancoPrincipalCard() {
   return (
     <section aria-label="Avanço principal" className="space-y-3">
       <div className="rounded-[20px] p-5 sm:p-6" style={INK}>
-        <p className="text-xs uppercase tracking-[0.08em]" style={MUTED}>
-          Avanço principal{principal ? ` · ${principal.tipo_nome}` : ''}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.08em]" style={MUTED}>
+            Avanço principal
+          </p>
+          {principal && (
+            <p className="text-[13px]" style={MUTED}>
+              {principal.tipo_nome}
+            </p>
+          )}
+        </div>
 
         {principal ? (
           <>
             <h2 className="mt-2 text-2xl font-semibold leading-tight">{principal.titulo}</h2>
             <p className="mt-3 text-[15px] leading-relaxed" style={MUTED}>
-              {principal.fio?.frase || 'Avanço livre: ainda sem porquê.'}
+              {fioCurto(principal.fio, dados.proposito) || 'Avanço livre: ainda sem porquê.'}
             </p>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
+            <div className="mt-5 flex items-center gap-2.5">
               <button
                 type="button"
                 disabled={ocupado}
                 onClick={() => executar(() => actionService.updateStatus(principal.id, 'feita'))}
-                className="flex min-h-12 items-center gap-2 rounded-full bg-primary px-6 text-base font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
+                className="flex h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-primary px-6 text-[17px] font-semibold text-primary-foreground transition-colors duration-200 hover:bg-[var(--ginga-primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
               >
                 {ocupado ? (
                   <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
@@ -102,12 +127,29 @@ export function AvancoPrincipalCard() {
               <button
                 type="button"
                 disabled={ocupado}
-                onClick={() => executar(() => actionService.unsetNextStep(principal.id))}
-                className="flex min-h-12 items-center rounded-full border border-current px-5 text-base font-medium transition-colors duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
+                aria-label="Iniciar cronômetro"
+                title="Iniciar cronômetro"
+                onClick={() =>
+                  executar(async () => {
+                    await timeService.start('action', principal.id)
+                    toast.success('Cronômetro iniciado')
+                  })
+                }
+                className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full border transition-colors duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--pegada-on-ink)] disabled:opacity-60"
+                style={{ borderColor: 'var(--pegada-on-ink-muted)' }}
               >
-                Trocar
+                <Play className="h-5 w-5 fill-current" aria-hidden="true" />
               </button>
             </div>
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => executar(() => actionService.unsetNextStep(principal.id))}
+              className="mt-2 min-h-11 text-sm underline underline-offset-4 disabled:opacity-60"
+              style={MUTED}
+            >
+              Trocar o avanço principal
+            </button>
           </>
         ) : (
           <>
@@ -148,28 +190,28 @@ export function AvancoPrincipalCard() {
         )}
       </div>
 
-      {(dados.capturas_pendentes > 0 || dados.propostas_pendentes > 0) && (
-        <div className="flex flex-wrap gap-2 text-sm">
+      {children}
+
+      {(dados.capturas_pendentes > 0 || reavaliar > 0 || dados.propostas_pendentes > 0) && (
+        <div className="flex flex-wrap gap-2.5">
           {dados.capturas_pendentes > 0 && (
-            <Link
-              to="/capturas"
-              className="flex min-h-11 items-center rounded-full border border-input px-4 font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {dados.capturas_pendentes}{' '}
-              {dados.capturas_pendentes === 1
-                ? 'captura para processar'
-                : 'capturas para processar'}
+            <Link to="/capturas" className={ATALHO}>
+              <span className="text-xl font-semibold">{dados.capturas_pendentes}</span>
+              <span>{dados.capturas_pendentes === 1 ? 'captura para decidir' : 'capturas para decidir'}</span>
             </Link>
           )}
+          {reavaliar > 0 && (
+            <button type="button" onClick={onReavaliar} className={ATALHO}>
+              <span className="text-xl font-semibold">{reavaliar}</span>
+              <span>{reavaliar === 1 ? 'item para reavaliar' : 'itens para reavaliar'}</span>
+            </button>
+          )}
           {dados.propostas_pendentes > 0 && (
-            <Link
-              to="/atividade"
-              className="flex min-h-11 items-center rounded-full border border-input px-4 font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {dados.propostas_pendentes}{' '}
-              {dados.propostas_pendentes === 1
-                ? 'proposta para confirmar'
-                : 'propostas para confirmar'}
+            <Link to="/atividade" className={ATALHO}>
+              <span className="text-xl font-semibold">{dados.propostas_pendentes}</span>
+              <span>
+                {dados.propostas_pendentes === 1 ? 'proposta para confirmar' : 'propostas para confirmar'}
+              </span>
             </Link>
           )}
         </div>

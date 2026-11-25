@@ -33,7 +33,10 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react'
-import { todayInZone, ownerTimezone } from '@/lib/datetime'
+import { dayInZone, todayInZone, ownerTimezone } from '@/lib/datetime'
+import { PegadaSimbolo } from '@/components/PegadaSimbolo'
+import { cn } from '@/lib/utils'
+import { Check } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useTimer } from '@/contexts/TimeContext'
 import {
@@ -106,7 +109,15 @@ export const TodayPage: React.FC = () => {
   const [isReevaluateOpen, setIsReevaluateOpen] = useState(false)
 
   // FATIA P1C — "hoje" no fuso do dono (fonte única: lib/datetime).
-  const todayStr = todayInZone(ownerTimezone(user?.timezone))
+  const timezone = ownerTimezone(user?.timezone)
+  const todayStr = todayInZone(timezone)
+  const proposito = (user?.life_purpose ?? '').trim()
+  const dataPorExtenso = new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: timezone,
+  }).format(new Date())
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -226,6 +237,22 @@ export const TodayPage: React.FC = () => {
           a.deadline && a.deadline < todayStr && a.status !== 'feita' && a.status !== 'cancelada',
       ),
     [actions, todayStr],
+  )
+
+  // Também hoje: os escolhidos para hoje (fora o principal) e os que foram
+  // concluídos hoje, que continuam na lista, riscados.
+  const tambemHoje = useMemo(
+    () => [
+      ...todaySelectedActions,
+      ...actions.filter(
+        (a) =>
+          a.is_today_selected &&
+          a.status === 'feita' &&
+          Boolean(a.completed_at) &&
+          dayInZone(a.completed_at as string, timezone) === todayStr,
+      ),
+    ],
+    [todaySelectedActions, actions, todayStr, timezone],
   )
 
   const blockedOrWaitingActions = useMemo(
@@ -376,38 +403,23 @@ export const TodayPage: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Page Title & Context Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
+      {/* Cabeçalho do desenho: a data, o título e o propósito em uma linha. */}
+      <div className="space-y-3">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
-              Hoje
-            </h1>
-            {contextFilter !== 'todos' && (
-              <Badge
-                variant="outline"
-                className="text-xs uppercase font-medium border-border text-foreground bg-muted"
-              >
-                Filtro: {contextFilter}
-              </Badge>
-            )}
-          </div>
+          <p className="text-sm text-muted-foreground">{dataPorExtenso}</p>
+          <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">
+            Hoje
+          </h1>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setEditingAction(null)
-              setIsActionModalOpen(true)
-            }}
-            disabled={savingActionId !== null}
-            className="gap-1.5 shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Novo Avanço
-          </Button>
-        </div>
+        <Link
+          to={proposito ? '/mapa' : '/configuracoes'}
+          className="flex min-h-11 items-center gap-2.5 text-sm leading-snug text-muted-foreground hover:text-foreground"
+        >
+          <PegadaSimbolo className="h-[18px] w-[18px] shrink-0 text-foreground" />
+          <span className="min-w-0 break-words">
+            {proposito || 'Escreva o seu propósito: é dele que nasce cada porquê.'}
+          </span>
+        </Link>
       </div>
 
       {loadError && (
@@ -438,69 +450,88 @@ export const TodayPage: React.FC = () => {
         </div>
       )}
 
-      <AvancoPrincipalCard />
-
-      {/* 2. Poucas ações selecionadas para Hoje */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-foreground">
-              Poucos Avanços de Hoje ({todaySelectedActions.length})
-            </h3>
+      <AvancoPrincipalCard
+        reavaliar={reevaluateCount}
+        onReavaliar={() => {
+          setIsReevaluateOpen(true)
+          document.getElementById('reavaliar')?.scrollIntoView({ behavior: 'smooth' })
+        }}
+      >
+        {/* Também hoje: lista simples, uma linha por avanço, feitos riscados. */}
+        <section aria-label="Também hoje" className="space-y-1">
+          <div className="flex items-baseline justify-between px-1 pb-1.5">
+            <h2 className="text-[17px] font-semibold text-foreground">Também hoje</h2>
+            {tambemHoje.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {tambemHoje.filter((a) => a.status === 'feita').length} de {tambemHoje.length}{' '}
+                {tambemHoje.length === 1 ? 'feito' : 'feitos'}
+              </p>
+            )}
           </div>
-        </div>
-
-        {todaySelectedActions.length > 0 ? (
-          <div className="grid gap-2.5 [&>*]:min-w-0">
-            {todaySelectedActions.map((action) => (
-              <ListRow
-                key={action.id}
-                title={action.title}
-                numberKind="action"
-                numberValue={action.sequence_number}
-                numberEntityId={action.id}
-                open={view === 'cards' || Boolean(openRows[action.id])}
-                onToggle={() => view === 'list' && toggleRow(action.id)}
-                summary={
-                  showSummary && view === 'list'
-                    ? actionSummaryLine(action, {
-                        projectTitle:
-                          formatEntityTitle(
-                            'project',
-                            resolveProject(action)?.sequence_number,
-                            resolveProject(action)?.title ?? '',
-                          ) || null,
-                        today: todayStr,
-                      })
-                    : undefined
-                }
-              >
-                <ActionRow
-                  action={action}
-                  saving={savingActionId === action.id}
-                  onToggleNextStep={handleToggleNextStep}
-                  onToggleTodaySelected={handleToggleTodaySelected}
-                  onStatusChange={handleStatusChange}
-                  onOpenLogModal={setLogModalAction}
-                  timeControl={renderActionTimeControl(action)}
-                  onEdit={(a) => {
-                    setEditingAction(a)
-                    setIsActionModalOpen(true)
-                  }}
-                />
-              </ListRow>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-border bg-muted p-4 text-center">
-            <p className="text-xs text-muted-foreground">
-              Nenhum outro avanço secundário selecionado para hoje. Você pode puxar mais do catálogo
-              em <span className="font-medium text-foreground">Avanços</span> — o recorte de Hoje
-              continua sendo escolha deliberada, não o catálogo completo.
+          {tambemHoje.length > 0 ? (
+            <ul className="overflow-hidden rounded-[20px] border border-border bg-card">
+              {tambemHoje.map((action, i) => {
+                const feito = action.status === 'feita'
+                const resultado = resolveProject(action)?.title
+                return (
+                  <li
+                    key={action.id}
+                    className={cn(
+                      'flex min-h-16 items-center gap-3 px-4 py-3',
+                      i > 0 && 'border-t border-border',
+                    )}
+                  >
+                    <button
+                      type="button"
+                      disabled={savingActionId !== null}
+                      aria-label={`${feito ? 'Desmarcar' : 'Concluir'}: ${action.title}`}
+                      onClick={() => handleStatusChange(action.id, feito ? 'pronta' : 'feita')}
+                      className={cn(
+                        'flex h-11 w-11 shrink-0 items-center justify-center rounded-full -mx-2',
+                        savingActionId === action.id && 'opacity-60',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex h-7 w-7 items-center justify-center rounded-full',
+                          feito
+                            ? 'bg-foreground text-background'
+                            : 'border-2 border-muted-foreground',
+                        )}
+                      >
+                        {feito && <Check className="h-4 w-4" strokeWidth={3} aria-hidden="true" />}
+                      </span>
+                    </button>
+                    <Link
+                      to={`/avancos?id=${encodeURIComponent(action.id)}`}
+                      className="flex min-w-0 flex-1 flex-col gap-0.5"
+                    >
+                      <span
+                        className={cn(
+                          'break-words text-base font-medium leading-tight text-foreground',
+                          feito && 'text-muted-foreground line-through',
+                        )}
+                      >
+                        {action.title}
+                      </span>
+                      <span className="truncate text-[13px] text-muted-foreground">
+                        {resultado || 'Avanço livre'}
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="rounded-[20px] border border-border bg-card px-4 py-4 text-sm text-muted-foreground">
+              Nada mais escolhido para hoje.{' '}
+              <Link to="/avancos" className="font-medium text-foreground underline underline-offset-4">
+                Escolher em Avanços
+              </Link>
             </p>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      </AvancoPrincipalCard>
 
       {/* 3. Prazos de Hoje Separados */}
       {todayDeadlineActions.length > 0 && (
@@ -563,7 +594,7 @@ export const TodayPage: React.FC = () => {
       )}
 
       {/* 4. SEÇÃO REAVALIAR (Recolhível) */}
-      <section className="pt-4 border-t border-border">
+      <section id="reavaliar" className="pt-4 border-t border-border scroll-mt-24">
         <Collapsible open={isReevaluateOpen} onOpenChange={setIsReevaluateOpen}>
           <div className="flex items-center justify-between bg-muted border border-border rounded-xl p-3.5 px-4">
             <div className="flex items-center gap-2.5">

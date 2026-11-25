@@ -12,7 +12,7 @@ name: publicar
 
 on:
   push:
-    branches: [main, migracao/fora-do-skip]
+    branches: [main, design/pranchas]
   workflow_dispatch:
     inputs:
       alvo:

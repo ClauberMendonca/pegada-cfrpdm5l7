@@ -22,7 +22,6 @@ import { LifeWorkContext } from '@/types/execution'
 import { cn } from '@/lib/utils'
 import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 import { GlobalTimerIndicator } from '@/components/TimeControl'
-import { LifePurposeBar } from '@/components/LifePurposeBar'
 import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
 import {
@@ -231,7 +230,6 @@ export default function Layout() {
           <div className="hidden items-center justify-end px-10 pt-4 lg:flex">
             <ContextoChip />
           </div>
-          <LifePurposeBar />
         </div>
 
         <main

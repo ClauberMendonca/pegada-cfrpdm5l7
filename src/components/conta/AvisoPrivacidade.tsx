@@ -14,7 +14,9 @@ export const AvisoPrivacidade: React.FC<{ className?: string }> = ({ className }
       </li>
       <li>
         <strong className="font-medium text-foreground">Quem vê.</strong> Só você. Outras pessoas só veem
-        um resultado se você o compartilhar com elas. Quem administra o servidor do Pegada tem acesso
+        um resultado se você o compartilhar com elas: aí elas veem esse resultado, as estratégias, os
+        avanços e as notas dele, e o seu nome e foto. O seu propósito, as suas vontades e
+        responsabilidades nunca aparecem para ninguém. Quem administra o servidor do Pegada tem acesso
         técnico ao banco de dados para manter o sistema e fazer cópias de segurança, e se compromete a
         não abrir o conteúdo de ninguém.
       </li>

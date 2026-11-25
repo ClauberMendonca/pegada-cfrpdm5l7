@@ -62,6 +62,16 @@ Segredos do servidor para o envio de e-mails (convite, nova senha, troca de e-ma
 | `PEGADA_URL` | Endereço público do app, usado nos links dos e-mails. |
 | `PEGADA_IA_LIMITE_DIA` | Opcional. Sugestões da IA por pessoa e por dia. Padrão `80`. |
 
+## Resultado compartilhado
+
+O método é de cada pessoa. Só o Resultado e o que está abaixo dele (estratégias, avanços e notas) pode ser compartilhado; propósito, vontades e responsabilidades nunca aparecem para os outros.
+
+- `projects.user_id` é quem criou o resultado; `projects.member_ids` guarda quem participa. `result_members` guarda o convite e o porquê pessoal de cada participante (a Responsabilidade ou Vontade dele).
+- `actions.user_id` é quem está com o avanço. Passar um avanço troca esse campo e anota quem passou em `delegated_by`. As estratégias são sempre de quem criou o resultado.
+- Quem sai ou é tirado perde a leitura na hora, e os avanços que tinha voltam para quem criou o resultado. Resultado compartilhado não vai para a Lixeira: primeiro tira-se as pessoas.
+- Avisos (`notices`) aparecem no sino. O histórico de um resultado (`audit_events.project_id`) é visto por quem participa.
+- Operações: `compartilhar_resultado`, `responder_convite`, `ver_participantes`, `remover_participante`, `sair_do_resultado`, `ligar_resultado_compartilhado`, `passar_avanco`, `devolver_avanco`, `listar_avisos`. São da própria pessoa: agentes não convidam nem passam avanços.
+
 ## Publicar
 
 Uma vez, no Fly.io (com `flyctl` instalado e logado):

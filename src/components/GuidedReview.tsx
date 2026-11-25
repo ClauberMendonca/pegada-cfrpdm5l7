@@ -233,7 +233,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                 {PASSOS.map((p, i) => (
                   <div
                     key={p.nome}
-                    className={cn('h-1.5 flex-1 rounded-full', i <= passo ? 'bg-foreground' : 'bg-input')}
+                    className={cn('h-1.5 flex-1 rounded-full', i <= passo ? 'bg-foreground' : 'bg-muted-foreground/25')}
                   />
                 ))}
               </div>
@@ -315,7 +315,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         <div
                           role="img"
                           aria-label={`${atual.avancos_feitos} de ${atual.avancos_total} avanços concluídos`}
-                          className="h-2 flex-1 overflow-hidden rounded-full bg-input"
+                          className="h-2 flex-1 overflow-hidden rounded-full bg-muted-foreground/25"
                         >
                           <div
                             className="h-2 rounded-full bg-foreground"

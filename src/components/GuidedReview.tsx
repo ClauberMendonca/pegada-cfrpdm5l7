@@ -116,11 +116,13 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
     setErro(null)
     try {
       const res = await op<Resumo>('ver_resumo_semana', { dias })
-      setResumo((res.resultado as Resumo) ?? null)
+      // Nas revisões longas o mapa chega junto: os passos de futuros e de
+      // responsabilidades nunca aparecem vazios por um instante.
       if (dias >= 90) {
         const m = await op<Mapa>('ver_mapa', {})
         setMapa((m.resultado as Mapa) ?? null)
       }
+      setResumo((res.resultado as Resumo) ?? null)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Não foi possível preparar a revisão.')
     } finally {

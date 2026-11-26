@@ -13,7 +13,7 @@ export function MapPage() {
       <div
         className={cn(
           soOMapa
-            ? 'mx-auto max-w-3xl'
+            ? ''
             : 'hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100dvh-6.5rem)] lg:self-start lg:overflow-y-auto lg:pr-2',
         )}
       >

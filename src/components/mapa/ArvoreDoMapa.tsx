@@ -17,6 +17,7 @@ import { projectService } from '@/services/projectService'
 import { responsibilityService } from '@/services/responsibilityService'
 import { wishService } from '@/services/wishService'
 import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
+import { ArvoreHorizontal, type NoDaArvore } from '@/components/mapa/ArvoreHorizontal'
 import { Desdobrar } from '@/components/Desdobrar'
 import { Dica } from '@/components/Dica'
 import { toast } from 'sonner'
@@ -85,6 +86,19 @@ function lerAbertos(): Record<string, boolean> {
   } catch {
     return {}
   }
+}
+
+// A vista em árvore só existe no computador; a escolha fica neste aparelho.
+const CHAVE_VISTA = 'pegada.mapa.vista'
+function useTelaLarga(): boolean {
+  const [larga, setLarga] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches)
+  useEffect(() => {
+    const m = window.matchMedia('(min-width: 1024px)')
+    const ouvir = () => setLarga(m.matches)
+    m.addEventListener('change', ouvir)
+    return () => m.removeEventListener('change', ouvir)
+  }, [])
+  return larga
 }
 
 const DEPOIS = new Set(['futuro', 'rascunho'])
@@ -486,6 +500,23 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
   const [erro, setErro] = useState<string | null>(null)
   const [abertos, setAbertos] = useState<Record<string, boolean>>(lerAbertos)
   const [concluindo, setConcluindo] = useState<string | null>(null)
+  const telaLarga = useTelaLarga()
+  const [vista, setVista] = useState<'lista' | 'arvore'>(() => {
+    try {
+      return localStorage.getItem(CHAVE_VISTA) === 'arvore' ? 'arvore' : 'lista'
+    } catch {
+      return 'lista'
+    }
+  })
+  const emArvore = !compacta && telaLarga && vista === 'arvore'
+  const trocarVista = (v: 'lista' | 'arvore') => {
+    setVista(v)
+    try {
+      localStorage.setItem(CHAVE_VISTA, v)
+    } catch {
+      // Sem armazenamento, o Mapa só não lembra a vista.
+    }
+  }
 
   const carregar = useCallback(async () => {
     try {
@@ -595,9 +626,84 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
   const contexto = contextFilter === 'todos' ? undefined : contextFilter
   const propositoAqui = pathname === '/mapa/proposito'
 
+  // A árvore horizontal usa os mesmos dados e as mesmas chaves da lista.
+  const noAvanco = (a: MapaAvanco): NoDaArvore => ({
+    id: `avanco:${a.id}`,
+    rotulo: 'Avanço',
+    titulo: a.titulo,
+    to: fichaDoAvanco(a.id),
+    tom: 'folha',
+    hoje: Boolean(a.hoje),
+  })
+  const noResultado = (r: MapaResultado): NoDaArvore => ({
+    id: `resultado:${r.id}`,
+    rotulo: ['Resultado', r.status === 'pausado' && 'pausado', formatarPrazo(r.prazo) && `até ${formatarPrazo(r.prazo)}`]
+      .filter(Boolean)
+      .join(' · '),
+    titulo: r.titulo,
+    to: fichaDoResultado(r.id),
+    padrao: r.status === 'ativo',
+    filhos: [
+      ...r.estrategias.map((s) => ({
+        id: `estrategia:${s.id}`,
+        rotulo: 'Estratégia',
+        titulo: s.titulo,
+        to: `${fichaDoResultado(r.id)}#estrategia-${s.id}`,
+        filhos: (s.avancos ?? []).map(noAvanco),
+      })),
+      ...(r.avancos_sem_estrategia ?? []).map(noAvanco),
+    ],
+  })
+  const agora = (rs: MapaResultado[]) => rs.filter((r) => !DEPOIS.has(r.status)).map(noResultado)
+  const raiz: NoDaArvore = {
+    id: 'raiz',
+    rotulo: 'Propósito',
+    titulo: mapa.proposito || 'Escreva o seu propósito',
+    to: '/mapa/proposito',
+    tom: 'proposito',
+    filhos: [
+      {
+        id: 'vontades',
+        rotulo: 'Se largar, ninguém cobra',
+        titulo: 'Vontades',
+        tom: 'ramo',
+        filhos: visao.vontades.map((v) => ({
+          id: `vontade:${v.id}`,
+          rotulo: 'Vontade',
+          titulo: v.titulo,
+          to: fichaDaVontade(v.id),
+          tom: 'forte' as const,
+          filhos: agora(v.resultados),
+        })),
+      },
+      {
+        id: 'responsabilidades',
+        rotulo: 'Se largar, alguém cobra',
+        titulo: 'Responsabilidades',
+        tom: 'ramo',
+        filhos: visao.responsabilidades.map((resp) => ({
+          id: `responsabilidade:${resp.id}`,
+          rotulo: 'Responsabilidade',
+          titulo: resp.titulo,
+          to: fichaDaResponsabilidade(resp.id),
+          tom: 'forte' as const,
+          filhos: [...agora(resp.resultados), ...(resp.avancos ?? []).map(noAvanco)],
+        })),
+      },
+      {
+        id: 'livres',
+        rotulo: 'Também vale',
+        titulo: 'Livres',
+        tom: 'ramo',
+        filhos: [...agora(visao.resultadosLivres), ...visao.livres.map(noAvanco)],
+      },
+    ],
+  }
+
   return (
-    <div data-mapa className="flex flex-col gap-5">
-      <div>
+    <div data-mapa className={cn('flex flex-col gap-5', !compacta && !emArvore && 'mx-auto max-w-3xl')}>
+      <div className={cn(!compacta && 'flex items-start justify-between gap-4')}>
+        <div>
         <h1
           className={cn(
             'font-semibold leading-tight tracking-tight text-foreground',
@@ -612,8 +718,38 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
             ativos.
           </p>
         )}
+        </div>
+        {!compacta && telaLarga && (
+          <div role="group" aria-label="Vista do Mapa" className="flex shrink-0 rounded-full bg-secondary p-1" data-vista-do-mapa>
+            {(['lista', 'arvore'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={vista === v}
+                onClick={() => trocarVista(v)}
+                className={cn(
+                  'min-h-9 rounded-full px-4 text-sm font-medium transition-colors',
+                  FOCO,
+                  vista === v ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {v === 'lista' ? 'Lista' : 'Árvore'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
+      {emArvore ? (
+        <>
+          <ArvoreHorizontal raiz={raiz} aberto={c.aberto} alternar={c.alternar} />
+          <p className="text-[13px] text-muted-foreground">
+            A árvore mostra o que está em andamento. Para adicionar, concluir ou ver o que ficou para depois, use a
+            vista em lista ou abra a ficha do item.
+          </p>
+        </>
+      ) : (
+        <>
       {!compacta && (
         <Dica id="mapa-escada">
           O mapa é uma escada: perguntar “para quê?” sobe um degrau, e perguntar “como?” desce um.
@@ -761,6 +897,8 @@ export function ArvoreDoMapa({ compacta = false }: { compacta?: boolean }) {
       </Ramo>
 
       <Encerrados c={c} />
+        </>
+      )}
     </div>
   )
 }

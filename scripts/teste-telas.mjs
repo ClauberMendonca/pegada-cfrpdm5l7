@@ -282,6 +282,23 @@ await passo('novo avanço para hoje', async () => {
   await foto('hoje')
 })
 
+// 6a. Mapa em árvore horizontal: só no computador, com os mesmos dados da lista
+await passo('Mapa em árvore horizontal', async () => {
+  await ir('/mapa')
+  const troca = page.locator('[data-vista-do-mapa]')
+  if (TELA !== 'computador') {
+    confere('no celular o Mapa não oferece a árvore horizontal', (await troca.count()) === 0)
+    return
+  }
+  await troca.getByRole('button', { name: 'Árvore' }).click()
+  const arvoreH = page.locator('[data-arvore-horizontal]')
+  await arvoreH.locator('[data-no="raiz"]').waitFor()
+  confere('a árvore horizontal sai do Propósito e chega ao resultado', (await arvoreH.innerText()).includes(nomes.resultado))
+  await troca.getByRole('button', { name: 'Lista' }).click()
+  await arvore().locator('[data-ramo="vontades"]').waitFor()
+  confere('a vista em lista volta com um toque', (await arvoreH.count()) === 0)
+})
+
 // 6b. Hoje em três passos: folha de escolha, três ações por linha e fechar o dia
 await passo('Hoje: escolher, linha e fechar o dia', async () => {
   await ir('/')

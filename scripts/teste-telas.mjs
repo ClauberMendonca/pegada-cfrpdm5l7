@@ -42,6 +42,7 @@ const nomes = {
   estudo: T('Estudar planilhas de treino'),
   captura: T('Comprar tênis de corrida'),
   captura2: T('Ideia solta para descartar'),
+  direto: T('Comprar meias de corrida'),
 }
 
 let falhas = 0
@@ -365,6 +366,23 @@ await passo('capturar pelo botão do topo', async () => {
   confere('captura do topo aparece em Capturas', (await texto('main')).includes(nomes.captura))
 })
 
+// 7a. Avanço direto: quem já sabe o que é cria sem passar pela Caixa
+await passo('avanço direto pelo botão de capturar', async () => {
+  await ir('/')
+  await botao(/^Capturar/).click()
+  await dialogo().locator('[data-trocar-modo]').click()
+  await dialogo().locator('textarea').fill(nomes.direto)
+  const opcoes = dialogo().locator('[data-avanco-direto]')
+  await opcoes.getByRole('radio', { name: new RegExp(nomes.estrategia) }).first().click()
+  await dialogo().getByRole('button', { name: 'Criar avanço', exact: true }).click()
+  await esperaSumir()
+  await ir('/mapa')
+  const est = arvore().locator('[data-estrategia]').filter({ hasText: nomes.estrategia }).first()
+  confere('avanço direto nasce embaixo da estratégia escolhida, sem passar pela Caixa', (await est.innerText()).includes(nomes.direto), await est.innerText())
+  await ir('/caixa')
+  confere('avanço direto não deixa captura na Caixa', !(await texto('main')).includes(nomes.direto))
+})
+
 await passo('capturar na tela de Capturas', async () => {
   await ir('/caixa')
   await capturarNaCaixa(nomes.captura2)
@@ -396,6 +414,13 @@ await passo('processar captura em avanço', async () => {
   await page.waitForTimeout(1500)
   await ir('/mapa')
   confere('captura processada vira avanço livre, no Mapa', (await arvore().locator('[data-ramo="livres"]').innerText()).includes(nomes.captura))
+  await ir('/caixa')
+  const decididas = page.locator('[data-ja-decididas]')
+  await decididas.getByRole('button', { name: /Já decididas/ }).click()
+  await page.waitForTimeout(800)
+  const lista = await decididas.innerText()
+  confere('"Já decididas" mostra o que virou avanço e segue aberto', lista.includes(nomes.captura), lista.slice(0, 200))
+  confere('"Já decididas" não mostra descartadas nem concluídas', !/Descartada/.test(lista))
 })
 
 await passo('descartar captura', async () => {

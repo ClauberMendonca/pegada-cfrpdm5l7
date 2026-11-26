@@ -8,15 +8,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { reduzirFoto } from '@/lib/reduzirFoto'
 import { COMMON_TIMEZONES } from '@/components/TimezoneModal'
-
-const FOTO_MAX = 2 * 1024 * 1024
 
 /** Quem sou: nome, foto e fuso. É assim que os outros veem você. */
 export const PerfilCard: React.FC = () => {
   const { user, avatarUrl, updateProfile, updateTimezone } = useAuth()
   const [nome, setNome] = useState(user?.name || '')
   const [salvando, setSalvando] = useState(false)
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
   const arquivo = useRef<HTMLInputElement>(null)
   if (!user) return null
 
@@ -42,13 +42,17 @@ export const PerfilCard: React.FC = () => {
     const f = ev.target.files?.[0]
     ev.target.value = ''
     if (!f) return
-    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return void toast.error('Use uma imagem PNG, JPG ou WebP.')
-    if (f.size > FOTO_MAX) return void toast.error('A foto pode ter no máximo 2 MB.')
+    if (f.type && !f.type.startsWith('image/')) return void toast.error('Escolha um arquivo de imagem.')
+    setEnviandoFoto(true)
     try {
-      await updateProfile({ foto: f })
+      // A foto é cortada e reduzida aqui mesmo, então o tamanho original não importa.
+      const pronta = await reduzirFoto(f)
+      await updateProfile({ foto: pronta })
       toast.success('Foto salva.')
     } catch (err) {
-      toast.error(mensagemDe(err))
+      toast.error(mensagemDe(err, 'Não deu para salvar a foto. Tente de novo.'))
+    } finally {
+      setEnviandoFoto(false)
     }
   }
 
@@ -91,14 +95,14 @@ export const PerfilCard: React.FC = () => {
           <input
             ref={arquivo}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/*"
             className="sr-only"
             aria-label="Escolher foto"
             onChange={trocarFoto}
           />
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => arquivo.current?.click()}>
-              {avatarUrl ? 'Trocar foto' : 'Escolher foto'}
+            <Button type="button" variant="outline" className="min-h-11" disabled={enviandoFoto} onClick={() => arquivo.current?.click()}>
+              {enviandoFoto ? 'Salvando...' : avatarUrl ? 'Trocar foto' : 'Escolher foto'}
             </Button>
             {avatarUrl && (
               <Button type="button" variant="ghost" className="min-h-11" onClick={tirarFoto}>

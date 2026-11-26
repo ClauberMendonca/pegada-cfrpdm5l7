@@ -52,8 +52,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUser(mapUserProfile(fresh))
           }
         })
-        .catch(() => {
-          // ignore error
+        .catch((err) => {
+          // O servidor não reconhece mais esta sessão (encerrada em outro
+          // aparelho, conta desativada, chaves trocadas): sair daqui e pedir
+          // a entrada de novo, em vez de mostrar um app em que nada salva.
+          // Falha de rede (status 0) não derruba a sessão.
+          const status = (err as { status?: number })?.status
+          if (status === 401 || status === 403 || status === 404) {
+            if (pb.authStore.model?.id === sessionId) pb.authStore.clear()
+          }
         })
         .finally(() => {
           setIsLoading(false)

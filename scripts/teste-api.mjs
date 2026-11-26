@@ -166,8 +166,107 @@ async function main() {
   // --- Leituras ---
   const mapa = await op('ver_mapa')
   confere('ver mapa', mapa.status === 200 && JSON.stringify(mapa.json).includes('Saúde da família'), mapa)
+  confere(
+    'mapa traz avanços livres e os que sustentam cada responsabilidade',
+    Array.isArray(mapa.json?.resultado?.avancos_livres) &&
+      (mapa.json?.resultado?.responsabilidades || []).every((r) => Array.isArray(r.avancos)),
+    mapa,
+  )
+  // --- Vontades: no mesmo nível da responsabilidade, logo abaixo do Propósito ---
+  const vont = await op('criar_vontade', { titulo: 'Voltar a tocar violão', contexto: 'vida' })
+  const vontId = vont.json?.resultado?.vontade_id
+  confere('criar vontade', vont.status === 200 && vontId, vont)
+  const vontSem = await op('criar_vontade', { titulo: 'Sem contexto' })
+  confere('vontade exige contexto', vontSem.status >= 400, vontSem)
+  const rv = await op('criar_resultado', { titulo: 'Tocar duas músicas inteiras até julho', prazo: '2027-07-01', vontade_id: vontId })
+  const rvId = rv.json?.resultado?.resultado_id
+  confere('resultado nasce de uma vontade', rv.status === 200 && rvId, rv)
+  const dupla = await op('criar_resultado', { titulo: 'Origem dupla', prazo: '2027-07-01', vontade_id: vontId, responsabilidade_id: respId })
+  confere('resultado não nasce de vontade e responsabilidade ao mesmo tempo', dupla.status >= 400, dupla)
+  const livre = await op('criar_resultado', { titulo: 'Resultado livre até agosto', prazo: '2027-08-01' })
+  const livreId = livre.json?.resultado?.resultado_id
+  confere('resultado livre continua permitido', livre.status === 200 && livreId, livre)
+  const avV = await op('criar_avanco', { titulo: 'Afinar o violão', tipo: 'acao', resultado_id: rvId, para_hoje: true })
+  confere('avanço de resultado de vontade tem o fio com a vontade', avV.json?.resultado?.fio?.apoio === 'vontade' && /realizando a vontade/.test(avV.json?.resultado?.fio?.frase || ''), avV)
+  const mapa2 = await op('ver_mapa')
+  const vontades = mapa2.json?.resultado?.vontades || []
+  confere('mapa traz as vontades', vontades.some((v) => v.titulo === 'Voltar a tocar violão'), mapa2)
+  confere(
+    'mapa traz vontade_id em cada resultado',
+    (mapa2.json?.resultado?.resultados || []).find((r) => r.id === rvId)?.vontade_id === vontId,
+    mapa2,
+  )
+  const religa = await op('editar_resultado', { resultado_id: rvId, responsabilidade_id: respId })
+  confere('ligar o resultado a uma responsabilidade desliga a vontade', religa.status === 200, religa)
+  const mapa3 = await op('ver_mapa')
+  confere('resultado fica com uma origem só', (mapa3.json?.resultado?.resultados || []).find((r) => r.id === rvId)?.vontade_id === null, mapa3)
+  const volta = await op('editar_resultado', { resultado_id: rvId, vontade_id: vontId })
+  confere('religar a uma vontade', volta.status === 200, volta)
+  // Excluir manda para a Lixeira, com o que está embaixo. De lá, restaura ou apaga de vez.
+  const vx = await op('criar_vontade', { titulo: 'Vontade para excluir', contexto: 'vida' })
+  const vxId = vx.json?.resultado?.vontade_id
+  const rx = await op('criar_resultado', { titulo: 'Resultado para excluir até julho', prazo: '2027-07-01', vontade_id: vxId, situacao: 'futuro' })
+  const rxId = rx.json?.resultado?.resultado_id
+  const ex = await op('criar_estrategia', { resultado_id: rxId, titulo: 'Estratégia para excluir' })
+  const exId = ex.json?.resultado?.estrategia_id
+  const ax = await op('criar_avanco', { titulo: 'Avanço para excluir', tipo: 'acao', estrategia_id: exId })
+  const axId = ax.json?.resultado?.avanco_id
+  const ax2 = await op('criar_avanco', { titulo: 'Outro avanço para excluir', tipo: 'acao', resultado_id: rxId })
+  const ax2Id = ax2.json?.resultado?.avanco_id
+  const noMapa = async () => JSON.stringify((await op('ver_mapa', {})).json?.resultado || {})
+  const conta = await op('ver_o_que_sai', { elemento: 'vontade', id: vxId })
+  const ab = conta.json?.resultado?.abaixo || {}
+  confere('contar o que sai junto com a vontade', ab.resultados === 1 && ab.estrategias === 1 && ab.avancos === 2, conta)
+  const exA = await op('excluir', { elemento: 'avanco', id: ax2Id })
+  confere('excluir um avanço manda para a Lixeira', exA.status === 200 && exA.json?.resultado?.lixeira_id, exA)
+  const desf = await http('POST', '/backend/v1/pegada/desfazer/' + exA.json?.evento_id, { token: t })
+  confere('exclusão não se desfaz pelo histórico', desf.status === 409, desf)
+  const volta1 = await op('restaurar', { lixeira_id: exA.json?.resultado?.lixeira_id })
+  const lido = await op('listar_avancos', { resultado_id: rxId })
+  confere('restaurar devolve o avanço ao lugar dele', volta1.status === 200 && JSON.stringify(lido.json).includes(ax2Id), volta1)
+  const exV = await op('excluir', { elemento: 'vontade', id: vxId })
+  confere('excluir a vontade leva tudo abaixo', exV.status === 200 && exV.json?.resultado?.abaixo?.avancos === 2, exV)
+  let txt = await noMapa()
+  confere('o que foi excluído some do mapa', !txt.includes(vxId) && !txt.includes(rxId) && !txt.includes(exId) && !txt.includes(axId), null)
+  confere('o que não estava embaixo continua', txt.includes(vontId) && txt.includes(rvId), null)
+  const lix = await op('ver_lixeira', {})
+  const item = (lix.json?.resultado?.itens || []).find((i) => i.id === exV.json?.resultado?.lixeira_id)
+  confere('a Lixeira lista a vontade e o que foi junto', item?.elemento === 'vontade' && item?.abaixo?.resultados === 1, lix)
+  const volta2 = await op('restaurar', { lixeira_id: item?.id })
+  txt = await noMapa()
+  confere('restaurar devolve a vontade com tudo abaixo', volta2.status === 200 && txt.includes(vxId) && txt.includes(rxId) && txt.includes(exId) && txt.includes(axId), volta2)
+  const exR = await op('excluir', { elemento: 'resultado', id: rxId })
+  const exV2 = await op('excluir', { elemento: 'vontade', id: vxId })
+  const voltaR = await op('restaurar', { lixeira_id: exR.json?.resultado?.lixeira_id })
+  txt = await noMapa()
+  confere('resultado restaurado sem a vontade volta solto', voltaR.status === 200 && txt.includes(rxId) && !txt.includes(vxId), voltaR)
+  await op('excluir', { elemento: 'resultado', id: rxId })
+  const some = await op('esvaziar_lixeira', { ids: [exV2.json?.resultado?.lixeira_id] })
+  confere('excluir de vez só o escolhido', some.status === 200 && some.json?.resultado?.excluidos === 1, some)
+  const tudo = await op('esvaziar_lixeira', {})
+  const vazia = await op('ver_lixeira', {})
+  confere('esvaziar a Lixeira inteira', tudo.status === 200 && (vazia.json?.resultado?.itens || []).length === 0, tudo)
+  const exDeNovo = await op('excluir', { elemento: 'vontade', id: vxId })
+  confere('excluir o que já não existe responde não encontrado', exDeNovo.status === 404, exDeNovo)
+  const edV = await op('editar_vontade', { vontade_id: vontId, titulo: 'Voltar a tocar violão, sem pressa' })
+  confere('editar vontade', edV.status === 200, edV)
+  const capV = await op('capturar', { texto: 'Quero aprender a velejar' })
+  const procV = await op('processar_captura', { captura_id: acharId(capV.json?.resultado), destino: 'vontade', dados: { contexto: 'vida' } })
+  confere('captura vira vontade', procV.status === 200 && JSON.stringify(procV.json).includes('vontade_id'), procV)
+  const arqV = await op('arquivar_vontade', { vontade_id: vontId })
+  confere('arquivar vontade', arqV.status === 200, arqV)
+  const mapa4 = await op('ver_mapa')
+  confere('vontade arquivada sai do mapa', !(mapa4.json?.resultado?.vontades || []).some((v) => v.id === vontId), mapa4)
+  const volV = await op('arquivar_vontade', { vontade_id: vontId, reativar: true })
+  confere('reativar vontade', volV.status === 200, volV)
   const semana = await op('ver_resumo_semana', { dias: 7 })
   confere('ver resumo da semana', semana.status === 200, semana)
+  const bal = semana.json?.resultado?.balanco || {}
+  confere(
+    'o balanço divide o tempo entre vontades, responsabilidades e livres',
+    ['vontades', 'responsabilidades', 'livres'].every((k) => typeof bal[k] === 'number'),
+    bal,
+  )
   const listAv = await op('listar_avancos', { resultado_id: resId })
   confere('listar avanços do resultado', listAv.status === 200, listAv)
 

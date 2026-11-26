@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { criarAgente, decidirProposta, desfazer, mcpUrl, revogarAgente } from '@/lib/pegada/api'
+import { criarAgente, desfazer, mcpUrl, revogarAgente } from '@/lib/pegada/api'
 
-// PEGADA — Atividade: o que cada um fez (pessoa, IA embutida, agentes), com
-// desfazer; as escolhas que agentes propuseram e aguardam o dono; e o acesso
-// de cada agente (nível 2), com token, escopos e revogação.
+// PEGADA — Histórico: o que cada um fez (pessoa, IA embutida, agentes), com
+// desfazer; e o acesso de cada agente (nível 2), com token, escopos e
+// revogação. As propostas que esperam decisão ficam na Caixa.
 
 interface AuditRow {
   id: string
@@ -19,16 +19,6 @@ interface AuditRow {
   summary: string
   undo_of: string
   undone_at: string
-  created: string
-}
-
-interface ProposalRow {
-  id: string
-  agent_id: string
-  op: string
-  summary: string
-  reason: string
-  status: string
   created: string
 }
 
@@ -62,7 +52,6 @@ const quando = (iso: string) => {
 
 export function ActivityPage() {
   const [eventos, setEventos] = useState<AuditRow[]>([])
-  const [propostas, setPropostas] = useState<ProposalRow[]>([])
   const [agentes, setAgentes] = useState<AgentRow[]>([])
   const [nome, setNome] = useState('')
   const [escopos, setEscopos] = useState<string[]>(['ler', 'capturar', 'avancos', 'propor'])
@@ -70,15 +59,11 @@ export function ActivityPage() {
   const [ocupado, setOcupado] = useState(false)
 
   const carregar = useCallback(async () => {
-    const [ev, pr, ag] = await Promise.all([
+    const [ev, ag] = await Promise.all([
       pb.collection('audit_events').getList<AuditRow>(1, 50, { sort: '-created' }),
-      pb
-        .collection('proposals')
-        .getFullList<ProposalRow>({ filter: "status = 'pendente'", sort: '-created' }),
       pb.collection('agents').getFullList<AgentRow>({ sort: '-created' }),
     ])
     setEventos(ev.items)
-    setPropostas(pr)
     setAgentes(ag)
   }, [])
 
@@ -131,48 +116,12 @@ export function ActivityPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-10 p-4 sm:p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Atividade</h1>
+        <h1 className="text-2xl font-semibold">Histórico</h1>
         <p className="text-muted-foreground">
           Tudo o que foi feito no seu método, por você, pela IA ou por agentes. Quase tudo se
           desfaz.
         </p>
       </header>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Decisões para você</h2>
-        {propostas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nenhuma proposta esperando.</p>
-        ) : (
-          propostas.map((p) => (
-            <div key={p.id} className="rounded-xl border border-border bg-card p-4">
-              <p className="text-sm text-muted-foreground">
-                {nomeDoAgente(p.agent_id)} propõe · {quando(p.created)}
-              </p>
-              <p className="mt-1 font-medium">{p.summary}</p>
-              {p.reason && (
-                <p className="mt-1 text-sm text-muted-foreground">Por quê: {p.reason}</p>
-              )}
-              <div className="mt-3 flex gap-2">
-                <Button
-                  size="sm"
-                  disabled={ocupado}
-                  onClick={() => agir(() => decidirProposta(p.id, true), 'Confirmado')}
-                >
-                  Confirmar
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={ocupado}
-                  onClick={() => agir(() => decidirProposta(p.id, false), 'Recusado')}
-                >
-                  Recusar
-                </Button>
-              </div>
-            </div>
-          ))
-        )}
-      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">O que foi feito</h2>

@@ -1,6 +1,6 @@
 // Service worker mínimo do Pegada: permite instalar o app e abrir a casca
 // sem rede. Nunca guarda respostas da API nem do banco (dados sempre frescos).
-const CACHE = 'pegada-casca-v1'
+const CACHE = 'pegada-casca-v2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest'])))

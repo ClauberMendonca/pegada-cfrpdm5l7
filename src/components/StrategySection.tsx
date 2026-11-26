@@ -11,8 +11,7 @@
 import { Referencias } from '@/components/Referencias'
 import { Desdobrar } from '@/components/Desdobrar'
 import { op as pegadaOp } from '@/lib/pegada/api'
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -22,13 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Archive, ChevronDown, Edit3, Plus, RotateCcw } from 'lucide-react'
+import { ChevronDown, Paperclip } from 'lucide-react'
+import { Triade } from '@/components/Triade'
+import { AdicionarNoLugar } from '@/components/mapa/AdicionarNoLugar'
+import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { StrategyModal } from '@/components/StrategyModal'
 import { useProjectStrategies } from '@/hooks/use-project-strategies'
 import { useToast } from '@/hooks/use-toast'
 import { strategyService } from '@/services/strategyService'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { groupActionsByStrategy, strategyGroupLabel } from '@/lib/strategyGroups'
+import { groupActionsByStrategy } from '@/lib/strategyGroups'
 import { ActionItem, Strategy } from '@/types/execution'
 
 export interface StrategySectionProps {
@@ -44,6 +46,12 @@ export interface StrategySectionProps {
   refreshTick?: number
   /** Avisa a ficha quando o desdobrar criou avanços, para ela recarregar a lista. */
   onAvancosCriados?: () => void
+  /** Vida ou Trabalho do resultado, para o que for adicionado aqui. */
+  contexto: 'vida' | 'trabalho'
+  /** Resultado encerrado não recebe nada novo. */
+  podeAdicionar: boolean
+  /** O "Adicionar" do próprio resultado, no fim da lista, como no Mapa. */
+  rodape?: React.ReactNode
 }
 
 const ARCHIVE_HINT =
@@ -56,10 +64,14 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
   renderActions,
   refreshTick,
   onAvancosCriados,
+  contexto,
+  podeAdicionar,
+  rodape,
 }) => {
   const { toast } = useToast()
   const strategies = useProjectStrategies(projectId)
-  const helpId = useId()
+  // Restaurar da Lixeira avisa por aqui: a lista de estratégias volta a ser lida.
+  usePegadaMudou(strategies.reload)
 
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editing, setEditing] = useState<Strategy | null>(null)
@@ -70,6 +82,8 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null)
   const statusBusyRef = useRef(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  // O material de referência de cada estratégia só abre quando a pessoa pede.
+  const [comMaterial, setComMaterial] = useState<Record<string, boolean>>({})
 
   // Troca de Resultado fecha diálogos abertos: nada vai para o pai errado.
   useEffect(() => {
@@ -143,49 +157,26 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
     })
   }
 
-  const openNew = () => {
-    setEditing(null)
-    setIsModalOpen(true)
-  }
   const openEdit = (strategy: Strategy) => {
     setEditing(strategy)
     setIsModalOpen(true)
   }
 
-  const toggleExpanded = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+
+  // A mesma lista do Mapa: cada estratégia abre e recolhe, com os avanços
+  // dela embaixo. Os avanços sem estratégia ficam soltos, no fim.
+  const porEstrategia = new Map<string, ActionItem[]>()
+  const soltos: ActionItem[] = []
+  for (const g of groups) {
+    if (g.kind === 'strategy' && g.strategy) porEstrategia.set(g.strategy.id, g.actions)
+    else soltos.push(...g.actions)
+  }
+  const FOCO = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h4 className="text-base font-bold tracking-tight text-foreground">
-            Estratégias
-            {!strategies.loading && !strategies.error && (
-              <span className="ml-1.5 text-muted-foreground">({strategies.items.length})</span>
-            )}
-          </h4>
-          <p id={helpId} className="text-xs text-muted-foreground">
-            Caminhos escolhidos para buscar este resultado. Avanços podem ficar sem estratégia.
-          </p>
-        </div>
-        <Button size="sm" onClick={openNew} className="min-h-11 gap-1.5 text-xs sm:min-h-9">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Nova estratégia
-        </Button>
-      </div>
-
-      <Desdobrar
-        nivel="resultado"
-        texto={projectLabel}
-        rotulo="Desdobrar em estratégias"
-        onCriar={async (s) => {
-          await pegadaOp('criar_estrategia', { resultado_id: projectId, titulo: s.titulo })
-        }}
-        onCriados={() => strategies.reload()}
-      />
-
+    <div className="flex flex-col gap-1" data-escada-do-resultado>
       {strategies.loading && (
-        <p role="status" className="text-xs text-muted-foreground">
+        <p role="status" className="px-2 text-[13px] text-muted-foreground">
           Carregando estratégias…
         </p>
       )}
@@ -193,12 +184,9 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
       {strategies.error && (
         <div
           role="alert"
-          className="flex flex-col gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between"
         >
-          <span>
-            Não foi possível carregar as estratégias: {strategies.error}. Os avanços seguem abaixo
-            sem agrupamento.
-          </span>
+          <span>Não foi possível carregar as estratégias: {strategies.error}. Os avanços seguem abaixo.</span>
           <Button
             size="sm"
             variant="outline"
@@ -210,32 +198,76 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
         </div>
       )}
 
-      {!strategies.loading && !strategies.error && strategies.items.length === 0 && (
-        <p className="rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-          Nenhuma estratégia criada. Os avanços continuam em "Sem estratégia".
-        </p>
-      )}
-
-      {strategies.items.length > 0 && (
-        <ul className="grid gap-2" aria-describedby={helpId}>
-          {strategies.items.map((strategy) => {
-            const isArchived = strategy.status === 'arquivada'
-            const isOpen = Boolean(expanded[strategy.id])
-            const busy = statusBusyId === strategy.id
-            return (
-              <li
-                key={strategy.id}
-                className="rounded-xl border border-border bg-muted/40 p-3 space-y-2"
+      {strategies.items.map((strategy) => {
+        const isArchived = strategy.status === 'arquivada'
+        // Aberta por padrão, como no Mapa; a arquivada vem recolhida.
+        const isOpen = expanded[strategy.id] ?? !isArchived
+        const busy = statusBusyId === strategy.id
+        const dela = porEstrategia.get(strategy.id) ?? []
+        return (
+          <div key={strategy.id} id={`estrategia-${strategy.id}`} data-estrategia={strategy.id} className="scroll-mt-24">
+            <div className="flex items-start gap-1">
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-label={`${isOpen ? 'Recolher' : 'Abrir'} ${strategy.title}`}
+                onClick={() => setExpanded((prev) => ({ ...prev, [strategy.id]: !isOpen }))}
+                className={`flex h-11 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary ${FOCO}`}
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
-                    {strategy.title}
-                  </span>
-                  <Badge variant="outline" className="text-[10px] uppercase">
-                    {isArchived ? 'Arquivada' : 'Ativa'}
-                  </Badge>
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${isOpen ? '' : '-rotate-90'}`}
+                  aria-hidden="true"
+                />
+              </button>
+              <div className="flex min-h-11 min-w-0 flex-1 flex-col justify-center px-2 py-1.5">
+                <span className="break-words text-base font-medium leading-snug text-foreground">
+                  {strategy.title}
+                </span>
+                <span className="text-[13px] text-muted-foreground">
+                  Estratégia{isArchived ? ' · arquivada' : ''}
+                </span>
+              </div>
+            </div>
+            {isOpen && (
+              <div className="ml-[17px] flex flex-col gap-1 border-l-2 border-border pl-4">
+                {strategy.description?.trim() ? (
+                  <p className="whitespace-pre-wrap break-words px-2 py-1 text-sm text-muted-foreground">
+                    {strategy.description}
+                  </p>
+                ) : null}
+                {dela.length > 0 && renderActions(dela)}
+                {!isArchived && podeAdicionar && (
+                  <AdicionarNoLugar
+                    tipos={['avanco']}
+                    onde={{ resultadoId: projectId, estrategiaId: strategy.id }}
+                    contexto={contexto}
+                    em={strategy.title}
+                    onCriado={() => onAvancosCriados?.()}
+                  />
+                )}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
+                  <Triade
+                    elemento="estrategia"
+                    id={strategy.id}
+                    titulo={strategy.title}
+                    de={`estratégia ${strategy.title}`}
+                    onEditar={() => openEdit(strategy)}
+                    arquivado={isArchived}
+                    onArquivar={() => {
+                      if (isArchived) void handleSetStatus(strategy, 'ativa')
+                      else {
+                        setArchiveError(null)
+                        setArchiveTarget(strategy)
+                      }
+                    }}
+                    ocupado={busy}
+                    onExcluido={() => {
+                      strategies.reload()
+                      onAvancosCriados?.()
+                    }}
+                  />
                 </div>
-                {!isArchived && (
+                {!isArchived && podeAdicionar && (
                   <Desdobrar
                     nivel="estrategia"
                     texto={`Estratégia: ${strategy.title}. Resultado: ${projectLabel}`}
@@ -257,107 +289,40 @@ export const StrategySection: React.FC<StrategySectionProps> = ({
                     onCriados={() => onAvancosCriados?.()}
                   />
                 )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-expanded={isOpen}
-                    aria-controls={`strategy-desc-${strategy.id}`}
-                    onClick={() => toggleExpanded(strategy.id)}
-                    className="min-h-11 gap-1 text-xs sm:min-h-9"
+                {comMaterial[strategy.id] ? (
+                  <Referencias elemento="estrategia" id={strategy.id} />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setComMaterial((m) => ({ ...m, [strategy.id]: true }))}
+                    className={`flex min-h-11 items-center gap-2 self-start rounded-xl px-2 text-[15px] text-muted-foreground hover:bg-secondary ${FOCO}`}
                   >
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                      aria-hidden="true"
-                    />
-                    {isOpen ? 'Ocultar descrição' : 'Ver descrição'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => openEdit(strategy)}
-                    aria-label={`Editar estratégia ${strategy.title}`}
-                    className="min-h-11 gap-1 text-xs sm:min-h-9"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Editar
-                  </Button>
-                  {isArchived ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => handleSetStatus(strategy, 'ativa')}
-                      aria-label={`Reativar estratégia ${strategy.title}`}
-                      className="min-h-11 gap-1 text-xs sm:min-h-9"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                      Reativar
-                    </Button>
-                  ) : (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => {
-                        setArchiveError(null)
-                        setArchiveTarget(strategy)
-                      }}
-                      aria-label={`Arquivar estratégia ${strategy.title}`}
-                      className="min-h-11 gap-1 text-xs sm:min-h-9"
-                    >
-                      <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-                      Arquivar
-                    </Button>
-                  )}
-                </div>
-                {isOpen && (
-                  <p
-                    id={`strategy-desc-${strategy.id}`}
-                    className="whitespace-pre-wrap break-words text-sm text-foreground"
-                  >
-                    {strategy.description || (
-                      <span className="italic text-muted-foreground">Sem descrição.</span>
-                    )}
-                  </p>
+                    <Paperclip className="h-4 w-4" aria-hidden="true" />
+                    Material de referência
+                  </button>
                 )}
-                {isOpen && <Referencias elemento="estrategia" id={strategy.id} />}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      {/* Agrupamento: só com a lista de Estratégias confirmada. */}
-      {actions.length > 0 &&
-        (grouped ? (
-          <div className="space-y-4">
-            {groups.map((group) => {
-              const archived = group.kind === 'strategy' && group.strategy?.status === 'arquivada'
-              return (
-                <div key={group.key} className="space-y-2">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-border pb-1">
-                    <span className="min-w-0 break-words text-sm font-semibold text-foreground">
-                      {strategyGroupLabel(group)}
-                    </span>
-                    {archived && (
-                      <Badge variant="outline" className="text-[10px] uppercase">
-                        Arquivada
-                      </Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      {group.actions.length} {group.actions.length === 1 ? 'avanço' : 'avanços'}
-                    </span>
-                  </div>
-                  {renderActions(group.actions)}
-                </div>
-              )
-            })}
+              </div>
+            )}
           </div>
-        ) : (
-          renderActions(actions)
-        ))}
+        )
+      })}
+
+      {/* Sem a lista de estratégias confirmada, os avanços aparecem todos juntos. */}
+      {grouped ? soltos.length > 0 && renderActions(soltos) : actions.length > 0 && renderActions(actions)}
+
+      {rodape}
+
+      {podeAdicionar && (
+        <Desdobrar
+          nivel="resultado"
+          texto={projectLabel}
+          rotulo="Desdobrar em estratégias"
+          onCriar={async (s) => {
+            await pegadaOp('criar_estrategia', { resultado_id: projectId, titulo: s.titulo })
+          }}
+          onCriados={() => strategies.reload()}
+        />
+      )}
 
       <StrategyModal
         open={isModalOpen}

@@ -34,6 +34,7 @@ function digitandoEmCampo(alvo: EventTarget | null): boolean {
 type Sugestao = Record<string, string>
 const DESTINOS: Record<string, string> = {
   resultado: 'um Resultado',
+  vontade: 'uma Vontade',
   responsabilidade: 'uma Responsabilidade',
   estrategia: 'uma Estratégia',
 }
@@ -96,7 +97,7 @@ export function GlobalCaptureHost() {
     const t = setTimeout(() => {
       sugerir('captura', valor, true)
         .then((r) => {
-          if (vivo && ['avanco', 'resultado', 'responsabilidade', 'estrategia'].includes(r.sugestao?.destino))
+          if (vivo && ['avanco', 'resultado', 'vontade', 'responsabilidade', 'estrategia'].includes(r.sugestao?.destino))
             setSugestao(r.sugestao)
         })
         .catch(() => {})
@@ -286,7 +287,7 @@ export function GlobalCaptureHost() {
         </div>
         <p className="text-center text-[13px] text-muted-foreground">
           Capturar leva um toque. Nada é perdido, nada é decidido por você.{' '}
-          <Link to="/capturas" onClick={() => setAberto(false)} className="underline underline-offset-4">
+          <Link to="/caixa" onClick={() => setAberto(false)} className="underline underline-offset-4">
             Ver capturas
           </Link>
         </p>

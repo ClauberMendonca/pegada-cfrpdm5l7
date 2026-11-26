@@ -164,6 +164,132 @@ function pegadaRota(e) {
         changes.push({ c: collection, id: rec.id, k: 'update', before: before, after: after })
         return rec
       },
+      // Exclusão física: sai do banco e não volta. O evento guarda só o nome.
+      remove: function (rec) {
+        var collection = rec.collection().name
+        var before = {}
+        var nome = rec.getString('title') || rec.getString('note')
+        if (nome) before.title = String(nome).slice(0, 200)
+        var id = rec.id
+        app.delete(rec)
+        changes.push({ c: collection, id: id, k: 'delete', before: before, after: {} })
+      },
+    }
+  }
+
+  // ---------------------------------------------------------------- excluir
+
+  var EXCLUIVEIS = {
+    vontade: ['wishes', 'Vontade'],
+    responsabilidade: ['responsibilities', 'Responsabilidade'],
+    resultado: ['projects', 'Resultado'],
+    estrategia: ['strategies', 'Estratégia'],
+    avanco: ['actions', 'Avanço'],
+  }
+
+  function todos(app, collection, filter, params) {
+    return app.findRecordsByFilter(collection, filter, '', 0, 0, params)
+  }
+
+  /**
+   * Tudo o que está embaixo de um elemento, na ordem da escada. Devolve os
+   * registros a apagar e a contagem que a pessoa vê antes de confirmar.
+   */
+  function abaixoDe(app, userId, elemento, id) {
+    var def = EXCLUIVEIS[elemento]
+    if (!def)
+      throw rule(
+        'ELEMENTO_INVALIDO',
+        'elemento deve ser vontade, responsabilidade, resultado, estrategia ou avanco.',
+      )
+    var raiz
+    if (elemento === 'estrategia') {
+      try {
+        raiz = app.findRecordById('strategies', id)
+      } catch (_) {
+        throw new NotFoundError('Estratégia não encontrado(a): ' + id)
+      }
+      findOwned(app, 'projects', raiz.getString('project_id'), userId, 'Estratégia')
+    } else raiz = findOwned(app, def[0], id, userId, def[1])
+
+    var projetos = []
+    var estrategias = []
+    var avancos = []
+    var visto = {}
+    var juntaAvancos = function (lista) {
+      for (var i = 0; i < lista.length; i++)
+        if (!visto[lista[i].id]) {
+          visto[lista[i].id] = true
+          avancos.push(lista[i])
+        }
+    }
+    if (elemento === 'vontade')
+      projetos = todos(app, 'projects', 'user_id = {:u} && wish_id = {:id}', { u: userId, id: id })
+    if (elemento === 'responsabilidade') {
+      projetos = todos(app, 'projects', 'user_id = {:u} && responsibility_id = {:id}', { u: userId, id: id })
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && responsibility_id = {:id}', { u: userId, id: id }))
+    }
+    if (elemento === 'resultado') projetos = [raiz]
+    for (var p = 0; p < projetos.length; p++) {
+      estrategias = estrategias.concat(todos(app, 'strategies', 'project_id = {:id}', { id: projetos[p].id }))
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && project_id = {:id}', { u: userId, id: projetos[p].id }))
+    }
+    if (elemento === 'estrategia') {
+      estrategias = [raiz]
+      juntaAvancos(todos(app, 'actions', 'user_id = {:u} && strategy_id = {:id}', { u: userId, id: id }))
+    }
+    if (elemento === 'avanco') juntaAvancos([raiz])
+
+    // O que vai junto, preso a cada item: notas, tempo registrado e anexos.
+    var notas = []
+    var tempos = []
+    var anexos = []
+    var vistoExtra = {}
+    var junta = function (alvo, lista) {
+      for (var i = 0; i < lista.length; i++)
+        if (!vistoExtra[lista[i].id]) {
+          vistoExtra[lista[i].id] = true
+          alvo.push(lista[i])
+        }
+    }
+    var anexosDe = function (tipo, eid) {
+      junta(anexos, todos(app, 'references', 'user_id = {:u} && element_type = {:t} && element_id = {:id}', { u: userId, t: tipo, id: eid }))
+    }
+    for (var a = 0; a < avancos.length; a++) {
+      junta(notas, todos(app, 'progress_logs', 'action_id = {:id}', { id: avancos[a].id }))
+      junta(tempos, todos(app, 'time_entries', 'action_id = {:id}', { id: avancos[a].id }))
+      anexosDe('avanco', avancos[a].id)
+    }
+    for (var e = 0; e < estrategias.length; e++) anexosDe('estrategia', estrategias[e].id)
+    for (var q = 0; q < projetos.length; q++) {
+      junta(notas, todos(app, 'progress_logs', 'project_id = {:id}', { id: projetos[q].id }))
+      junta(tempos, todos(app, 'time_entries', 'project_id = {:id}', { id: projetos[q].id }))
+      anexosDe('resultado', projetos[q].id)
+    }
+    if (elemento === 'responsabilidade') anexosDe('responsabilidade', id)
+
+    var proprio = function (lista) {
+      var n = 0
+      for (var i = 0; i < lista.length; i++) if (lista[i].id !== raiz.id) n++
+      return n
+    }
+    return {
+      raiz: raiz,
+      nome: def[1],
+      projetos: projetos,
+      estrategias: estrategias,
+      avancos: avancos,
+      notas: notas,
+      tempos: tempos,
+      anexos: anexos,
+      abaixo: {
+        resultados: proprio(projetos),
+        estrategias: proprio(estrategias),
+        avancos: proprio(avancos),
+        notas: notas.length,
+        tempos: tempos.length,
+        anexos: anexos.length,
+      },
     }
   }
 
@@ -202,11 +328,13 @@ function pegadaRota(e) {
     var strategy = get('strategies', action.getString('strategy_id'))
     var directResp = get('responsibilities', action.getString('responsibility_id'))
     var resp = result ? get('responsibilities', result.getString('responsibility_id')) : directResp
+    var wish = result ? get('wishes', result.getString('wish_id')) : null
     var parts = ['Faço "' + title + '"']
     if (strategy) parts.push('pela estratégia "' + strategy.getString('title') + '"')
     if (result) {
       parts.push('para alcançar "' + result.getString('title') + '"')
-      if (resp) parts.push('sustentando "' + resp.getString('title') + '"')
+      if (wish) parts.push('realizando a vontade "' + wish.getString('title') + '"')
+      else if (resp) parts.push('sustentando "' + resp.getString('title') + '"')
     } else if (resp) {
       parts.push('para sustentar "' + resp.getString('title') + '"')
     }
@@ -221,8 +349,10 @@ function pegadaRota(e) {
       resultado: result ? { id: result.id, titulo: result.getString('title') } : null,
       estrategia: strategy ? { id: strategy.id, titulo: strategy.getString('title') } : null,
       responsabilidade: resp ? { id: resp.id, titulo: resp.getString('title') } : null,
-      // construir = nasce do Propósito; sustentar = nasce de uma Responsabilidade
-      apoio: semFio ? 'livre' : resp ? 'sustentar' : 'construir',
+      vontade: wish ? { id: wish.id, titulo: wish.getString('title') } : null,
+      // vontade = nasce de uma Vontade; responsabilidade = nasce de uma
+      // Responsabilidade (ou é rotina dela); livre = não nasce de nenhuma
+      apoio: wish ? 'vontade' : resp ? 'responsabilidade' : 'livre',
     }
   }
 
@@ -257,6 +387,7 @@ function pegadaRota(e) {
       status: r.getString('status'),
       contexto: r.getString('context'),
       responsabilidade_id: r.getString('responsibility_id') || null,
+      vontade_id: r.getString('wish_id') || null,
     }
   }
 
@@ -296,33 +427,6 @@ function pegadaRota(e) {
     return n + 1 > SUGGESTED_ACTIVE_RESULTS
       ? 'Você está com ' + (n + 1) + ' resultados ativos, perto do limite de 7.'
       : ''
-  }
-
-  // Campos do modelo antigo (antes do método). Aceitos só para não quebrar
-  // telas antigas; não aparecem no catálogo nem no MCP. Remover quando o
-  // formulário de Resultado for simplificado.
-  var LEGACY_RESULT_FIELDS = [
-    'aspiration',
-    'controllable_delivery',
-    'learning_asset',
-    'r_resultado',
-    'r_razao',
-    'r_referencia',
-    'r_rumo',
-    'r_recursos',
-    'r_restricoes',
-    'r_riscos',
-    'r_responsavel',
-  ]
-  function legacyResultPatch(input) {
-    var out = {}
-    var d = input && input._legado
-    if (!d || typeof d !== 'object') return out
-    for (var i = 0; i < LEGACY_RESULT_FIELDS.length; i++) {
-      var f = LEGACY_RESULT_FIELDS[i]
-      if (has(d, f)) out[f] = str(d[f])
-    }
-    return out
   }
 
   function checkResultShape(title, deadline) {
@@ -477,13 +581,21 @@ function pegadaRota(e) {
       write: false,
       title: 'Ver o mapa do sentido',
       description:
-        'Devolve a estrutura inteira: Propósito, Responsabilidades ativas, Resultados (ativos e futuros) com suas Estratégias e a contagem de avanços abertos. Use para entender onde encaixar algo novo.',
+        'Devolve a estrutura inteira: Propósito, Vontades ativas, Responsabilidades ativas (com os avanços e rotinas que as sustentam), Resultados (ativos e futuros) com suas Estratégias e avanços abertos, e os avanços livres. Use para entender onde encaixar algo novo.',
       schema: { type: 'object', properties: {} },
       run: function (ctx) {
         var app = ctx.app
         var u = ctx.userId
         var resps = app.findRecordsByFilter(
           'responsibilities',
+          "user_id = {:u} && status = 'ativa'",
+          'title',
+          0,
+          0,
+          { u: u },
+        )
+        var wishes = app.findRecordsByFilter(
+          'wishes',
           "user_id = {:u} && status = 'ativa'",
           'title',
           0,
@@ -537,16 +649,30 @@ function pegadaRota(e) {
         }
         var openByStrategy = {}
         var openLoose = {}
+        // Avanços sem resultado: os que sustentam uma responsabilidade (rotinas
+        // e avulsos) e os livres, que não têm ligação nenhuma e são legítimos.
+        var openByResp = {}
+        var openFree = []
         for (var o = 0; o < openActions.length; o++) {
+          var oa = openActions[o]
           var item = {
-            id: openActions[o].id,
-            titulo: openActions[o].getString('title'),
-            tipo: openActions[o].getString('kind') || 'acao',
+            id: oa.id,
+            titulo: oa.getString('title'),
+            tipo: oa.getString('kind') || 'acao',
+            status: oa.getString('status'),
+            contexto: oa.getString('context'),
+            hoje: oa.getBool('is_today_selected') || oa.getBool('is_next_step'),
+            principal: oa.getBool('is_next_step'),
+            rotina: !!oa.getString('recurrence_series_id'),
+            prazo: oa.getString('deadline'),
           }
-          var sid = openActions[o].getString('strategy_id')
-          var opid = openActions[o].getString('project_id')
+          var sid = oa.getString('strategy_id')
+          var opid = oa.getString('project_id')
+          var orid = oa.getString('responsibility_id')
           if (sid) (openByStrategy[sid] = openByStrategy[sid] || []).push(item)
           else if (opid) (openLoose[opid] = openLoose[opid] || []).push(item)
+          else if (orid) (openByResp[orid] = openByResp[orid] || []).push(item)
+          else openFree.push(item)
         }
         var resultsOut = results.map(function (r) {
           var v = resultView(r)
@@ -576,9 +702,20 @@ function pegadaRota(e) {
               titulo: r.getString('title'),
               contexto: r.getString('context'),
               escolhida_por: r.getString('chosen_by') || null,
+              avancos: openByResp[r.id] || [],
+            }
+          }),
+          vontades: wishes.map(function (r) {
+            return {
+              id: r.id,
+              titulo: r.getString('title'),
+              contexto: r.getString('context'),
+              descricao: r.getString('description'),
+              avancos: [],
             }
           }),
           resultados: resultsOut,
+          avancos_livres: openFree,
           avancos_sem_fio: semFio,
           resultados_sem_forma_minima: results
             .filter(function (r) {
@@ -624,7 +761,7 @@ function pegadaRota(e) {
           { u: u, s: since },
         )
         var cache = {}
-        var balanco = { construir: 0, sustentar: 0, livre: 0 }
+        var balanco = { vontade: 0, responsabilidade: 0, livre: 0 }
         var porResultado = {}
         var porEstrategia = {}
         for (var i = 0; i < done.length; i++) {
@@ -718,8 +855,11 @@ function pegadaRota(e) {
           }),
           resultados_parados: parados,
           balanco: {
-            construir: balanco.construir,
-            sustentar: balanco.sustentar,
+            vontades: balanco.vontade,
+            responsabilidades: balanco.responsabilidade,
+            // nomes antigos, mantidos para quem ainda os lê: construir = vontades
+            construir: balanco.vontade,
+            sustentar: balanco.responsabilidade,
             livres: balanco.livre,
             percentual_livres: Math.round((balanco.livre * 100) / total),
           },
@@ -964,7 +1104,7 @@ function pegadaRota(e) {
       write: true,
       title: 'Processar captura',
       description:
-        "Transforma uma captura pendente em: 'avanco' (com ou sem fio), 'resultado', 'responsabilidade' ou 'estrategia'. Em 'dados' vão os mesmos campos da operação de criação correspondente (criar_avanco, criar_resultado, criar_responsabilidade, criar_estrategia). Se dados.titulo faltar, usa o texto da captura. Para agentes, os destinos resultado, responsabilidade e estrategia viram proposta para o dono confirmar.",
+        "Transforma uma captura pendente em: 'avanco' (com ou sem fio), 'resultado' (ligado a uma vontade, a uma responsabilidade ou livre), 'vontade', 'responsabilidade' ou 'estrategia'. Em 'dados' vão os mesmos campos da operação de criação correspondente (criar_avanco, criar_resultado, criar_responsabilidade, criar_estrategia). Se dados.titulo faltar, usa o texto da captura. Para agentes, os destinos resultado, responsabilidade e estrategia viram proposta para o dono confirmar.",
       isChoice: function (input) {
         return str(input.destino) !== 'avanco'
       },
@@ -975,7 +1115,7 @@ function pegadaRota(e) {
           captura_id: S_ID,
           destino: {
             type: 'string',
-            enum: ['avanco', 'resultado', 'responsabilidade', 'estrategia'],
+            enum: ['avanco', 'resultado', 'vontade', 'responsabilidade', 'estrategia'],
           },
           dados: { type: 'object', description: 'campos da criação do destino' },
         },
@@ -998,6 +1138,7 @@ function pegadaRota(e) {
             'converted_project_id',
             'resultado_id',
           ],
+          vontade: ['criar_vontade', 'convertida_vontade', 'converted_wish_id', 'vontade_id'],
           responsabilidade: [
             'criar_responsabilidade',
             'convertida_responsabilidade',
@@ -1014,7 +1155,7 @@ function pegadaRota(e) {
         if (!map)
           throw rule(
             'DESTINO_INVALIDO',
-            'destino deve ser avanco, resultado, responsabilidade ou estrategia.',
+            'destino deve ser avanco, resultado, vontade, responsabilidade ou estrategia.',
           )
         var out = OPS[map[0]].run(ctx, dados)
         var patch = { status: map[1] }
@@ -1626,6 +1767,96 @@ function pegadaRota(e) {
       },
     },
 
+    // ======================= VONTADES =======================
+    criar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Criar vontade',
+      description:
+        'Cria uma vontade: algo que a pessoa quer construir e que ninguém cobra se ela largar ("se eu largar, alguém me cobra?" não = Vontade; sim = Responsabilidade). Não tem linha de chegada: os resultados nascem dentro dela. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['titulo', 'contexto'],
+        properties: {
+          titulo: { type: 'string', maxLength: 200 },
+          contexto: S_CTX,
+          descricao: { type: 'string', maxLength: 3000 },
+        },
+      },
+      run: function (ctx, input) {
+        var c = str(input.contexto)
+        if (c !== 'vida' && c !== 'trabalho')
+          throw rule('CONTEXTO_OBRIGATORIO', "contexto deve ser 'vida' ou 'trabalho'.")
+        if (!str(input.titulo)) throw rule('TITULO_OBRIGATORIO', 'A vontade precisa de um título.')
+        var r = ctx.create('wishes', {
+          title: str(input.titulo),
+          context: c,
+          status: 'ativa',
+          description: str(input.descricao) || undefined,
+        })
+        return { resumo: 'Criou a vontade "' + r.getString('title') + '"', vontade_id: r.id }
+      },
+    },
+
+    editar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Editar vontade',
+      description: 'Muda título, descrição ou contexto de uma vontade. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['vontade_id'],
+        properties: {
+          vontade_id: S_ID,
+          titulo: { type: 'string', maxLength: 200 },
+          descricao: { type: 'string', maxLength: 3000 },
+          contexto: S_CTX,
+        },
+      },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'wishes', str(input.vontade_id), ctx.userId, 'Vontade')
+        var patch = {}
+        if (has(input, 'titulo')) {
+          if (!str(input.titulo)) throw rule('TITULO_OBRIGATORIO', 'A vontade precisa de um título.')
+          patch.title = str(input.titulo)
+        }
+        if (has(input, 'descricao')) patch.description = str(input.descricao)
+        if (has(input, 'contexto')) {
+          var cx = str(input.contexto)
+          if (cx !== 'vida' && cx !== 'trabalho')
+            throw rule('CONTEXTO_OBRIGATORIO', "contexto deve ser 'vida' ou 'trabalho'.")
+          patch.context = cx
+        }
+        ctx.update(r, patch)
+        return { resumo: 'Editou a vontade "' + r.getString('title') + '"', vontade_id: r.id }
+      },
+    },
+
+    arquivar_vontade: {
+      scope: 'propor',
+      write: true,
+      choice: true,
+      title: 'Arquivar vontade',
+      description:
+        'Arquiva uma vontade que perdeu a força (reativar=true para trazer de volta). Os resultados dela continuam ligados. Agentes só propõem.',
+      schema: {
+        type: 'object',
+        required: ['vontade_id'],
+        properties: { vontade_id: S_ID, reativar: { type: 'boolean' } },
+      },
+      run: function (ctx, input) {
+        var r = findOwned(ctx.app, 'wishes', str(input.vontade_id), ctx.userId, 'Vontade')
+        var back = input.reativar === true
+        ctx.update(r, { status: back ? 'ativa' : 'arquivada' })
+        return {
+          resumo: (back ? 'Reativou' : 'Arquivou') + ' a vontade "' + r.getString('title') + '"',
+          vontade_id: r.id,
+        }
+      },
+    },
+
     criar_resultado: {
       scope: 'propor',
       write: true,
@@ -1641,6 +1872,7 @@ function pegadaRota(e) {
           prazo: S_DATE,
           como_sei: { type: 'string', maxLength: 2000, description: 'como saberei que alcancei' },
           responsabilidade_id: S_ID,
+          vontade_id: { type: 'string', description: 'a Vontade de onde o resultado nasce (ou responsabilidade_id; nunca as duas)' },
           contexto: S_CTX,
           situacao: {
             type: 'string',
@@ -1662,6 +1894,12 @@ function pegadaRota(e) {
         } else if (!title) checkResultShape(title, deadline)
         if (deadline && !isDate(deadline)) throw rule('DATA_INVALIDA', 'Prazo deve ser AAAA-MM-DD.')
         var respId = str(input.responsabilidade_id)
+        var wishId = str(input.vontade_id)
+        if (respId && wishId)
+          throw rule(
+            'ORIGEM_UNICA',
+            'Um resultado nasce de uma Vontade ou de uma Responsabilidade, não das duas.',
+          )
         var context = str(input.contexto)
         if (respId)
           context = findOwned(
@@ -1671,15 +1909,17 @@ function pegadaRota(e) {
             ctx.userId,
             'Responsabilidade',
           ).getString('context')
+        if (wishId)
+          context = findOwned(ctx.app, 'wishes', wishId, ctx.userId, 'Vontade').getString('context')
         if (context !== 'vida' && context !== 'trabalho') context = 'trabalho'
-        var data = legacyResultPatch(input)
-        data.title = title
+        var data = { title: title }
         var r = ctx.create(
           'projects',
           Object.assign(data, {
             deadline: deadline || undefined,
             completion_condition: str(input.como_sei) || undefined,
             responsibility_id: respId || undefined,
+            wish_id: wishId || undefined,
             context: context,
             status: status,
           }),
@@ -1708,14 +1948,15 @@ function pegadaRota(e) {
           prazo: S_DATE,
           como_sei: { type: 'string' },
           contexto: S_CTX,
-          responsabilidade_id: { type: 'string', description: "id ou '' para nascer do Propósito" },
+          responsabilidade_id: { type: 'string', description: "id ou '' para desligar" },
+          vontade_id: { type: 'string', description: "id ou '' para desligar" },
         },
       },
       run: function (ctx, input) {
         var r = findOwned(ctx.app, 'projects', str(input.resultado_id), ctx.userId, 'Resultado')
-        var patch = legacyResultPatch(input)
+        var patch = {}
         if (has(input, 'titulo')) patch.title = str(input.titulo)
-        if (has(input, 'contexto') && !has(input, 'responsabilidade_id')) {
+        if (has(input, 'contexto') && !has(input, 'responsabilidade_id') && !has(input, 'vontade_id')) {
           var cx = str(input.contexto)
           if (cx === 'vida' || cx === 'trabalho') patch.context = cx
         }
@@ -1733,6 +1974,22 @@ function pegadaRota(e) {
               'Responsabilidade',
             ).getString('context')
         }
+        if (has(input, 'vontade_id')) {
+          var wid = str(input.vontade_id)
+          patch.wish_id = wid
+          if (wid) {
+            patch.context = findOwned(ctx.app, 'wishes', wid, ctx.userId, 'Vontade').getString('context')
+            // Nasce de uma só origem: ligar a uma Vontade desliga a Responsabilidade.
+            if (!has(input, 'responsabilidade_id')) patch.responsibility_id = ''
+          }
+        }
+        if (has(patch, 'responsibility_id') && patch.responsibility_id && !has(input, 'vontade_id'))
+          patch.wish_id = ''
+        if (patch.responsibility_id && patch.wish_id)
+          throw rule(
+            'ORIGEM_UNICA',
+            'Um resultado nasce de uma Vontade ou de uma Responsabilidade, não das duas.',
+          )
         var finalTitle = has(patch, 'title') ? patch.title : r.getString('title')
         var finalDeadline = has(patch, 'deadline') ? patch.deadline : r.getString('deadline')
         var aviso = ''
@@ -1881,6 +2138,218 @@ function pegadaRota(e) {
           estrategia_id: s.id,
         }
       },
+    },
+  }
+
+  var S_EXCLUIR = {
+    type: 'object',
+    required: ['elemento', 'id'],
+    properties: {
+      elemento: { type: 'string', enum: ['vontade', 'responsabilidade', 'resultado', 'estrategia', 'avanco'] },
+      id: S_ID,
+    },
+  }
+
+  OPS.ver_o_que_sai = {
+    scope: 'dono',
+    title: 'Ver o que sai junto ao excluir',
+    description:
+      'Conta o que está embaixo de um elemento e seria apagado junto com ele: resultados, estratégias, avanços, notas, tempo registrado e anexos. Não muda nada.',
+    schema: S_EXCLUIR,
+    run: function (ctx, input) {
+      var t = abaixoDe(ctx.app, ctx.userId, str(input.elemento), str(input.id))
+      return { elemento: str(input.elemento), id: t.raiz.id, titulo: t.raiz.getString('title'), abaixo: t.abaixo }
+    },
+  }
+
+  // Cópia fiel de uma linha, pronta para voltar ao banco como estava.
+  function copiaDaLinha(rec) {
+    var fields = rec.collection().fields
+    var row = {}
+    for (var i = 0; i < fields.length; i++) {
+      var f = fields[i]
+      var n = f.name
+      var t = f.type()
+      if (t === 'bool') row[n] = rec.getBool(n)
+      else if (t === 'number') row[n] = rec.getFloat(n)
+      else row[n] = rec.getString(n)
+    }
+    return row
+  }
+
+  // Quem cada linha precisa encontrar ao voltar. true = não volta sem ele.
+  var PAIS = {
+    projects: { responsibility_id: ['responsibilities', false], wish_id: ['wishes', false] },
+    strategies: { project_id: ['projects', true] },
+    actions: {
+      project_id: ['projects', false],
+      strategy_id: ['strategies', false],
+      responsibility_id: ['responsibilities', false],
+    },
+    progress_logs: { project_id: ['projects', false], action_id: ['actions', false] },
+    time_entries: { project_id: ['projects', false], action_id: ['actions', false] },
+  }
+
+  function lixoDoDono(app, userId, id) {
+    return findOwned(app, 'trash', id, userId, 'Item da Lixeira')
+  }
+
+  function lixoView(r) {
+    return {
+      id: r.id,
+      elemento: r.getString('element_type'),
+      titulo: r.getString('title'),
+      abaixo: jsonField(r, 'counts', {}),
+      excluido_em: r.getString('created'),
+    }
+  }
+
+  OPS.excluir = {
+    scope: 'dono',
+    write: true,
+    title: 'Excluir (vai para a Lixeira)',
+    description:
+      'Tira do Pegada uma vontade, responsabilidade, resultado, estratégia ou avanço, junto com tudo o que está embaixo, e guarda na Lixeira. De lá o dono restaura ou exclui de vez. Só o dono faz, nunca um agente.',
+    schema: S_EXCLUIR,
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente')
+        throw new ForbiddenError('Só o dono exclui. Um agente pode arquivar ou propor.')
+      var elemento = str(input.elemento)
+      var t = abaixoDe(ctx.app, ctx.userId, elemento, str(input.id))
+      var k
+      for (k = 0; k < t.avancos.length; k++) {
+        var av = t.avancos[k]
+        var series = ctx.app.countRecords('recurrence_series', $dbx.hashExp({ source_action_id: av.id }))
+        if (av.getString('recurrence_series_id') || series > 0)
+          throw rule(
+            'AVANCO_DE_SERIE',
+            'O avanço ' + label(av) + ' faz parte de uma série que se repete. Encerre a série antes de excluir.',
+          )
+      }
+      for (k = 0; k < t.tempos.length; k++)
+        if (t.tempos[k].getString('status') === 'running')
+          throw rule('RELOGIO_LIGADO', 'O relógio está contando tempo aqui. Pare o relógio antes de excluir.')
+
+      // Ordem de volta: primeiro quem está em cima, depois quem depende dele.
+      var titulo = t.raiz.getString('title')
+      var topo = elemento === 'vontade' || elemento === 'responsabilidade' ? [t.raiz] : []
+      var grupos = [topo, t.projetos, t.estrategias, t.avancos, t.notas, t.tempos, t.anexos]
+      var linhas = []
+      for (var g = 0; g < grupos.length; g++)
+        for (k = 0; k < grupos[g].length; k++)
+          linhas.push({ c: grupos[g][k].collection().name, row: copiaDaLinha(grupos[g][k]) })
+      var lixo = ctx.create('trash', {
+        element_type: elemento,
+        element_id: t.raiz.id,
+        title: titulo,
+        counts: t.abaixo,
+        payload: linhas,
+      })
+      // Saída do banco: de baixo para cima.
+      for (g = grupos.length - 1; g >= 0; g--)
+        for (k = 0; k < grupos[g].length; k++) ctx.remove(grupos[g][k])
+      var junto = t.abaixo.resultados + t.abaixo.estrategias + t.abaixo.avancos
+      return {
+        resumo:
+          'Mandou para a Lixeira ' +
+          (elemento === 'avanco' ? 'o avanço' : elemento === 'resultado' ? 'o resultado' : 'a ' + t.nome.toLowerCase()) +
+          ' "' + titulo + '"' +
+          (junto ? ' e ' + junto + (junto === 1 ? ' item' : ' itens') + ' abaixo' : ''),
+        lixeira_id: lixo.id,
+        abaixo: t.abaixo,
+      }
+    },
+  }
+
+  OPS.ver_lixeira = {
+    scope: 'dono',
+    title: 'Ver a Lixeira',
+    description: 'Lista o que foi excluído e ainda pode ser restaurado, do mais recente para o mais antigo.',
+    schema: { type: 'object', properties: {} },
+    run: function (ctx) {
+      var rs = ctx.app.findRecordsByFilter('trash', 'user_id = {:u}', '-created', 0, 0, { u: ctx.userId })
+      return { itens: rs.map(lixoView) }
+    },
+  }
+
+  OPS.restaurar = {
+    scope: 'dono',
+    write: true,
+    title: 'Restaurar da Lixeira',
+    description:
+      'Devolve ao Pegada um item excluído, com tudo o que foi junto. Se o lugar de onde ele veio não existe mais, ele volta solto. Só o dono faz.',
+    schema: { type: 'object', required: ['lixeira_id'], properties: { lixeira_id: S_ID } },
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente') throw new ForbiddenError('Só o dono restaura.')
+      var lixo = lixoDoDono(ctx.app, ctx.userId, str(input.lixeira_id))
+      var linhas = jsonField(lixo, 'payload', [])
+      var dentro = {}
+      var k
+      for (k = 0; k < linhas.length; k++) dentro[linhas[k].c + ':' + linhas[k].row.id] = true
+      var existe = function (c, id) {
+        return !!dentro[c + ':' + id] || !!safeFind(ctx.app, c, id)
+      }
+      var ativos = ctx.app.countRecords('projects', $dbx.hashExp({ user_id: ctx.userId, status: 'ativo' }))
+      var avisos = []
+      for (k = 0; k < linhas.length; k++) {
+        var c = linhas[k].c
+        var row = linhas[k].row
+        if (row.user_id !== ctx.userId) throw new ForbiddenError('Este item não é seu.')
+        if (safeFind(ctx.app, c, row.id)) continue
+        var pais = PAIS[c] || {}
+        for (var campo in pais) {
+          if (!row[campo] || existe(pais[campo][0], row[campo])) continue
+          if (pais[campo][1])
+            throw rule(
+              'SEM_LUGAR_PARA_VOLTAR',
+              'O resultado desta estratégia não existe mais. Restaure o resultado primeiro.',
+            )
+          row[campo] = ''
+          if (c === 'projects' || c === 'actions') avisos.push(row.title)
+        }
+        if (c === 'projects' && row.status === 'ativo') {
+          if (ativos >= MAX_ACTIVE_RESULTS) row.status = 'futuro'
+          else ativos++
+        }
+        if (c === 'actions') {
+          row.is_next_step = false
+          row.is_today_selected = false
+        }
+        ctx.app.db().insert(c, row).execute()
+        ctx.changes.push({ c: c, id: row.id, k: 'restore', before: {}, after: {} })
+      }
+      var titulo = lixo.getString('title')
+      ctx.app.delete(lixo)
+      return {
+        resumo: 'Restaurou da Lixeira "' + titulo + '"',
+        elemento: lixo.getString('element_type'),
+        id: lixo.getString('element_id'),
+        voltaram_soltos: avisos,
+      }
+    },
+  }
+
+  OPS.esvaziar_lixeira = {
+    scope: 'dono',
+    write: true,
+    title: 'Excluir de vez da Lixeira',
+    description:
+      'Apaga para sempre o que está na Lixeira: tudo, ou só os itens informados em "ids". Não tem volta. Só o dono faz.',
+    schema: {
+      type: 'object',
+      properties: { ids: { type: 'array', items: S_ID, description: 'sem ids, esvazia a Lixeira inteira' } },
+    },
+    run: function (ctx, input) {
+      if (ctx.actor && ctx.actor.type === 'agente') throw new ForbiddenError('Só o dono exclui de vez.')
+      var alvo = []
+      if (Array.isArray(input.ids) && input.ids.length) {
+        for (var i = 0; i < input.ids.length; i++) alvo.push(lixoDoDono(ctx.app, ctx.userId, str(input.ids[i])))
+      } else alvo = ctx.app.findRecordsByFilter('trash', 'user_id = {:u}', '', 0, 0, { u: ctx.userId })
+      for (var k = 0; k < alvo.length; k++) ctx.remove(alvo[k])
+      return {
+        resumo: 'Excluiu de vez ' + alvo.length + (alvo.length === 1 ? ' item' : ' itens') + ' da Lixeira',
+        excluidos: alvo.length,
+      }
     },
   }
 
@@ -2178,6 +2647,9 @@ function pegadaRota(e) {
       if (ev.getString('op') === 'desfazer')
         throw conflict('Não é possível desfazer um desfazer. Refaça a operação original.')
       var changes = jsonField(ev, 'changes', [])
+      for (var d = 0; d < changes.length; d++)
+        if (changes[d].k === 'delete' || changes[d].k === 'restore')
+          throw conflict('Isto se resolve na Lixeira: restaure o item por lá.')
       var ctx = makeCtx(tx, { type: actor.type, userId: actor.userId, agent: actor.agent })
       for (var i = changes.length - 1; i >= 0; i--) {
         var ch = changes[i]
@@ -2583,10 +3055,12 @@ function pegadaRota(e) {
       proposito:
         'Proponha uma frase de propósito no formato "Eu existo para [verbo] [quem ou o quê], para que [mudança]." Responda JSON {"texto": "...", "por_que": "uma frase"}.',
       captura:
-        'Classifique a captura: destino entre avanco, resultado, responsabilidade, estrategia; se avanco, o tipo. Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
+        'Classifique a captura: destino entre avanco, resultado, vontade, responsabilidade, estrategia; se avanco, o tipo. Teste entre vontade e responsabilidade: "se eu largar, alguém me cobra?" (sim = responsabilidade, não = vontade). Responda JSON {"destino": "...", "tipo": "...", "titulo": "...", "por_que": "uma frase"}.',
       // Desdobrar: descer um degrau da escada, sempre como sugestões selecionáveis.
       desdobrar_papel:
         'A pessoa descreve um PAPEL que vive (pai, sócia, líder). Traduza em 3 a 5 RESPONSABILIDADES: compromissos contínuos, com padrão a manter e sem linha de chegada, escritos como "Cuidar de…" ou "Zelar por…". Para cada uma, o contexto: vida ou trabalho. Responda JSON {"sugestoes": [{"titulo": "...", "contexto": "vida ou trabalho", "por_que": "uma frase"}]}.',
+      desdobrar_vontade:
+        'A pessoa informa uma VONTADE: algo que quer construir, sem linha de chegada (ex.: "voltar a tocar violão"). Proponha 2 a 4 RESULTADOS que podem nascer dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
       desdobrar_responsabilidade:
         'A pessoa informa uma RESPONSABILIDADE. Proponha 2 a 4 RESULTADOS que nascem dela: estados futuros e verificáveis, escritos como algo já pronto, com prazo AAAA-MM-DD só se fizer sentido. Responda JSON {"sugestoes": [{"titulo": "...", "prazo": "AAAA-MM-DD ou vazio", "por_que": "uma frase"}]}.',
       desdobrar_resultado:
@@ -2595,7 +3069,7 @@ function pegadaRota(e) {
         'A pessoa informa uma ESTRATÉGIA e o resultado a que ela serve. Proponha 3 a 5 AVANÇOS concretos: título curto começando por verbo e o tipo entre acao, compromisso, estudo, reflexao, ideia, espera. Responda JSON {"sugestoes": [{"titulo": "...", "tipo": "...", "por_que": "uma frase"}]}.',
       // Correção gentil: confere se o texto é mesmo um resultado.
       conferir_resultado:
-        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, responsabilidade (padrão a manter, sem linha de chegada), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
+        'A pessoa está criando um RESULTADO (estado futuro e verificável, com linha de chegada). Diga o que o texto é de fato: resultado, vontade (algo que a pessoa quer construir, sem linha de chegada e sem ninguém cobrando), responsabilidade (padrão a manter, alguém cobra se ela largar), estrategia (um caminho que serve a outro estado) ou proposito (nunca se conclui). Responda JSON {"e": "resultado|vontade|responsabilidade|estrategia|proposito", "por_que": "uma frase gentil, começando por Isto"}.',
     }[tipo]
     if (!guide) throw new BadRequestError('tipo de sugestão desconhecido.')
     var baseUrl = ($os.getenv('PEGADA_IA_URL') || 'https://api.anthropic.com').replace(/\/$/, '')

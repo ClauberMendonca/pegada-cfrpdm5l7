@@ -76,6 +76,18 @@ export interface Strategy {
   }
 }
 
+/** PEGADA — Vontade: o que a pessoa quer construir, sem que ninguém cobre. */
+export interface Wish {
+  id: string
+  user_id: string
+  title: string
+  description?: string
+  context: 'vida' | 'trabalho'
+  status: 'ativa' | 'arquivada'
+  created: string
+  updated: string
+}
+
 export interface Responsibility {
   id: string
   user_id: string
@@ -109,20 +121,8 @@ export interface Project {
   title: string
   context: EntityContext
   status: ProjectStatus
-  aspiration?: string // o que quero alcançar
-  controllable_delivery?: string // o que vou entregar (controlável)
   completion_condition?: string // condição de término
   deadline?: string // YYYY-MM-DD
-  learning_asset?: string // possível aprendizado ou ativo durável
-  // Oito Rs opcionais:
-  r_resultado?: string
-  r_razao?: string
-  r_referencia?: string
-  r_rumo?: string
-  r_recursos?: string
-  r_restricoes?: string
-  r_riscos?: string
-  r_responsavel?: string
   // NUMERAÇÃO PERMANENTE: número do banco (migration 0009); ausente/0 = indisponível.
   sequence_number?: number
   // FATIA 3A — Responsabilidade do Resultado: 0..1, opcional, vazio por padrão.
@@ -130,10 +130,13 @@ export interface Project {
   // Vínculo novo exige destino existente, mesmo dono, mesmo contexto e ativa
   // (validado no backend, incl. caminho txApp da conversão).
   responsibility_id?: string
+  /** A Vontade de onde o resultado nasce. Nunca junto com responsibility_id. */
+  wish_id?: string
   created: string
   updated: string
   expand?: {
     responsibility_id?: Responsibility
+    wish_id?: Wish
   }
 }
 

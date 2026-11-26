@@ -2,6 +2,7 @@
 // e o indicador global compacto do cronômetro.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { AlertCircle, RotateCcw, Timer } from 'lucide-react'
 import {
@@ -37,10 +38,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext'
 import { ownerTimezone, todayInZone, formatCalendarDay } from '@/lib/datetime'
 import { useRunningSeconds, useTimer } from '@/contexts/TimeContext'
-import { entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
-import { actionService } from '@/services/actionService'
-import { projectService } from '@/services/projectService'
-import { ActionItem, Project } from '@/types/execution'
+import { formatEntityTitle } from '@/lib/entityNumber'
 
 /**
  * "R-3 · Título" (ou só o título) — formatter EXISTENTE formatEntityTitle,
@@ -669,167 +667,63 @@ export const ProjectTimeHistory: React.FC<ProjectTimeHistoryProps> = ({
 // ---------------------------------------------------------------------------
 
 /**
- * NUMERAÇÃO — código do alvo corrente ("R-3"/"AV-12") para o indicador global.
- * Resolve com UMA leitura autenticada por (dono, tipo, id) — cache de módulo
- * compartilhado entre montagens, válido enquanto sessão/alvo não mudam.
- * Falha de leitura não bloqueia Pausar/Encerrar nem altera reconciliação;
- * sem número, título segue legível (nunca "P-0"). Respostas tardias são
- * ignoradas quando o alvo já mudou ou desmontou.
+ * O relógio visto de qualquer tela: um chip discreto no topo, no lugar da
+ * faixa que cobria o conteúdo. Tocar leva à ficha onde o tempo está correndo,
+ * e é lá que ficam pausar e parar.
  */
-const targetNumberCache = new Map<string, string | null>()
-
-function useTargetNumberCode(
-  targetType: TimeTargetType | null,
-  targetId: string | null | undefined,
-): string | null {
-  const [code, setCode] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!targetType || !targetId) {
-      setCode(null)
-      return
-    }
-    const cacheKey = `${targetType}:${targetId}`
-    const cached = targetNumberCache.get(cacheKey)
-    if (cached !== undefined) {
-      setCode(cached)
-      return
-    }
-    let cancelled = false
-    setCode(null)
-    const fetchNumber = async () => {
-      try {
-        const record =
-          targetType === 'action'
-            ? await actionService.getById(targetId)
-            : await projectService.getById(targetId)
-        const n =
-          targetType === 'action'
-            ? (record as ActionItem).sequence_number
-            : (record as Project).sequence_number
-        const resolved = entityNumberCode(targetType, n)
-        targetNumberCache.set(cacheKey, resolved)
-        if (!cancelled) setCode(resolved)
-      } catch {
-        if (!cancelled) setCode(null) // sem número; título segue legível
-      }
-    }
-    void fetchNumber()
-    return () => {
-      cancelled = true
-    }
-  }, [targetType, targetId])
-
-  return code
-}
-
-export const GlobalTimerIndicator: React.FC = () => {
-  const { running, pending, error, pauseTimer, endTimer, resumeTimer, reconcile, isReconciling } =
-    useTimer()
+export const GlobalTimerIndicator: React.FC<{ className?: string }> = ({ className }) => {
+  const { running, pending, error, reconcile, isReconciling } = useTimer()
   const liveSeconds = useRunningSeconds()
-
-  // NUMERAÇÃO — código do alvo corrente (só apresentação). Fonte única: o
-  // número persistido da entidade; sem ele, o título segue legível e a
-  // leitura autenticada única é tentada pelo hook abaixo (nunca por segundo
-  // de cronômetro, nunca por time_entry e sem iniciar/retomar nada).
-  const targetNumberCode = useTargetNumberCode(
-    running ? running.target_type : null,
-    running ? (running.target_type === 'action' ? running.action_id : running.project_id) : null,
-  )
 
   if (!running && !error) return null // conciliação nunca inicia nada automaticamente
 
   if (!running) {
     return (
-      <div
-        role="region"
-        aria-label="Estado do cronômetro"
-        className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:bottom-0 lg:left-56"
+      <button
+        type="button"
+        onClick={() => reconcile()}
+        disabled={isReconciling || pending !== null}
+        title={error || undefined}
+        aria-label={`Relógio com problema: ${error}. Reconfirmar`}
+        className={`flex h-11 items-center gap-2 rounded-full border border-destructive/40 px-3 text-sm text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}
       >
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Timer className="h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => reconcile()}
-            disabled={isReconciling || pending !== null}
-          >
-            {isReconciling ? 'Confirmando…' : 'Reconfirmar'}
-          </Button>
-        </div>
-      </div>
+        <Timer className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {isReconciling ? 'Confirmando…' : 'Reconfirmar'}
+      </button>
     )
   }
 
-  const seconds = running.status === 'paused' ? Number(running.duration_seconds) || 0 : liveSeconds
-  const busy = pending !== null || isReconciling
+  const pausado = running.status === 'paused'
+  const seconds = pausado ? Number(running.duration_seconds) || 0 : liveSeconds
+  const s = Math.max(0, Math.round(seconds))
+  const dois = (n: number) => String(n).padStart(2, '0')
+  const relogio =
+    s >= 3600
+      ? `${Math.floor(s / 3600)}:${dois(Math.floor((s % 3600) / 60))}:${dois(s % 60)}`
+      : `${dois(Math.floor(s / 60))}:${dois(s % 60)}`
+  const nome = running.target_title || (running.target_type === 'action' ? 'Avanço' : 'Resultado')
+  const to =
+    running.target_type === 'action'
+      ? `/mapa/avanco/${encodeURIComponent(running.action_id || '')}`
+      : `/mapa/resultado/${encodeURIComponent(running.project_id || '')}`
 
   return (
-    <div
-      role="region"
-      aria-label="Cronômetro ativo"
-      className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:bottom-0 lg:left-56"
+    <Link
+      to={to}
+      data-relogio-no-topo
+      title={`${pausado ? 'Pausado' : 'Correndo'}: ${nome}`}
+      aria-label={`Relógio ${pausado ? 'pausado' : 'correndo'} em ${nome}: ${relogio}. Abrir`}
+      className={`flex h-11 shrink-0 items-center gap-2 rounded-full bg-secondary px-3.5 text-sm font-semibold tabular-nums text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}
     >
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Timer className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span
-              className="truncate text-sm font-medium"
-              title={entityNumberedText(
-                running.target_type,
-                targetNumberCode,
-                running.target_title || (running.target_type === 'action' ? 'Avanço' : 'Resultado'),
-              )}
-            >
-              {entityNumberedText(
-                running.target_type,
-                targetNumberCode,
-                running.target_title || (running.target_type === 'action' ? 'Avanço' : 'Resultado'),
-              )}
-            </span>
-            <span className="text-sm tabular-nums" aria-live="off">
-              {formatDuration(seconds)}
-            </span>
-            {running.status === 'paused' && (
-              <Badge variant="outline" className="text-xs">
-                Pausado
-              </Badge>
-            )}
-          </div>
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {running.status === 'paused' ? (
-            <Button size="sm" onClick={() => resumeTimer(running.id)} disabled={busy}>
-              {busy && pending?.kind === 'resume' ? 'Confirmando…' : 'Retomar'}
-            </Button>
-          ) : (
-            <>
-              <Button size="sm" variant="outline" onClick={() => pauseTimer()} disabled={busy}>
-                {busy && pending?.kind === 'pause' ? 'Pausando…' : 'Pausar'}
-              </Button>
-              <Button size="sm" variant="destructive" onClick={() => endTimer()} disabled={busy}>
-                {busy && pending?.kind === 'end' ? 'Encerrando…' : 'Encerrar'}
-              </Button>
-            </>
-          )}
-          {running.status === 'paused' && (
-            <Button size="sm" variant="destructive" onClick={() => endTimer()} disabled={busy}>
-              {busy && pending?.kind === 'end' ? 'Encerrando…' : 'Encerrar'}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
+      <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+        {!pausado && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+        )}
+        <span
+          className={`relative inline-flex h-2.5 w-2.5 rounded-full ${pausado ? 'bg-muted-foreground' : 'bg-primary'}`}
+        />
+      </span>
+      {relogio}
+    </Link>
   )
 }

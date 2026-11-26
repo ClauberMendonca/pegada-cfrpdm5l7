@@ -37,7 +37,7 @@ interface Resumo {
 }
 
 const PERIODOS = [
-  { dias: 1, nome: 'Diária', titulo: 'Revisão do dia', frase: 'hoje', duracao: 'até 5 min' },
+  // A revisão diária saiu: o dia se fecha em Hoje, com "Fechar o dia".
   { dias: 7, nome: 'Semanal', titulo: 'Revisão da semana', frase: 'na semana', duracao: 'até 30 min' },
   { dias: 90, nome: 'Trimestral', titulo: 'Revisão do trimestre', frase: 'no trimestre', duracao: 'até 1 hora' },
   { dias: 365, nome: 'Anual', titulo: 'Revisão do ano', frase: 'no ano', duracao: 'até 2 horas' },
@@ -55,7 +55,6 @@ const PASSO: Record<Tipo, { nome: string; titulo: string }> = {
 }
 // Cada revisão tem o próprio roteiro (seção Ritmo do método).
 const ROTEIROS: Record<number, Tipo[]> = {
-  1: ['andou', 'resultados', 'esperas', 'fechamento'],
   7: ['andou', 'resultados', 'esperas', 'fechamento'],
   90: ['resultados', 'andou', 'futuros', 'fechamento'],
   365: ['proposito', 'responsabilidades', 'andou', 'fechamento'],
@@ -109,7 +108,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
   const trimestral = dias === 90
   const respostasDoPeriodo = trimestral ? RESPOSTAS_TRIMESTRE : RESPOSTAS
 
-  const periodo = PERIODOS.find((p) => p.dias === dias) ?? PERIODOS[1]
+  const periodo = PERIODOS.find((p) => p.dias === dias) ?? PERIODOS[0]
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -337,10 +336,10 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                     </div>
                     {resumo.concluidos > 0 && (
                       <p className="rounded-3xl bg-secondary p-4 text-sm text-foreground" data-balanco>
-                        O balanço {periodo.frase}: <strong>{resumo.balanco.construir}</strong> para construir,{' '}
-                        <strong>{resumo.balanco.sustentar}</strong> para sustentar e{' '}
-                        <strong>{resumo.balanco.livres}</strong> livres. Quem só sustenta não avança, e quem só
-                        constrói deixa a vida desabar.
+                        O balanço {periodo.frase}: <strong>{resumo.balanco.construir}</strong> para as suas
+                        vontades, <strong>{resumo.balanco.sustentar}</strong> para as suas responsabilidades e{' '}
+                        <strong>{resumo.balanco.livres}</strong> livres. Quem só cuida das responsabilidades não
+                        avança, e quem só segue as vontades deixa a vida desabar.
                       </p>
                     )}
                     {resumo.concluidos === 0 && (
@@ -465,7 +464,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                           </p>
                         </div>
                         <Button size="sm" variant="outline" asChild className="rounded-full">
-                          <Link to={`/avancos?id=${encodeURIComponent(e.id)}`} onClick={sair}>
+                          <Link to={`/mapa/avanco/${encodeURIComponent(e.id)}`} onClick={sair}>
                             Abrir avanço
                           </Link>
                         </Button>
@@ -543,7 +542,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                       </button>
                     ))}
                     <Link
-                      to="/configuracoes"
+                      to="/mapa/proposito"
                       onClick={sair}
                       className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
                     >
@@ -582,11 +581,11 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                       </div>
                     ))}
                     <Link
-                      to="/responsabilidades"
+                      to="/mapa"
                       onClick={sair}
                       className="inline-flex min-h-11 items-center text-sm text-foreground underline underline-offset-4"
                     >
-                      Chegou uma nova: criar responsabilidade
+                      Chegou uma nova: criar no Mapa
                     </Link>
                   </>
                 )}
@@ -603,7 +602,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                             : `${resumo.capturas_pendentes} capturas esperando decisão.`}
                         </p>
                         <Button size="sm" asChild className="rounded-full">
-                          <Link to="/capturas" onClick={sair}>
+                          <Link to="/caixa" onClick={sair}>
                             Decidir capturas
                           </Link>
                         </Button>
@@ -614,8 +613,8 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         {dias >= 90 ? 'Feche escolhendo os próximos avanços.' : 'Defina os próximos avanços.'}
                       </p>
                       <Button size="sm" variant="outline" asChild className="rounded-full">
-                        <Link to="/avancos" onClick={sair}>
-                          Ver avanços
+                        <Link to="/mapa" onClick={sair}>
+                          Abrir o Mapa
                         </Link>
                       </Button>
                     </div>
@@ -625,7 +624,7 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
                         {ajustar.map((r) => (
                           <Link
                             key={r.id}
-                            to={`/resultados?id=${encodeURIComponent(r.id)}`}
+                            to={`/mapa/resultado/${encodeURIComponent(r.id)}`}
                             onClick={sair}
                             className="block break-words text-sm text-foreground underline underline-offset-4"
                           >

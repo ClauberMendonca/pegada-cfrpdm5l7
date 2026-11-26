@@ -19,6 +19,7 @@ interface AvancoHoje {
   tipo: string
   tipo_nome: string
   contexto: string
+  prazo?: string
   fio: {
     frase: string
     sem_fio?: boolean
@@ -27,6 +28,7 @@ interface AvancoHoje {
   }
 }
 interface FioDeHoje {
+  data?: string
   proposito?: string
   principal: AvancoHoje | null
   compromissos: AvancoHoje[]
@@ -44,12 +46,11 @@ const MUTED = { color: 'var(--pegada-on-ink-muted)' } as const
 interface Props {
   /** Conteúdo entre o cartão e os atalhos (a lista "Também hoje"). */
   children?: React.ReactNode
-  /** Quantos avanços e resultados pedem reavaliação; 0 esconde o atalho. */
-  reavaliar?: number
-  onReavaliar?: () => void
+  /** Abre a folha de escolha do dia. */
+  onEscolher?: () => void
 }
 
-export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Props) {
+export function AvancoPrincipalCard({ children, onEscolher }: Props) {
   const { contextFilter } = useGlobalFilter()
   const [dados, setDados] = useState<FioDeHoje | null>(null)
   const [ocupado, setOcupado] = useState(false)
@@ -102,12 +103,16 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
             {[...dados.compromissos, ...dados.vencendo].map((a) => (
               <li key={a.id}>
                 <Link
-                  to={`/avancos?id=${encodeURIComponent(a.id)}`}
+                  to={`/mapa/avanco/${encodeURIComponent(a.id)}`}
                   className="flex min-h-11 items-center justify-between gap-3 text-base text-foreground"
                 >
                   <span className="min-w-0 break-words">{a.titulo}</span>
                   <span className="shrink-0 text-[13px] text-muted-foreground">
-                    {a.tipo_nome === 'Compromisso' ? 'compromisso' : 'vence hoje'}
+                    {a.tipo_nome === 'Compromisso'
+                      ? 'compromisso'
+                      : a.prazo && dados.data && a.prazo < dados.data
+                        ? 'venceu'
+                        : 'vence hoje'}
                   </span>
                 </Link>
               </li>
@@ -200,13 +205,14 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
             ) : (
               <p className="mt-3 text-[15px]" style={MUTED}>
                 Nada escolhido para hoje ainda.{' '}
-                <Link
-                  to="/avancos"
+                <button
+                  type="button"
+                  onClick={onEscolher}
                   className="underline underline-offset-4"
                   style={{ color: 'var(--pegada-on-ink)' }}
                 >
-                  Escolher em Avanços
-                </Link>
+                  Escolher agora
+                </button>
               </p>
             )}
           </>
@@ -227,9 +233,13 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
           return (
             <p className="px-1 text-sm text-muted-foreground" data-dica-do-dia>
               Complete com poucos outros, até 3 a 5 no dia.{' '}
-              <Link to="/avancos" className="font-medium text-foreground underline underline-offset-4">
-                Escolher em Avanços
-              </Link>
+              <button
+                type="button"
+                onClick={onEscolher}
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                Escolher
+              </button>
             </p>
           )
         return null
@@ -237,29 +247,11 @@ export function AvancoPrincipalCard({ children, reavaliar = 0, onReavaliar }: Pr
 
       {children}
 
-      {(dados.capturas_pendentes > 0 || reavaliar > 0 || dados.propostas_pendentes > 0) && (
-        <div className="flex flex-wrap gap-2.5">
-          {dados.capturas_pendentes > 0 && (
-            <Link to="/capturas" className={ATALHO}>
-              <span className="text-xl font-semibold">{dados.capturas_pendentes}</span>
-              <span>{dados.capturas_pendentes === 1 ? 'captura para decidir' : 'capturas para decidir'}</span>
-            </Link>
-          )}
-          {reavaliar > 0 && (
-            <button type="button" onClick={onReavaliar} className={ATALHO}>
-              <span className="text-xl font-semibold">{reavaliar}</span>
-              <span>{reavaliar === 1 ? 'item para reavaliar' : 'itens para reavaliar'}</span>
-            </button>
-          )}
-          {dados.propostas_pendentes > 0 && (
-            <Link to="/atividade" className={ATALHO}>
-              <span className="text-xl font-semibold">{dados.propostas_pendentes}</span>
-              <span>
-                {dados.propostas_pendentes === 1 ? 'proposta para confirmar' : 'propostas para confirmar'}
-              </span>
-            </Link>
-          )}
-        </div>
+      {dados.capturas_pendentes + dados.propostas_pendentes > 0 && (
+        <Link to="/caixa" className={ATALHO} data-para-decidir>
+          <span className="text-xl font-semibold">{dados.capturas_pendentes + dados.propostas_pendentes}</span>
+          <span>para decidir na Caixa</span>
+        </Link>
       )}
     </section>
   )

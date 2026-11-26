@@ -50,7 +50,9 @@ export type UpdateActionInput = Partial<CreateActionInput>
 // PEGADA — todas as escritas passam pela API do método (/backend/v1/pegada).
 // As assinaturas foram mantidas para as telas existentes continuarem iguais.
 
-const EXPAND = { expand: 'project_id,project_id.responsibility_id,strategy_id,responsibility_id' }
+const EXPAND = {
+  expand: 'project_id,project_id.responsibility_id,project_id.wish_id,strategy_id,responsibility_id',
+}
 
 export const notificarMudanca = () => window.dispatchEvent(new Event('pegada:mudou'))
 

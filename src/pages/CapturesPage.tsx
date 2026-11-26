@@ -1,14 +1,16 @@
+// PEGADA — a Caixa: o que foi capturado e ainda não foi decidido, um item por
+// vez, junto com as propostas de agentes. O que já foi decidido fica guardado.
 import { Dica } from '@/components/Dica'
+import { PropostasParaDecidir } from '@/components/PropostasParaDecidir'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { ProcessCaptureMenu } from '@/components/ProcessCaptureMenu'
 import { Link } from 'react-router-dom'
 import { CaptureItem, CaptureStatus } from '@/types/execution'
 import { captureService } from '@/services/captureService'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Inbox, Plus, FolderKanban, CheckSquare, Trash2, Lightbulb } from 'lucide-react'
+import { ChevronDown, Plus, FolderKanban, CheckSquare, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { toast as aviso } from 'sonner'
 import { op } from '@/lib/pegada/api'
@@ -16,74 +18,18 @@ import { notificarMudanca } from '@/services/actionService'
 import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
 import { AiSuggest } from '@/components/AiSuggest'
 import { useAuth } from '@/contexts/AuthContext'
-import {
-  ListRow,
-  SummaryToggle,
-  useSummaryPreference,
-  useViewPreference,
-  ViewToggle,
-} from '@/components/ViewToggle'
 import { dayInZone, formatCalendarDay, ownerTimezone } from '@/lib/datetime'
 import { useCaptureDraft } from '@/hooks/use-capture-draft'
-import { EntityNumberKind, entityNumberCode, formatEntityTitle } from '@/lib/entityNumber'
-import {
-  collectTargetIds,
-  emptyTargetMaps,
-  fetchTargetMaps,
-  TargetMaps,
-} from '@/lib/captureTargets'
+import { EntityNumberKind, formatEntityTitle } from '@/lib/entityNumber'
+import { collectTargetIds, emptyTargetMaps, fetchTargetMaps, TargetMaps } from '@/lib/captureTargets'
 import { currentOwnerSnapshot, isSameOwner } from '@/lib/ownerScope'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
-import {
-  EMPTY_PLANNED,
-  isValidPlannedDate,
-  isValidPlannedTime,
-  PlannedExecution,
-  plannedTimezoneOrFallback,
-} from '@/lib/plannedExecution'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Project } from '@/types/execution'
-import { projectService } from '@/services/projectService'
-import { ResponsibilitySelect } from '@/components/ResponsibilitySelect'
-import {
-  ResponsibilityRefState,
-  useResponsibilityReference,
-} from '@/hooks/use-responsibility-reference'
-import { StrategySelect } from '@/components/StrategySelect'
-import { StrategyModal } from '@/components/StrategyModal'
-import { Strategy } from '@/types/execution'
-
-type ConversionType = 'project' | 'action' | null
-
-interface ConversionFeedback {
-  captureId: string
-  targetType: 'project' | 'action'
-  targetId: string
-  duplicate: boolean
-  targetSequenceNumber: number | null
-  targetTitle: string
-}
 
 const TIPOS_SUGERIVEIS: ActionKind[] = ['acao', 'compromisso', 'estudo', 'reflexao', 'ideia']
 const DESTINO_ROTULO: Record<string, string> = {
   avanco: 'Avanço',
   resultado: 'Resultado (rascunho)',
+  vontade: 'Vontade',
   responsabilidade: 'Responsabilidade',
   estrategia: 'Estratégia',
 }
@@ -101,7 +47,12 @@ export const CapturesPage: React.FC = () => {
   const { user } = useAuth()
 
   const [captures, setCaptures] = useState<CaptureItem[]>([])
-  const [filterStatus, setFilterStatus] = useState<CaptureStatus | 'todas'>('pendente')
+  // Caixa: um item por vez. `naVez` é a captura trazida para a frente; sem
+  // ela, vale a primeira da fila.
+  const [naVez, setNaVez] = useState<string | null>(null)
+  const [verDecididas, setVerDecididas] = useState(false)
+  const [filaInteira, setFilaInteira] = useState(false)
+  const [filterStatus, setFilterStatus] = useState<CaptureStatus | 'todas'>('todas')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -122,14 +73,6 @@ export const CapturesPage: React.FC = () => {
   // Captura com Enter: trava síncrona além do estado visual — Enter repetido,
   // tecla segurada ou Enter seguido de clique não gravam duas vezes.
   const savingRef = useRef(false)
-
-  // CAPTURA RÁPIDA — apresentação Cards/Lista (preferência por dono nesta área).
-  const [view, setView] = useViewPreference('captures', user?.id)
-  const [showSummary, setShowSummary] = useSummaryPreference('captures', user?.id)
-  const [openRows, setOpenRows] = useState<Record<string, boolean>>({})
-  const toggleRow = useCallback((id: string) => {
-    setOpenRows((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
 
   // Título de exibição: primeira linha não vazia do raw_text (somente leitura,
   // sem criar título no banco e sem IA).
@@ -161,15 +104,14 @@ export const CapturesPage: React.FC = () => {
   const loadCaptures = useCallback(async () => {
     setIsLoading(true)
     try {
-      const list = await captureService.list(filterStatus === 'todas' ? undefined : filterStatus)
-      setCaptures(list)
+      setCaptures(await captureService.list(undefined))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao listar capturas'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
     } finally {
       setIsLoading(false)
     }
-  }, [filterStatus, toast])
+  }, [toast])
   usePegadaMudou(loadCaptures)
 
   useEffect(() => {
@@ -265,8 +207,7 @@ export const CapturesPage: React.FC = () => {
   const handleDiscard = async (id: string) => {
     try {
       await captureService.discard(id)
-      toast({ title: 'Captura descartada logicamente' })
-      loadCaptures()
+            loadCaptures()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Não foi possível descartar a captura.'
       toast({ variant: 'destructive', title: 'Erro', description: msg })
@@ -294,8 +235,8 @@ export const CapturesPage: React.FC = () => {
     const target = isProject ? targetMaps.projects.get(targetId) : targetMaps.actions.get(targetId)
     const label = target ? formatEntityTitle(kind, target.sequence_number, target.title) : null
     const to = isProject
-      ? `/resultados?id=${encodeURIComponent(targetId)}`
-      : `/avancos?id=${encodeURIComponent(targetId)}`
+      ? `/mapa/resultado/${encodeURIComponent(targetId)}`
+      : `/mapa/avanco/${encodeURIComponent(targetId)}`
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {label && (
@@ -344,75 +285,6 @@ export const CapturesPage: React.FC = () => {
     }
   }
 
-  const renderCaptureCard = (item: CaptureItem) => (
-    <div
-      key={item.id}
-      className="p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-    >
-      <div className="space-y-1.5 flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          {getStatusBadge(item.status)}
-          <span className="text-xs font-mono text-muted-foreground">
-            {formatCreatedDay(item.created)}
-          </span>
-        </div>
-        <p className="text-sm text-foreground whitespace-pre-wrap break-words">{item.raw_text}</p>
-        {item.status === 'pendente' && (
-          <AiSuggest
-            tipo="captura"
-            texto={item.raw_text}
-            descrever={descreverSugestaoCaptura}
-            impedimento={(s) =>
-              s.destino === 'avanco' || s.destino === 'resultado'
-                ? null
-                : 'Para este destino, escolha no botão Processar.'
-            }
-            onUsar={(s) => aplicarSugestaoCaptura(item.id, s)}
-          />
-        )}
-      </div>
-
-      {/* Destino de captura já convertida (BLOCO 2C) */}
-      {(item.status === 'convertida_projeto' || item.status === 'convertida_acao') && (
-        <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
-          {renderConvertedDest(item)}
-        </div>
-      )}
-
-      {/* Ações de processamento: SOMENTE o menu de processamento e a lixeira. */}
-      {item.status === 'pendente' && (
-        <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border">
-          <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => handleDiscard(item.id)}
-            className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
-            title="Descartar logicamente"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      )}
-    </div>
-  )
-
-  // BLOCO 4C — rótulo textual do estado, mesma semântica do badge (dados já
-  // carregados; formatação de data é a existente — correção de fuso é bloco 6).
-  const captureStatusLabel = (st: CaptureStatus): string => {
-    switch (st) {
-      case 'pendente':
-        return 'Pendente'
-      case 'convertida_projeto':
-        return 'Convertida em resultado'
-      case 'convertida_acao':
-        return 'Convertida em avanço'
-      case 'descartada':
-        return 'Descartada'
-    }
-  }
-
   const getStatusBadge = (st: CaptureStatus) => {
     switch (st) {
       case 'pendente':
@@ -440,203 +312,232 @@ export const CapturesPage: React.FC = () => {
     }
   }
 
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <Inbox className="w-6 h-6 text-primary" />
-            Capturas
-          </h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Caixa de entrada rápida para descarregar a mente sem fricção. Converta em Resultado ou
-            Avanço, ou descarte.
-          </p>
-        </div>
+  const pendentes = captures.filter((c) => c.status === 'pendente')
+  const atual = pendentes.find((c) => c.id === naVez) ?? pendentes[0] ?? null
+  const fila = pendentes.filter((c) => c.id !== atual?.id)
+  const decididas = captures.filter(
+    (c) => c.status !== 'pendente' && (filterStatus === 'todas' || c.status === filterStatus),
+  )
+  const pular = () => {
+    if (fila.length > 0) setNaVez(fila[0].id)
+  }
 
-        {/* Filter by status + modo de apresentação Cards/Lista */}
-        <div className="flex flex-wrap items-center gap-2">
-          <ViewToggle view={view} onChange={setView} />
-          {view === 'list' && <SummaryToggle checked={showSummary} onChange={setShowSummary} />}
-          <div className="flex flex-wrap items-center gap-1.5 bg-muted border border-border p-1 rounded-lg text-xs">
-            {(
-              ['pendente', 'todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const
-            ).map((st) => (
-              <button
-                key={st}
-                onClick={() => setFilterStatus(st)}
-                className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                  filterStatus === st
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
+  return (
+    <div className="space-y-8" data-caixa>
+      <div>
+        <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">Caixa</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isLoading
+            ? 'Carregando…'
+            : pendentes.length === 0
+              ? 'Nada para decidir. A cabeça está livre.'
+              : pendentes.length === 1
+                ? '1 captura para decidir.'
+                : `${pendentes.length} capturas para decidir, uma por vez.`}
+        </p>
+      </div>
+
+      <PropostasParaDecidir />
+      <Dica id="capturas">
+        Capture do jeito que pensa, sem classificar na hora. Depois você decide o que cada captura vira.
+      </Dica>
+
+      {/* A captura da vez: o texto, a sugestão do Pegada e a decisão. */}
+      {atual && (
+        <section aria-label="Captura da vez" className="space-y-3" data-captura-da-vez>
+          <div className="space-y-4 rounded-[20px] border border-border bg-card p-5">
+            <div>
+              <p className="text-[13px] text-muted-foreground">Capturado em {formatCreatedDay(atual.created)}</p>
+              <p className="mt-1.5 whitespace-pre-wrap break-words text-lg font-medium leading-snug text-foreground">
+                {atual.raw_text}
+              </p>
+            </div>
+            <AiSuggest
+              key={atual.id}
+              tipo="captura"
+              texto={atual.raw_text}
+              descrever={descreverSugestaoCaptura}
+              impedimento={(s) =>
+                s.destino === 'avanco' || s.destino === 'resultado'
+                  ? null
+                  : 'Para este destino, escolha no botão Decidir.'
+              }
+              onUsar={(s) => aplicarSugestaoCaptura(atual.id, s)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <ProcessCaptureMenu key={atual.id} capture={atual} onDone={loadCaptures} rotulo="Decidir" />
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => handleDiscard(atual.id)}
+                className="min-h-11 gap-1.5 text-muted-foreground hover:text-destructive"
               >
-                {st === 'todas'
-                  ? 'Todas'
-                  : st === 'pendente'
-                    ? 'Pendentes'
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                Descartar
+              </Button>
+              {fila.length > 0 && (
+                <Button type="button" variant="ghost" onClick={pular} className="ml-auto min-h-11">
+                  Pular
+                </Button>
+              )}
+            </div>
+          </div>
+          {fila.length > 0 && (
+            <div data-fila-da-caixa>
+              <p className="px-2 pb-1 text-[13px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Depois ({fila.length})
+              </p>
+              <ul>
+                {(filaInteira ? fila : fila.slice(0, 5)).map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => setNaVez(c.id)}
+                      className="flex min-h-11 w-full items-center rounded-xl px-2 py-1.5 text-left text-[15px] text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="min-w-0 truncate">{captureDisplayTitle(c.raw_text)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {fila.length > 5 && !filaInteira && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setFilaInteira(true)}
+                  className="min-h-11 px-2 text-sm text-muted-foreground"
+                >
+                  Mostrar todas
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Capturar aqui mesmo */}
+      <section aria-label="Capturar" className="space-y-2">
+        <Textarea
+          ref={quickAddRef}
+          value={newCaptureText}
+          onChange={(e) => setNewCaptureText(e.target.value)}
+          onKeyDown={handleQuickAddKeyDown}
+          aria-label="Nova captura"
+          placeholder="O que está na sua cabeça? Uma linha basta."
+          rows={2}
+          disabled={isSubmitting}
+        />
+        {draftEnabled && draftRestored && (
+          <p role="status" className="text-xs text-foreground">
+            Rascunho restaurado deste dispositivo
+          </p>
+        )}
+        {draftNotice && (
+          <p role="status" className="text-xs text-pegada-warning">
+            {draftNotice}
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              aria-pressed={draftEnabled}
+              onClick={toggleDraft}
+              disabled={!user?.id || isSubmitting}
+              className="min-h-11 px-2 text-xs text-muted-foreground"
+              title="O texto não enviado fica neste navegador até você capturar."
+            >
+              {draftEnabled ? 'Rascunho guardado neste dispositivo' : 'Manter rascunho neste dispositivo'}
+            </Button>
+            {draftEnabled && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={clearDraft}
+                disabled={isSubmitting || !newCaptureText}
+                className="min-h-11 px-2 text-xs"
+              >
+                Limpar rascunho
+              </Button>
+            )}
+          </div>
+          <Button
+            type="button"
+            onClick={() => void submitCapture()}
+            disabled={isSubmitting || !newCaptureText.trim()}
+            className="min-h-11 gap-1.5"
+          >
+            {isSubmitting ? (
+              'Gravando…'
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Capturar
+              </>
+            )}
+          </Button>
+        </div>
+      </section>
+
+      {/* O que já foi decidido fica guardado, fora da vista. */}
+      <section aria-label="Já decididas" data-ja-decididas>
+        <Button
+          type="button"
+          variant="ghost"
+          aria-expanded={verDecididas}
+          onClick={() => setVerDecididas((v) => !v)}
+          className="min-h-11 gap-1.5 px-2 text-sm text-muted-foreground"
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${verDecididas ? 'rotate-180' : ''}`} aria-hidden="true" />
+          Já decididas
+        </Button>
+        {verDecididas && (
+          <div className="mt-2 space-y-3">
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              {(['todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  aria-pressed={filterStatus === st}
+                  onClick={() => setFilterStatus(st)}
+                  className={`min-h-9 rounded-full px-3 font-medium transition-colors ${
+                    filterStatus === st ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {st === 'todas'
+                    ? 'Todas'
                     : st === 'convertida_projeto'
                       ? 'Resultados'
                       : st === 'convertida_acao'
                         ? 'Avanços'
                         : 'Descartadas'}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <Dica id="capturas">
-        Capture do jeito que pensa, sem classificar na hora. Depois você decide o que cada captura vira.
-      </Dica>
-      {/* Input de Captura Rápida */}
-      <Card className="bg-card border-border shadow-md">
-        <CardContent className="pt-4 space-y-3">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
-            <Lightbulb className="w-3.5 h-3.5" />
-            <span>Anotação Rápida em Texto Livre</span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            aria-pressed={draftEnabled}
-            onClick={toggleDraft}
-            disabled={!user?.id || isSubmitting}
-            className="min-h-[44px] text-xs"
-          >
-            Manter rascunho neste dispositivo
-          </Button>
-          {draftEnabled && (
-            <p className="text-xs text-muted-foreground">
-              O texto não enviado fica neste navegador; só vira captura quando você confirmar com
-              Enter ou pelo botão.
-            </p>
-          )}
-          {draftEnabled && draftRestored && (
-            <p role="status" className="text-xs text-foreground">
-              Rascunho restaurado deste dispositivo
-            </p>
-          )}
-          {draftNotice && (
-            <p role="status" className="text-xs text-pegada-warning">
-              {draftNotice}
-            </p>
-          )}
-          <Textarea
-            ref={quickAddRef}
-            value={newCaptureText}
-            onChange={(e) => setNewCaptureText(e.target.value)}
-            onKeyDown={handleQuickAddKeyDown}
-            placeholder="O que está na sua cabeça? Ideia, insight, pendência que surgiu, oportunidade..."
-            rows={3}
-            disabled={isSubmitting}
-          />
-          <div className="flex justify-between items-center pt-1 gap-3">
-            <span className="text-xs text-muted-foreground">
-              Enter para capturar · Shift+Enter para nova linha
-            </span>
-            <div className="flex items-center gap-2 shrink-0">
-              {draftEnabled && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearDraft}
-                  disabled={isSubmitting || !newCaptureText}
-                  className="min-h-[44px] text-xs"
-                >
-                  Limpar rascunho
-                </Button>
-              )}
-              <Button
-                type="button"
-                onClick={() => void submitCapture()}
-                disabled={isSubmitting || !newCaptureText.trim()}
-                className="gap-1.5 min-h-[44px]"
-              >
-                {isSubmitting ? (
-                  'Gravando…'
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Capturar Ideia
-                  </>
-                )}
-              </Button>
+                </button>
+              ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Lista de Capturas */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs text-muted-foreground font-medium px-1">
-          <span>Itens na Caixa de Entrada ({captures.length})</span>
-        </div>
-
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Carregando capturas...</div>
-        ) : captures.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-muted p-8 text-center">
-            <Inbox className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-foreground font-medium">Nenhuma captura encontrada.</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {filterStatus === 'pendente'
-                ? 'Sua caixa de entrada está limpa! Todas as ideias foram processadas.'
-                : 'Nenhum registro para este filtro.'}
-            </p>
-          </div>
-        ) : view === 'cards' ? (
-          <div className="grid gap-3 [&>*]:min-w-0">{captures.map(renderCaptureCard)}</div>
-        ) : (
-          <div className="grid gap-2">
-            {captures.map((item) => (
-              <ListRow
-                key={item.id}
-                title={captureDisplayTitle(item.raw_text)}
-                open={Boolean(openRows[item.id])}
-                onToggle={() => toggleRow(item.id)}
-                hint={formatCreatedDay(item.created)}
-                summary={
-                  showSummary
-                    ? `${captureStatusLabel(item.status)} · ${formatCreatedDay(item.created)}`
-                    : undefined
-                }
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">{getStatusBadge(item.status)}</div>
-                  <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-                    {item.raw_text}
-                  </p>
-                  {/* Destino de captura já convertida (BLOCO 2C) */}
-                  {(item.status === 'convertida_projeto' || item.status === 'convertida_acao') && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {renderConvertedDest(item)}
+            {decididas.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                Nada por aqui ainda.
+              </p>
+            ) : (
+              <ul className="rounded-2xl border border-border bg-card p-2">
+                {decididas.map((item) => (
+                  <li key={item.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl px-2 py-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[15px] text-foreground">{captureDisplayTitle(item.raw_text)}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+                        {getStatusBadge(item.status)}
+                        {formatCreatedDay(item.created)}
+                      </p>
                     </div>
-                  )}
-                  {item.status === 'pendente' && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ProcessCaptureMenu capture={item} onDone={loadCaptures} />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDiscard(item.id)}
-                        className="text-muted-foreground hover:text-destructive hover:bg-pegada-danger-bg text-xs"
-                        title="Descartar logicamente"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Descartar
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </ListRow>
-            ))}
+                    {renderConvertedDest(item)}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }

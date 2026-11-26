@@ -63,8 +63,6 @@ export const captureService = {
       project_id?: string
       responsibility_id?: string
       strategy_id?: string
-      aspiration?: string
-      controllable_delivery?: string
       completion_condition?: string
       deadline?: string
       planned_date?: string
@@ -81,10 +79,6 @@ export const captureService = {
             como_sei: data.completion_condition || undefined,
             prazo: data.deadline || undefined,
             situacao: data.deadline ? 'ativo' : 'rascunho',
-            _legado: {
-              aspiration: data.aspiration,
-              controllable_delivery: data.controllable_delivery,
-            },
           }
         : {
             titulo: data.title,

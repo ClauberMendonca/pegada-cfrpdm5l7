@@ -103,18 +103,6 @@
           ]
         },
         {
-          "name": "aspiration",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "controllable_delivery",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "completion_condition",
           "type": "text",
           "required": false,
@@ -122,60 +110,6 @@
         },
         {
           "name": "deadline",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "learning_asset",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_resultado",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_razao",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_referencia",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_rumo",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_recursos",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_restricoes",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_riscos",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "r_responsavel",
           "type": "text",
           "required": false,
           "system": false

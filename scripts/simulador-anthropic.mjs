@@ -14,6 +14,11 @@ function respostaPara(pedido) {
       { titulo: 'Zelar pela educação das filhas', contexto: 'vida', por_que: 'Não tem linha de chegada.' },
       { titulo: 'Cuidar do tempo em família', contexto: 'vida', por_que: 'É contínuo.' },
     ] }
+  if (pedido.includes('informa uma VONTADE'))
+    return { sugestoes: [
+      { titulo: 'Tocar duas músicas inteiras até julho', prazo: '2027-07-01', por_que: 'Tem linha de chegada.' },
+      { titulo: 'Fazer uma apresentação para a família', prazo: '', por_que: 'É verificável.' },
+    ] }
   if (pedido.includes('informa uma RESPONSABILIDADE'))
     return { sugestoes: [
       { titulo: 'Consultas de rotina de todos em dia', prazo: '2027-06-30', por_que: 'Tem linha de chegada.' },

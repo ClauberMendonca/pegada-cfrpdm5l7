@@ -25,9 +25,11 @@ const TIPOS_UM_TOQUE: ActionKind[] = ['acao', 'compromisso', 'estudo', 'reflexao
 interface Props {
   capture: CaptureItem
   onDone: () => void
+  /** Nome do botão; na Caixa é "Decidir". */
+  rotulo?: string
 }
 
-export function ProcessCaptureMenu({ capture, onDone }: Props) {
+export function ProcessCaptureMenu({ capture, onDone, rotulo = 'Processar' }: Props) {
   const [busy, setBusy] = useState(false)
   const [resultados, setResultados] = useState<Project[] | null>(null)
 
@@ -70,7 +72,7 @@ export function ProcessCaptureMenu({ capture, onDone }: Props) {
       <DropdownMenuTrigger asChild>
         <Button size="sm" variant="default" disabled={busy} className="text-xs gap-1.5">
           <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-          Processar
+          {rotulo}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
@@ -84,6 +86,17 @@ export function ProcessCaptureMenu({ capture, onDone }: Props) {
         <DropdownMenuItem onSelect={() => processar('resultado', { situacao: 'rascunho' })}>
           Resultado (rascunho)
         </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Vontade</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onSelect={() => processar('vontade', { contexto: 'vida' })}>
+              de Vida
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => processar('vontade', { contexto: 'trabalho' })}>
+              de Trabalho
+            </DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Responsabilidade</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>

@@ -318,7 +318,7 @@ export const ResponsibilityReference: React.FC<{ id?: string | null }> = ({ id }
     <p className="text-xs text-muted-foreground">
       <span>Responsabilidade: </span>
       <Link
-        to={`/responsabilidades?id=${encodeURIComponent(ref.data.id)}`}
+        to={`/mapa/responsabilidade/${encodeURIComponent(ref.data.id)}`}
         // min-h-11 (44px) no alvo do toque, sem reduzir a fonte funcional.
         className="-my-2.5 inline-flex min-h-11 items-center font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm"
       >

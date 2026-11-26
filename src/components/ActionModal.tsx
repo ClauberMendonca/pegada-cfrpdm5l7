@@ -826,19 +826,17 @@ export const ActionModal: React.FC<ActionModalProps> = ({
               className="border-input bg-card text-base text-foreground placeholder:text-muted-foreground focus-visible:ring-ring sm:text-sm"
               required
             />
-            {!actionToEdit && (
-              <AiSuggest
-                tipo="avanco"
-                texto={title}
-                descrever={(s) =>
-                  `${s.tipo in ACTION_KIND_LABEL ? ACTION_KIND_LABEL[s.tipo as ActionKind] : 'Avanço'}: ${s.titulo}`
-                }
-                onUsar={(s) => {
-                  if (s.titulo) setTitle(s.titulo)
-                  if (s.tipo in ACTION_KIND_LABEL && s.tipo !== 'espera') setKind(s.tipo as ActionKind)
-                }}
-              />
-            )}
+            <AiSuggest
+              tipo="avanco"
+              texto={title}
+              descrever={(s) =>
+                `${s.tipo in ACTION_KIND_LABEL ? ACTION_KIND_LABEL[s.tipo as ActionKind] : 'Avanço'}: ${s.titulo}`
+              }
+              onUsar={(s) => {
+                if (s.titulo) setTitle(s.titulo)
+                if (s.tipo in ACTION_KIND_LABEL && s.tipo !== 'espera') setKind(s.tipo as ActionKind)
+              }}
+            />
             {/* NUMERAÇÃO PERMANENTE — número da ação FORA do input: selo de
                leitura na edição; na criação, nota discreta (nunca P-0/A-0 ou
                número previsto). O título digitado continua puro. */}
@@ -1054,9 +1052,14 @@ export const ActionModal: React.FC<ActionModalProps> = ({
 
             <div className="space-y-1.5">
               <Label htmlFor={ids.status} className="text-sm font-medium text-foreground">
-                Status
+                Situação
               </Label>
-              <Select value={status} onValueChange={(val) => setStatus(val as ActionStatus)}>
+              {/* Quatro situações na tela; "em andamento" e "bloqueado" seguem
+                  guardados e aparecem como Aberto e Esperando. */}
+              <Select
+                value={status === 'em_andamento' ? 'pronta' : status === 'bloqueada' ? 'aguardando' : status}
+                onValueChange={(val) => setStatus(val as ActionStatus)}
+              >
                 <SelectTrigger
                   id={ids.status}
                   className="border-input bg-card text-base text-foreground sm:text-sm"
@@ -1064,10 +1067,8 @@ export const ActionModal: React.FC<ActionModalProps> = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-border bg-popover text-popover-foreground">
-                  <SelectItem value="pronta">Pronto</SelectItem>
-                  <SelectItem value="em_andamento">Em andamento</SelectItem>
-                  <SelectItem value="aguardando">Aguardando</SelectItem>
-                  <SelectItem value="bloqueada">Bloqueado</SelectItem>
+                  <SelectItem value="pronta">Aberto</SelectItem>
+                  <SelectItem value="aguardando">Esperando</SelectItem>
                   <SelectItem value="feita">Feito</SelectItem>
                   <SelectItem value="cancelada">Cancelado</SelectItem>
                 </SelectContent>
@@ -1078,7 +1079,7 @@ export const ActionModal: React.FC<ActionModalProps> = ({
           {(status === 'aguardando' || status === 'bloqueada' || kind === 'espera') && (
             <div className="space-y-1.5">
               <Label htmlFor={ids.waitingFor} className="text-sm font-medium text-foreground">
-                Motivo / bloqueio
+                De quem ou do quê está esperando
               </Label>
               <Input
                 id={ids.waitingFor}

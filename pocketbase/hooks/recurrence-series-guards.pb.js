@@ -517,7 +517,7 @@ onRecordDelete((e) => {
   }
   let referencing = 1 // fail-closed: só libera se a contagem rodar e vier 0
   try {
-    referencing = e.app.countRecords('recurrence_series', "source_action_id = '" + rec.id + "'")
+    referencing = e.app.countRecords('recurrence_series', $dbx.hashExp({ source_action_id: rec.id }))
   } catch (_) {
     referencing = 1
   }

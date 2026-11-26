@@ -2,9 +2,9 @@
 // ProjectDetail (Iniciar tempo / leitura discreta / histórico / manual).
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertCircle, RotateCcw } from 'lucide-react'
+import { AlertCircle, Clock, Pause, Play, RotateCcw, Square } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useToast } from '@/hooks/use-toast'
 import { TimeEntry, TimeTargetType, timeService } from '@/services/timeService'
@@ -13,6 +13,18 @@ import { formatDuration, sumEndedSeconds } from '@/lib/timeHelpers'
 import { canStartNewTimer, canStartNewTimerForProject } from '@/lib/timeEligibility'
 import { ActionItem, Project } from '@/types/execution'
 import { TimeEntryDialog, TimeHistoryDialog } from '@/components/TimeControl'
+
+/** Relógio clássico: 12:34, ou 1:02:03 depois de uma hora. */
+export function formatRelogio(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(Number.isFinite(totalSeconds) ? totalSeconds : 0))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const dois = (n: number) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${dois(m)}:${dois(s % 60)}` : `${dois(m)}:${dois(s % 60)}`
+}
+
+const ICONE =
+  'flex h-11 w-11 items-center justify-center rounded-full border border-input bg-card text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
 
 type TimeServiceWithProjectList = typeof timeService & {
   listByProject: (projectId: string) => Promise<TimeEntry[]>
@@ -311,49 +323,98 @@ export const TimeControl: React.FC<TimeControlProps> = ({
     setManualOpen(true)
   }
 
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span
-        className="text-xs tabular-nums text-muted-foreground"
-        title="Tempo registrado (encerrado)"
-      >
-        {entriesLoadingNow
-          ? 'Tempo: …'
-          : entriesErrorNow
-            ? 'Tempo: —'
-            : entries
-              ? historyEntries.some((e) => !e.is_deleted && e.status !== 'running')
-                ? `Tempo: ${formatDuration(totalSeconds)}`
-                : 'Tempo: não registrado'
-              : 'Tempo: —'}
-      </span>
+  const pausado = isThisTargetRunning && running?.status === 'paused'
+  const ocupado = starting || pending !== null || isReconciling
+  const temRegistro = historyEntries.some((e) => !e.is_deleted && e.status !== 'running')
+  const total = entriesLoadingNow ? '…' : entriesErrorNow || !entries ? '—' : temRegistro ? formatDuration(totalSeconds) : ''
 
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-relogio={isThisTargetRunning ? (pausado ? 'pausado' : 'correndo') : 'parado'}>
       {isThisTargetRunning ? (
-        <Badge variant="secondary" className="font-medium">
-          {running?.status === 'paused' ? 'Pausado' : 'Em curso'}{' '}
-          {runningEntrySeconds > 0 ? formatDuration(runningEntrySeconds) : ''}
-        </Badge>
+        <>
+          {/* O tempo correndo, aqui mesmo: um ponto que pulsa e o relógio. */}
+          <span className="flex h-11 items-center gap-2.5 rounded-full bg-secondary pl-4 pr-5" aria-live="off">
+            <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+              {!pausado && (
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
+              )}
+              <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full', pausado ? 'bg-muted-foreground' : 'bg-primary')} />
+            </span>
+            <span className="text-lg font-semibold tabular-nums text-foreground">{formatRelogio(runningEntrySeconds)}</span>
+            {pausado && <span className="text-[13px] text-muted-foreground">pausado</span>}
+          </span>
+          {pausado ? (
+            <button
+              type="button"
+              className={ICONE}
+              onClick={() => running && void timer.resumeTimer(running.id)}
+              disabled={ocupado}
+              aria-label="Retomar relógio"
+              title="Retomar"
+            >
+              <Play className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={ICONE}
+              onClick={() => void timer.pauseTimer()}
+              disabled={ocupado}
+              aria-label="Pausar relógio"
+              title="Pausar"
+            >
+              <Pause className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            className={ICONE}
+            onClick={() => void timer.endTimer().then(() => refreshEntries())}
+            disabled={ocupado}
+            aria-label="Parar relógio"
+            title="Parar"
+          >
+            <Square className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </>
       ) : startedHere ? (
-        <Button
-          size="sm"
-          variant="outline"
+        <button
+          type="button"
+          className={ICONE}
           onClick={handleStart}
-          disabled={starting || pending !== null || isReconciling}
+          disabled={ocupado}
+          aria-label="Iniciar relógio"
+          title="Iniciar"
         >
-          {starting || pending?.kind === 'start'
-            ? 'Iniciando…'
-            : isReconciling
-              ? 'Confirmando estado…'
-              : 'Iniciar tempo'}
-        </Button>
-      ) : (
-        <span
-          className="text-xs text-muted-foreground"
-          title="Estado atual não inicia novo cronômetro"
-        >
-          Registro manual disponível
-        </span>
-      )}
+          <Play className="h-4 w-4" aria-hidden="true" />
+        </button>
+      ) : null}
+
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Tempo registrado e histórico"
+            title="Tempo registrado"
+            className={cn(
+              'flex h-11 items-center gap-1.5 rounded-full px-3 text-sm tabular-nums text-muted-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            )}
+          >
+            <Clock className="h-4 w-4" aria-hidden="true" />
+            {total}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-56">
+          <div className="flex flex-col gap-2">
+            <Button size="sm" variant="outline" onClick={openManual}>
+              Registrar tempo
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
+              Histórico de tempo
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       {(startError || (isThisTargetRunning ? timerError : null)) && (
         <span role="alert" className="text-xs text-destructive">
@@ -377,24 +438,6 @@ export const TimeControl: React.FC<TimeControlProps> = ({
           </Button>
         </span>
       )}
-
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button size="sm" variant="ghost" aria-label="Controles de tempo">
-            Tempo ▾
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-56">
-          <div className="flex flex-col gap-2">
-            <Button size="sm" variant="outline" onClick={openManual}>
-              Registrar tempo
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)}>
-              Histórico de tempo
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
 
       <TimeHistoryDialog
         open={historyOpen}

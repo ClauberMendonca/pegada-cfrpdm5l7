@@ -2,13 +2,14 @@
 // Em cima, a que ele serve (o fio). No meio, o avanço e o que fazer com ele.
 // Embaixo, o que ajuda a fazer: material de referência e notas.
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { ActionRow } from '@/components/ActionRow'
 import { ActionModal } from '@/components/ActionModal'
 import { ProgressLogModal } from '@/components/ProgressLogModal'
 import { Referencias } from '@/components/Referencias'
 import { TimeControl } from '@/components/TimeControlCompact'
+import { FioEmNotas, notasDoFio } from '@/components/FioEmNotas'
 import { Ficha, FichaNaoEncontrada } from '@/components/Ficha'
 import { Triade } from '@/components/Triade'
 import type { Degrau } from '@/components/Trilha'
@@ -119,6 +120,8 @@ export function FichaAvancoPage() {
     emResultadoAlheio && junto && junto.id === avanco.id
       ? { ...fioLocal, frase: junto.fio.frase, semFio: junto.fio.sem_fio }
       : fioLocal
+  // As notas do fio seguem a mesma regra: no resultado alheio, o porquê de quem vê.
+  const doServidor = emResultadoAlheio && junto && junto.id === avanco.id ? junto.fio : null
   const meu = !user || avanco.user_id === user.id
   const compartilhado = junto && junto.id === avanco.id && junto.compartilhado ? junto : null
 
@@ -163,18 +166,33 @@ export function FichaAvancoPage() {
               </button>
             </>
           ) : (
-            <Link
-              to={
-                resultado
-                  ? fichaDoResultado(resultado.id)
-                  : responsabilidade
-                    ? fichaDaResponsabilidade(responsabilidade.id)
-                    : '/mapa'
-              }
-              className="font-medium underline-offset-4 hover:underline"
-            >
-              {fio.frase}
-            </Link>
+            <FioEmNotas
+              notas={notasDoFio({
+                vontade: doServidor
+                  ? doServidor.vontade && {
+                      titulo: doServidor.vontade.titulo,
+                      to: fichaDaVontade(doServidor.vontade.id),
+                    }
+                  : vontade && { titulo: vontade.title, to: fichaDaVontade(vontade.id) },
+                responsabilidade: doServidor
+                  ? doServidor.responsabilidade && {
+                      titulo: doServidor.responsabilidade.titulo,
+                      to: fichaDaResponsabilidade(doServidor.responsabilidade.id),
+                    }
+                  : responsabilidade && {
+                      titulo: responsabilidade.title,
+                      to: fichaDaResponsabilidade(responsabilidade.id),
+                    },
+                resultado: resultado ? { titulo: resultado.title, to: fichaDoResultado(resultado.id) } : null,
+                estrategia:
+                  avanco.expand?.strategy_id && resultado
+                    ? {
+                        titulo: avanco.expand.strategy_id.title,
+                        to: `${fichaDoResultado(resultado.id)}#estrategia-${avanco.expand.strategy_id.id}`,
+                      }
+                    : null,
+              })}
+            />
           )
         }
         como={

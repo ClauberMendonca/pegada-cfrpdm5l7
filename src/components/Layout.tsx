@@ -29,6 +29,7 @@ import { RastroPromptHost } from '@/components/RastroPromptHost'
 import { GlobalCaptureHost, abrirCaptura } from '@/components/GlobalCaptureHost'
 import { BuscaGlobal, abrirBusca } from '@/components/BuscaGlobal'
 import { Sino } from '@/components/juntos/Sino'
+import { PropositoNoTopo } from '@/components/PropositoNoTopo'
 import { Destino, digitandoEmCampo, lugarDe } from '@/lib/pegada/lugar'
 import {
   DropdownMenu,
@@ -344,6 +345,7 @@ export default function Layout() {
             'pb-[calc(env(safe-area-inset-bottom)+7rem)] lg:pb-8',
           )}
         >
+          <PropositoNoTopo />
           <Outlet />
           <RastroPromptHost />
         </main>

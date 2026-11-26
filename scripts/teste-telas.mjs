@@ -280,6 +280,12 @@ await passo('novo avanço para hoje', async () => {
   confere('avanço criado aparece em Hoje', t.includes(nomes.acao), t.slice(0, 200))
   confere('o Estudo escolhido para hoje também aparece', t.includes(nomes.estudo))
   confere('Hoje mostra o porquê (o resultado) do avanço', t.includes(nomes.resultado))
+  const topo = page.locator('[data-proposito-no-topo]')
+  confere('o propósito fica no topo da tela, fora dos cartões', (await topo.innerText()).includes(nomes.proposito))
+  confere('os cartões não repetem a frase inteira do porquê', !/Faço "/.test(t), t.slice(0, 200))
+  await ir('/caixa')
+  confere('o propósito também fica no topo da Caixa', (await topo.innerText()).includes(nomes.proposito))
+  await ir('/')
   await foto('hoje')
 })
 

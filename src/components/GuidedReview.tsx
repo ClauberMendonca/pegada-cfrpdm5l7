@@ -33,6 +33,8 @@ interface Resumo {
   resultados_ativos: ResultadoAtivo[]
   balanco: { construir: number; sustentar: number; livres: number; percentual_livres: number }
   esperas_abertas: { id: string; titulo: string; aguardando: string; desde: string }[]
+  /** Avanços que passei para outra pessoa e seguem abertos. */
+  passados_adiante?: { id: string; titulo: string; com: { nome: string }; desde: string }[]
   capturas_pendentes: number
 }
 
@@ -454,7 +456,24 @@ export function GuidedReview({ onChanged }: { onChanged?: () => void }) {
 
                 {tipo === 'esperas' && (
                   <>
-                    {resumo.esperas_abertas.length === 0 && <Vazio>Nenhuma espera aberta.</Vazio>}
+                    {resumo.esperas_abertas.length === 0 && !resumo.passados_adiante?.length && (
+                      <Vazio>Nenhuma espera aberta.</Vazio>
+                    )}
+                    {(resumo.passados_adiante ?? []).map((e) => (
+                      <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-border bg-card p-4">
+                        <div className="min-w-0">
+                          <p className="break-words text-base font-medium text-foreground">{e.titulo}</p>
+                          <p className="text-[13px] text-muted-foreground">
+                            Com {e.com.nome} · desde {e.desde.split('-').reverse().join('/')}
+                          </p>
+                        </div>
+                        <Button size="sm" variant="outline" asChild className="rounded-full">
+                          <Link to={`/mapa/avanco/${encodeURIComponent(e.id)}`} onClick={sair}>
+                            Abrir avanço
+                          </Link>
+                        </Button>
+                      </div>
+                    ))}
                     {resumo.esperas_abertas.map((e) => (
                       <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 rounded-3xl border border-border bg-card p-4">
                         <div className="min-w-0">

@@ -14,6 +14,8 @@ export type UserRecordLike = {
   name?: string
   timezone?: string
   life_purpose?: string
+  role?: string
+  avatar?: string
   created?: string
   updated?: string
 }
@@ -26,6 +28,8 @@ export function mapUserProfile(model: UserRecordLike | null | undefined): UserPr
     name: model.name || '',
     timezone: model.timezone || '',
     life_purpose: model.life_purpose || '',
+    role: model.role || '',
+    avatar: model.avatar || '',
     created: model.created || '',
     updated: model.updated || '',
   }

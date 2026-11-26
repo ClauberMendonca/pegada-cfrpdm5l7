@@ -127,7 +127,13 @@ export const actionService = {
       filters.push(`context = '${contextFilter}'`)
     }
     if (projectId) {
+      // Dentro de um resultado, os avanços de todos que participam dele.
       filters.push(`project_id = '${projectId}'`)
+    } else {
+      // Fora dele, só o que está com a própria pessoa: Hoje, revisão e busca
+      // não misturam o trabalho dos colegas.
+      const eu = pb.authStore.model?.id
+      if (eu) filters.push(`user_id = '${eu}'`)
     }
     const filter = filters.length > 0 ? filters.join(' && ') : ''
     return pb.collection('actions').getFullList<ActionItem>({

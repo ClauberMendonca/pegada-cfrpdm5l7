@@ -3,8 +3,9 @@
 // Assim os testes pelas telas não gravam nada na conta do dono.
 // Lê PEGADA_DONO_EMAIL/PEGADA_DONO_SENHA (superusuário) e PEGADA_TESTE_EMAIL/PEGADA_TESTE_SENHA.
 const BASE = (process.argv[2] || '').replace(/\/$/, '')
-const { PEGADA_DONO_EMAIL: suEmail, PEGADA_DONO_SENHA: suSenha, PEGADA_TESTE_EMAIL: email, PEGADA_TESTE_SENHA: senha } =
-  process.env
+const { PEGADA_DONO_EMAIL: suEmail, PEGADA_TESTE_EMAIL: email, PEGADA_TESTE_SENHA: senha } = process.env
+// O painel pode ter senha própria; sem ela, vale a do dono.
+const suSenha = process.env.PEGADA_PAINEL_SENHA || process.env.PEGADA_DONO_SENHA
 if (!BASE || !suEmail || !suSenha || !email || !senha) {
   console.error('Uso: PEGADA_DONO_EMAIL=... PEGADA_DONO_SENHA=... PEGADA_TESTE_EMAIL=... PEGADA_TESTE_SENHA=... node scripts/conta-teste.mjs https://app')
   process.exit(2)

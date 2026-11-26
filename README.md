@@ -19,7 +19,7 @@ pnpm build
   --migrationsDir=pocketbase/migrations --publicDir=dist
 ```
 
-Abra http://127.0.0.1:8090 para o app e http://127.0.0.1:8090/_/ para o painel. O cadastro público é fechado: o dono é criado pelo painel, na coleção `users`.
+Abra http://127.0.0.1:8090 para o app e http://127.0.0.1:8090/_/ para o painel. O cadastro público é fechado: o primeiro dono é criado pelo painel, na coleção `users`, com `role = admin`. Daí em diante as contas nascem de convite, em Pessoas, no menu do avatar.
 
 Para mexer só nas telas com recarga automática, rode `pnpm dev` com `VITE_POCKETBASE_URL=http://127.0.0.1:8090` num arquivo `.env.local`.
 
@@ -27,6 +27,7 @@ Para mexer só nas telas com recarga automática, rode `pnpm dev` com `VITE_POCK
 
 ```bash
 node scripts/simulador-anthropic.mjs &   # IA simulada, sem custo
+node scripts/simulador-smtp.mjs &        # caixa de e-mail de teste (opcional: PEGADA_SMTP_HOST=127.0.0.1 PEGADA_SMTP_PORT=2525 no servidor e PEGADA_TESTE_CAIXA=http://127.0.0.1:2526/ no teste)
 ANTHROPIC_API_KEY=teste PEGADA_IA_URL=http://127.0.0.1:8787 ./pocketbase serve ...   # como acima
 PEGADA_URL=http://127.0.0.1:8090 PEGADA_TESTE_IA=simulada \
   PB_ADMIN_EMAIL=voce@exemplo.com PB_ADMIN_SENHA=SUA-SENHA pnpm test
@@ -45,6 +46,31 @@ A rota `POST /backend/v1/pegada/ia/sugerir` chama o Claude pela API da Anthropic
 | `ANTHROPIC_API_KEY` | Liga a IA embutida. Sem ela, a rota responde 503 e o app segue sem sugestões. |
 | `PEGADA_IA_MODELO` | Opcional. Padrão `claude-sonnet-5-5`. |
 | `PEGADA_IA_URL` | Só para testes, aponta para o simulador. |
+
+## Contas e e-mail
+
+Conta nova só por convite de quem administra (`users.role = admin`). O convite é um link de uso único, válido por 7 dias; a pessoa define a própria senha. As regras ficam em `pocketbase/hooks/contas.pb.js` e `pocketbase/hooks/lib/contas.js`: senha de 10 caracteres ou mais, limite de tentativas, sessão de 30 dias, registro de acesso guardado por 180 dias.
+
+Segredos do servidor para o envio de e-mails (convite, nova senha, troca de e-mail e avisos):
+
+| Segredo | Para quê |
+| --- | --- |
+| `PEGADA_SMTP_HOST` | Liga o envio. Sem ele, o convite vira um link para copiar e "Esqueci a senha" avisa que não está disponível. |
+| `PEGADA_SMTP_PORT` | Opcional. Padrão `587`. |
+| `PEGADA_SMTP_USER`, `PEGADA_SMTP_PASS` | Credenciais do serviço de envio. |
+| `PEGADA_EMAIL_REMETENTE` | Endereço de quem envia, por exemplo `ola@usepegada.com.br`. |
+| `PEGADA_URL` | Endereço público do app, usado nos links dos e-mails. |
+| `PEGADA_IA_LIMITE_DIA` | Opcional. Sugestões da IA por pessoa e por dia. Padrão `80`. |
+
+## Resultado compartilhado
+
+O método é de cada pessoa. Só o Resultado e o que está abaixo dele (estratégias, avanços e notas) pode ser compartilhado; propósito, vontades e responsabilidades nunca aparecem para os outros.
+
+- `projects.user_id` é quem criou o resultado; `projects.member_ids` guarda quem participa. `result_members` guarda o convite e o porquê pessoal de cada participante (a Responsabilidade ou Vontade dele).
+- `actions.user_id` é quem está com o avanço. Passar um avanço troca esse campo e anota quem passou em `delegated_by`. As estratégias são sempre de quem criou o resultado.
+- Quem sai ou é tirado perde a leitura na hora, e os avanços que tinha voltam para quem criou o resultado. Resultado compartilhado não vai para a Lixeira: primeiro tira-se as pessoas.
+- Avisos (`notices`) aparecem no sino. O histórico de um resultado (`audit_events.project_id`) é visto por quem participa.
+- Operações: `compartilhar_resultado`, `responder_convite`, `ver_participantes`, `remover_participante`, `sair_do_resultado`, `ligar_resultado_compartilhado`, `passar_avanco`, `devolver_avanco`, `listar_avisos`. São da própria pessoa: agentes não convidam nem passam avanços.
 
 ## Publicar
 

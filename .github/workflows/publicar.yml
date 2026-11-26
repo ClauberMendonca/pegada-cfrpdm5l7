@@ -6,7 +6,9 @@
 #    no ambiente "producao" do GitHub.
 # Segredos do repositório: FLY_API_TOKEN (obrigatório para publicar),
 # PEGADA_DONO_EMAIL e PEGADA_DONO_SENHA (criam o dono na primeira vez),
-# ANTHROPIC_API_KEY (liga a IA embutida).
+# ANTHROPIC_API_KEY (liga a IA embutida), PEGADA_PAINEL_SENHA (senha própria do
+# painel), PEGADA_SMTP_HOST/PORT/USER/PASS e PEGADA_EMAIL_REMETENTE (envio de
+# e-mails). Variável PEGADA_URL_OFICIAL: endereço público do app oficial.
 # Sem FLY_API_TOKEN, os passos de publicação são pulados.
 name: publicar
 
@@ -43,6 +45,12 @@ jobs:
       PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
       PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PEGADA_PAINEL_SENHA: ${{ secrets.PEGADA_PAINEL_SENHA }}
+      PEGADA_SMTP_HOST: ${{ secrets.PEGADA_SMTP_HOST }}
+      PEGADA_SMTP_PORT: ${{ secrets.PEGADA_SMTP_PORT }}
+      PEGADA_SMTP_USER: ${{ secrets.PEGADA_SMTP_USER }}
+      PEGADA_SMTP_PASS: ${{ secrets.PEGADA_SMTP_PASS }}
+      PEGADA_EMAIL_REMETENTE: ${{ secrets.PEGADA_EMAIL_REMETENTE }}
     steps:
       - uses: actions/checkout@v4
       - name: Sem FLY_API_TOKEN, nada a publicar
@@ -65,6 +73,7 @@ jobs:
       PEGADA_URL: https://pegada-cfrpdm5l7-previa.fly.dev
       PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
       PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
+      PEGADA_PAINEL_SENHA: ${{ secrets.PEGADA_PAINEL_SENHA }}
       TEM_CHAVE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       PEGADA_TESTE_IA: ${{ secrets.ANTHROPIC_API_KEY != '' && '1' || '' }}
       PEGADA_TESTE_EMAIL: teste-telas@pegada.teste
@@ -119,6 +128,13 @@ jobs:
       PEGADA_DONO_EMAIL: ${{ secrets.PEGADA_DONO_EMAIL }}
       PEGADA_DONO_SENHA: ${{ secrets.PEGADA_DONO_SENHA }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PEGADA_PAINEL_SENHA: ${{ secrets.PEGADA_PAINEL_SENHA }}
+      PEGADA_SMTP_HOST: ${{ secrets.PEGADA_SMTP_HOST }}
+      PEGADA_SMTP_PORT: ${{ secrets.PEGADA_SMTP_PORT }}
+      PEGADA_SMTP_USER: ${{ secrets.PEGADA_SMTP_USER }}
+      PEGADA_SMTP_PASS: ${{ secrets.PEGADA_SMTP_PASS }}
+      PEGADA_EMAIL_REMETENTE: ${{ secrets.PEGADA_EMAIL_REMETENTE }}
+      PEGADA_URL: ${{ vars.PEGADA_URL_OFICIAL }}
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master

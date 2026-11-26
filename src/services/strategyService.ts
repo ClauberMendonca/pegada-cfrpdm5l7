@@ -36,7 +36,8 @@ export const strategyService = {
     const userId = pb.authStore.model?.id
     if (!userId || !projectId) return []
     return pb.collection('strategies').getFullList<Strategy>({
-      filter: `user_id = ${quote(userId)} && project_id = ${quote(projectId)}`,
+      // As estratégias são do resultado: quem participa dele vê todas.
+      filter: `project_id = ${quote(projectId)}`,
       sort: 'created,id',
     })
   },

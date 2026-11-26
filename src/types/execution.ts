@@ -111,6 +111,10 @@ export interface UserProfile {
   // FATIA 2A — propósito de vida opcional (users.life_purpose, máx. 500).
   // Fonte canônica: backend. Ausente/vazio = sem propósito.
   life_purpose?: string
+  /** 'admin' para quem cuida do sistema (convida e desativa contas). */
+  role?: string
+  /** Nome do arquivo da foto; vazio = iniciais. */
+  avatar?: string
   created: string
   updated: string
 }

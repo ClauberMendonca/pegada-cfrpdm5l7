@@ -6,7 +6,7 @@ import { op } from '@/lib/pegada/api'
 import { usePegadaMudou } from '@/lib/pegada/useMudou'
 import { actionService, notificarMudanca } from '@/services/actionService'
 import { timeService } from '@/services/timeService'
-import { fioCurto } from '@/lib/pegada/fioCurto'
+import { FioEmNotas, notasDoFio } from '@/components/FioEmNotas'
 import { useGlobalFilter } from '@/contexts/FilterContext'
 
 // PEGADA — o Avanço principal do dia, com a frase do fio.
@@ -25,6 +25,8 @@ interface AvancoHoje {
     sem_fio?: boolean
     resultado?: { id: string; titulo: string } | null
     responsabilidade?: { id: string; titulo: string } | null
+    estrategia?: { id: string; titulo: string } | null
+    vontade?: { id: string; titulo: string } | null
   }
 }
 interface FioDeHoje {
@@ -135,9 +137,13 @@ export function AvancoPrincipalCard({ children, onEscolher }: Props) {
         {principal ? (
           <>
             <h2 className="mt-2 text-2xl font-semibold leading-tight">{principal.titulo}</h2>
-            <p className="mt-3 text-[15px] leading-relaxed" style={MUTED}>
-              {fioCurto(principal.fio, dados.proposito) || 'Avanço livre: ainda sem porquê.'}
-            </p>
+            {principal.fio.sem_fio ? (
+              <p className="mt-3 text-sm" style={MUTED}>
+                Avanço livre
+              </p>
+            ) : (
+              <FioEmNotas emTinta className="mt-3" notas={notasDoFio(principal.fio)} />
+            )}
             <div className="mt-5 flex items-center gap-2.5">
               <button
                 type="button"

@@ -18,7 +18,6 @@ import { FecharODia } from '@/components/hoje/FecharODia'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { dayInZone, todayInZone, ownerTimezone } from '@/lib/datetime'
-import { PegadaSimbolo } from '@/components/PegadaSimbolo'
 import { FioESemana } from '@/components/FioESemana'
 import { fichaDoAvanco } from '@/lib/pegada/enderecos'
 import { cn } from '@/lib/utils'
@@ -62,7 +61,6 @@ export const TodayPage: React.FC = () => {
 
   const timezone = ownerTimezone(user?.timezone)
   const todayStr = todayInZone(timezone)
-  const proposito = (user?.life_purpose ?? '').trim()
   const dataPorExtenso = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long',
     day: 'numeric',
@@ -231,15 +229,6 @@ export const TodayPage: React.FC = () => {
             <p className="text-sm text-muted-foreground">{dataPorExtenso}</p>
             <h1 className="text-[32px] font-semibold leading-tight tracking-tight text-foreground">Hoje</h1>
           </div>
-          <Link
-            to={proposito ? '/mapa' : '/mapa/proposito'}
-            className="flex min-h-11 items-center gap-2.5 text-sm leading-snug text-muted-foreground hover:text-foreground"
-          >
-            <PegadaSimbolo pequeno className="h-[18px] w-[18px] shrink-0 text-foreground" />
-            <span className="min-w-0 break-words">
-              {proposito || 'Escreva o seu propósito: é dele que nasce cada porquê.'}
-            </span>
-          </Link>
         </div>
 
         {loadError && (
@@ -257,8 +246,8 @@ export const TodayPage: React.FC = () => {
 
         <ExemploVivo onCriado={() => void loadData()} />
         <Dica id="hoje-fio">
-          Cada avanço carrega o seu porquê: “Faço isto, para alcançar aquilo, porque…”. Se a frase soar errada,
-          algo está no lugar errado.
+          O seu propósito fica no topo de cada tela. Em cada avanço, as notas mostram de onde ele vem: a
+          responsabilidade ou vontade, o resultado e a estratégia.
         </Dica>
 
         <AvancoPrincipalCard onEscolher={() => setEscolhendo(true)}>

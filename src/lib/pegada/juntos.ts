@@ -55,7 +55,12 @@ export interface AvancoJunto {
   pode_passar: boolean
   pode_devolver: boolean
   pessoas: Pessoa[]
-  fio: { frase: string; sem_fio: boolean }
+  fio: {
+    frase: string
+    sem_fio: boolean
+    vontade?: { id: string; titulo: string } | null
+    responsabilidade?: { id: string; titulo: string } | null
+  }
 }
 
 export interface EventoDoResultado {

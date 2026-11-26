@@ -315,8 +315,22 @@ export const CapturesPage: React.FC = () => {
   const pendentes = captures.filter((c) => c.status === 'pendente')
   const atual = pendentes.find((c) => c.id === naVez) ?? pendentes[0] ?? null
   const fila = pendentes.filter((c) => c.id !== atual?.id)
+  // Já decididas: só o que ainda está em andamento. O que virou avanço feito
+  // ou cancelado, resultado concluído ou arquivado, e o que foi descartado
+  // sai da vista (continua guardado no Mapa, em Encerrados, e no Histórico).
+  const emAndamento = (c: CaptureItem) => {
+    if (c.status === 'convertida_acao') {
+      const a = c.converted_action_id ? targetMaps.actions.get(c.converted_action_id) : undefined
+      return Boolean(a) && a!.status !== 'feita' && a!.status !== 'cancelada'
+    }
+    if (c.status === 'convertida_projeto') {
+      const p = c.converted_project_id ? targetMaps.projects.get(c.converted_project_id) : undefined
+      return Boolean(p) && p!.status !== 'concluido' && p!.status !== 'arquivado'
+    }
+    return false
+  }
   const decididas = captures.filter(
-    (c) => c.status !== 'pendente' && (filterStatus === 'todas' || c.status === filterStatus),
+    (c) => emAndamento(c) && (filterStatus === 'todas' || c.status === filterStatus),
   )
   const pular = () => {
     if (fila.length > 0) setNaVez(fila[0].id)
@@ -490,12 +504,12 @@ export const CapturesPage: React.FC = () => {
           className="min-h-11 gap-1.5 px-2 text-sm text-muted-foreground"
         >
           <ChevronDown className={`h-4 w-4 transition-transform ${verDecididas ? 'rotate-180' : ''}`} aria-hidden="true" />
-          Já decididas
+          Já decididas, em andamento
         </Button>
         {verDecididas && (
           <div className="mt-2 space-y-3">
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              {(['todas', 'convertida_projeto', 'convertida_acao', 'descartada'] as const).map((st) => (
+              {(['todas', 'convertida_projeto', 'convertida_acao'] as const).map((st) => (
                 <button
                   key={st}
                   type="button"
@@ -509,15 +523,13 @@ export const CapturesPage: React.FC = () => {
                     ? 'Todas'
                     : st === 'convertida_projeto'
                       ? 'Resultados'
-                      : st === 'convertida_acao'
-                        ? 'Avanços'
-                        : 'Descartadas'}
+                      : 'Avanços'}
                 </button>
               ))}
             </div>
             {decididas.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Nada por aqui ainda.
+                Nada em andamento por aqui. O que já foi concluído fica no Mapa, em Encerrados.
               </p>
             ) : (
               <ul className="rounded-2xl border border-border bg-card p-2">

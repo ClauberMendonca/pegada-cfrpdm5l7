@@ -13,9 +13,12 @@ import { captureService } from '@/services/captureService'
 import { notificarMudanca } from '@/services/actionService'
 import { op, sugerir } from '@/lib/pegada/api'
 import { ACTION_KIND_LABEL, type ActionKind } from '@/types/execution'
-import { Mic } from 'lucide-react'
+import { Check, Mic } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 // PEGADA — captura de um toque, disponível em qualquer tela.
+// Quando a pessoa já sabe que é um avanço, "Já é um avanço" cria direto, sem
+// passar pela Caixa: ela escolhe (ou não) a estratégia em andamento e cria.
 // Abre pelo botão central (abrirCaptura) ou pela tecla C fora de campos de texto.
 // Enter salva pela operação "capturar"; Shift+Enter quebra linha.
 const EVENTO = 'pegada:capturar'
@@ -32,6 +35,21 @@ function digitandoEmCampo(alvo: EventTarget | null): boolean {
 }
 
 type Sugestao = Record<string, string>
+
+// Onde o avanço direto pode morar: resultados ativos e suas estratégias.
+interface Lugar {
+  id: string
+  titulo: string
+  contexto: string
+  estrategias: { id: string; titulo: string }[]
+}
+interface Destino {
+  resultadoId: string
+  estrategiaId?: string
+}
+interface MapaCurto {
+  resultados: { id: string; titulo: string; status: string; contexto: string; estrategias: { id: string; titulo: string }[] }[]
+}
 const DESTINOS: Record<string, string> = {
   resultado: 'um Resultado',
   vontade: 'uma Vontade',
@@ -63,6 +81,10 @@ export function GlobalCaptureHost() {
   const [sugestao, setSugestao] = useState<Sugestao | null>(null)
   const [dispensada, setDispensada] = useState('')
   const [ouvindo, setOuvindo] = useState(false)
+  const [modo, setModo] = useState<'captura' | 'avanco'>('captura')
+  const [lugares, setLugares] = useState<Lugar[] | null>(null)
+  const [destino, setDestino] = useState<Destino | null>(null)
+  const [hoje, setHoje] = useState(false)
   const travado = useRef(false)
   const voz = useRef<Reconhecedor | null>(null)
   const temVoz = typeof window !== 'undefined' && Boolean(
@@ -92,7 +114,7 @@ export function GlobalCaptureHost() {
   useEffect(() => {
     const valor = texto.trim()
     setSugestao(null)
-    if (!aberto || valor.length < 12 || valor === dispensada) return
+    if (!aberto || modo === 'avanco' || valor.length < 12 || valor === dispensada) return
     let vivo = true
     const t = setTimeout(() => {
       sugerir('captura', valor, true)
@@ -106,14 +128,61 @@ export function GlobalCaptureHost() {
       vivo = false
       clearTimeout(t)
     }
-  }, [texto, aberto, dispensada])
+  }, [texto, aberto, dispensada, modo])
 
   useEffect(() => {
     if (!aberto) {
       voz.current?.stop()
       setDispensada('')
+      setModo('captura')
+      setDestino(null)
+      setHoje(false)
     }
   }, [aberto])
+
+  // Ao entrar no modo avanço, busca os resultados ativos e suas estratégias.
+  useEffect(() => {
+    if (!aberto || modo !== 'avanco') return
+    let vivo = true
+    op<MapaCurto>('ver_mapa', {})
+      .then((r) => {
+        if (!vivo) return
+        const rs = (r.resultado?.resultados ?? []).filter((x) => x.status === 'ativo')
+        setLugares(rs.map((x) => ({ id: x.id, titulo: x.titulo, contexto: x.contexto, estrategias: x.estrategias ?? [] })))
+      })
+      .catch(() => vivo && setLugares([]))
+    return () => {
+      vivo = false
+    }
+  }, [aberto, modo])
+
+  const criarAvanco = useCallback(async () => {
+    const valor = texto.trim()
+    if (!valor || travado.current) return
+    travado.current = true
+    setSalvando(true)
+    try {
+      await op(
+        'criar_avanco',
+        {
+          titulo: valor,
+          tipo: 'acao',
+          ...(destino ? { resultado_id: destino.resultadoId } : {}),
+          ...(destino?.estrategiaId ? { estrategia_id: destino.estrategiaId } : {}),
+          ...(hoje ? { para_hoje: true } : {}),
+        },
+        { desfazer: true, onDesfeito: notificarMudanca },
+      )
+      setTexto('')
+      setAberto(false)
+      notificarMudanca()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Não foi possível criar o avanço.')
+    } finally {
+      travado.current = false
+      setSalvando(false)
+    }
+  }, [texto, destino, hoje])
 
   const salvar = useCallback(
     async (aceita?: Sugestao | null) => {
@@ -187,7 +256,9 @@ export function GlobalCaptureHost() {
       >
         <div aria-hidden="true" className="h-[5px] w-10 self-center rounded-full bg-input" />
         <SheetHeader className="flex-row items-center justify-between space-y-0 text-left">
-          <SheetTitle className="text-[22px] font-semibold tracking-tight">O que surgiu?</SheetTitle>
+          <SheetTitle className="text-[22px] font-semibold tracking-tight">
+            {modo === 'avanco' ? 'Novo avanço' : 'O que surgiu?'}
+          </SheetTitle>
           <button
             type="button"
             aria-label="Fechar captura"
@@ -200,7 +271,9 @@ export function GlobalCaptureHost() {
         <div className="flex flex-col gap-2">
           <SheetDescription asChild>
             <label htmlFor="captura-texto" className="text-sm text-muted-foreground">
-              {temVoz ? 'Escreva ou fale.' : 'Escreva.'} Você decide o destino depois.
+              {modo === 'avanco'
+                ? 'O que você vai fazer? Comece por um verbo.'
+                : `${temVoz ? 'Escreva ou fale.' : 'Escreva.'} Você decide o destino depois.`}
             </label>
           </SheetDescription>
           <textarea
@@ -211,15 +284,76 @@ export function GlobalCaptureHost() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                void salvar()
+                void (modo === 'avanco' ? criarAvanco() : salvar())
               }
             }}
-            rows={3}
-            className="min-h-28 w-full resize-none rounded-[18px] border-2 border-foreground bg-card px-4 py-3.5 text-lg leading-snug text-foreground outline-none"
+            rows={modo === 'avanco' ? 2 : 3}
+            className="min-h-20 w-full resize-none rounded-[18px] border-2 border-foreground bg-card px-4 py-3.5 text-lg leading-snug text-foreground outline-none"
           />
         </div>
 
-        {sugestao && (
+        {modo === 'avanco' && (
+          <div className="flex min-h-0 flex-col gap-2" data-avanco-direto>
+            <p className="text-sm text-muted-foreground">Para alcançar o quê? Se não escolher, ele fica livre.</p>
+            <div role="radiogroup" aria-label="Onde o avanço entra" className="-mx-1 max-h-[34dvh] overflow-y-auto px-1">
+              {[{ chave: 'livre', rotulo: 'Sem vínculo', sub: 'Avanço livre', d: null as Destino | null, recuo: false }]
+                .concat(
+                  (lugares ?? []).flatMap((l) => [
+                    { chave: l.id, rotulo: l.titulo, sub: 'Resultado', d: { resultadoId: l.id } as Destino | null, recuo: false },
+                    ...l.estrategias.map((e) => ({
+                      chave: `${l.id}:${e.id}`,
+                      rotulo: e.titulo,
+                      sub: 'Estratégia',
+                      d: { resultadoId: l.id, estrategiaId: e.id } as Destino | null,
+                      recuo: true,
+                    })),
+                  ]),
+                )
+                .map((o) => {
+                  const marcado = (o.d?.resultadoId ?? '') === (destino?.resultadoId ?? '') && (o.d?.estrategiaId ?? '') === (destino?.estrategiaId ?? '')
+                  return (
+                    <button
+                      key={o.chave}
+                      type="button"
+                      role="radio"
+                      aria-checked={marcado}
+                      onClick={() => setDestino(o.d)}
+                      className={cn(
+                        'flex min-h-11 w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        o.recuo && 'pl-8',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                          marcado ? 'bg-primary text-primary-foreground' : 'border-2 border-muted-foreground text-transparent',
+                        )}
+                      >
+                        <Check className="h-3 w-3" strokeWidth={3} aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block break-words text-[15px] leading-snug text-foreground">{o.rotulo}</span>
+                        <span className="block text-[13px] text-muted-foreground">{o.sub}</span>
+                      </span>
+                    </button>
+                  )
+                })}
+              {lugares === null && <p className="px-2 py-2 text-sm text-muted-foreground">Carregando os resultados…</p>}
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hoje}
+              onClick={() => setHoje((v) => !v)}
+              className="flex min-h-11 items-center gap-3 rounded-xl px-2 text-left text-[15px] text-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true" className={cn('h-2.5 w-2.5 rounded-full', hoje ? 'bg-primary' : 'border-2 border-input')} />
+              Fazer hoje
+            </button>
+          </div>
+        )}
+
+        {sugestao && modo === 'captura' && (
           <div className="flex flex-col gap-2" data-sugestao>
             <p className="text-[13px] uppercase tracking-[0.06em] text-muted-foreground">Sugestão do Pegada</p>
             <div className="flex flex-col gap-2.5 rounded-2xl border border-border bg-card px-3.5 py-3">
@@ -278,19 +412,28 @@ export function GlobalCaptureHost() {
             </button>
           )}
           <Button
-            onClick={() => void salvar()}
+            onClick={() => void (modo === 'avanco' ? criarAvanco() : salvar())}
             disabled={salvando || !texto.trim()}
             className="h-14 flex-1 rounded-full text-lg font-semibold"
           >
-            Capturar
+            {modo === 'avanco' ? 'Criar avanço' : 'Capturar'}
           </Button>
         </div>
-        <p className="text-center text-[13px] text-muted-foreground">
-          Capturar leva um toque. Nada é perdido, nada é decidido por você.{' '}
-          <Link to="/caixa" onClick={() => setAberto(false)} className="underline underline-offset-4">
-            Ver capturas
-          </Link>
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-4 text-[13px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setModo(modo === 'avanco' ? 'captura' : 'avanco')}
+            className="min-h-11 font-medium text-foreground underline underline-offset-4"
+            data-trocar-modo
+          >
+            {modo === 'avanco' ? 'Só capturar e decidir depois' : 'Já é um avanço'}
+          </button>
+          {modo === 'captura' && (
+            <Link to="/caixa" onClick={() => setAberto(false)} className="flex min-h-11 items-center underline underline-offset-4">
+              Ver capturas
+            </Link>
+          )}
+        </div>
       </SheetContent>
     </Sheet>
   )
